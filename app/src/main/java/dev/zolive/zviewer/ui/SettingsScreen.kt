@@ -23,8 +23,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.zolive.zviewer.BuildConfig
 import dev.zolive.zviewer.LibraryState
 import dev.zolive.zviewer.LibraryViewModel
 import dev.zolive.zviewer.data.ReaderSettings
@@ -43,7 +43,6 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
     }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SettingsHeading("让阅读，合你心意")
             Text("外观", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             SettingsCard {
                 Text("应用主题", style = MaterialTheme.typography.titleMedium)
@@ -92,9 +91,7 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
                 }, leadingContent = { Icon(Icons.Outlined.CleaningServices, null) },
                     modifier = Modifier.clickable { confirmClear = true }, colors = ListItemDefaults.colors(containerColor = Color.Transparent))
             }
-            TextButton(onClick = { about = true }, Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)) { Text("关于 ZViewer 1.0.0") }
-            Text("留一点时间，给喜欢的故事。", Modifier.align(Alignment.CenterHorizontally).padding(bottom = 32.dp),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            TextButton(onClick = { about = true }, Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp, bottom = 32.dp)) { Text("关于 ZViewer ${BuildConfig.VERSION_NAME}") }
         }
     }
     if (customColor) {
@@ -115,7 +112,7 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
         confirmButton = { TextButton(onClick = { model.clearCache(); confirmClear = false }) { Text("清理") } },
         dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } })
     if (about) AlertDialog(onDismissRequest = { about = false }, title = { Text("ZViewer · 本地漫画阅读器") },
-        text = { Text("版本 1.0.0\n\n支持 ZIP / CBZ、RAR / CBR、7Z、PDF 与图片文件夹。支持 APNG、动态 WebP、GIF、AVIF 及常用静态图片。\n\n全部阅读数据仅保存在本机，不联网、不上传文件。密码保护、分卷压缩包及 DRM 文件请先自行转换。\n\n开源组件：AndroidX / Compose（Apache 2.0）、APNG4Android（Apache 2.0）、libarchive（BSD）、libavif（BSD）。\n\nHEIF / HEIC 的可解码范围取决于设备系统解码器。") },
+        text = { Text("版本 ${BuildConfig.VERSION_NAME}\n\n支持 ZIP / CBZ、RAR / CBR、7Z、PDF 与图片文件夹。支持 APNG、动态 WebP、GIF、AVIF 及常用静态图片。\n\n全部阅读数据仅保存在本机，不联网、不上传文件。密码保护、分卷压缩包及 DRM 文件请先自行转换。\n\n开源组件：AndroidX / Compose（Apache 2.0）、APNG4Android（Apache 2.0）、libarchive（BSD）、libavif（BSD）。\n\nHEIF / HEIC 的可解码范围取决于设备系统解码器。") },
         confirmButton = { TextButton(onClick = { about = false }) { Text("知道了") } },
         dismissButton = { TextButton(onClick = { about = false; licenses = true }) { Text("开源许可") } })
     if (licenses) {
@@ -128,11 +125,6 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
             text = { Text(notices, Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall) },
             confirmButton = { TextButton(onClick = { licenses = false }) { Text("关闭") } })
     }
-}
-
-@Composable
-private fun SettingsHeading(text: String) {
-    Text(text, Modifier.padding(top = 12.dp, bottom = 12.dp), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
 }
 
 @Composable

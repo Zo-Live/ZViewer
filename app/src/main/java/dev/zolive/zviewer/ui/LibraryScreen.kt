@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -161,7 +162,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, onSettin
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(titles[tab], style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                        Text("${books.size} 本漫画 · 随时翻开，接着读", Modifier.padding(top = 5.dp),
+                        Text("${books.size} 本漫画", Modifier.padding(top = 5.dp),
                             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = model::refresh, enabled = !state.scanning) { Icon(Icons.Outlined.Refresh, "刷新书库") }
@@ -222,17 +223,9 @@ private fun WelcomeScreen(onChooseLibrary: () -> Unit) {
             drawCircle(primary, 6f, Offset(size.width * .53f, size.height * .66f))
         }
         Spacer(Modifier.height(30.dp))
-        Text("好故事，就在手边。", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("选择一个漫画文件夹，\n把喜欢的世界收进你的书库。", Modifier.padding(top = 14.dp, bottom = 30.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 26.sp)
         Button(onClick = onChooseLibrary, modifier = Modifier.fillMaxWidth().height(56.dp)) {
             Icon(Icons.Outlined.CreateNewFolder, null); Spacer(Modifier.width(10.dp)); Text("选择书库文件夹", fontSize = 16.sp)
         }
-        Text("ZIP · RAR · 7Z · PDF · 图片文件夹", Modifier.padding(top = 20.dp),
-            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text("本地阅读 · 无需账号 · 不上传文件", Modifier.padding(top = 8.dp, bottom = 36.dp),
-            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -242,8 +235,8 @@ private fun EmptyLibrary(scanning: Boolean, filtered: Boolean, onChooseLibrary: 
         Icon(Icons.AutoMirrored.Outlined.MenuBook, null, Modifier.size(52.dp), tint = MaterialTheme.colorScheme.primary)
         Text(if (scanning) "正在整理你的书库…" else if (filtered) "还没有符合条件的漫画" else "这个文件夹还没有漫画", Modifier.padding(top = 20.dp),
             style = MaterialTheme.typography.titleMedium)
-        Text(if (filtered) "试试其他筛选条件，或收藏一本喜欢的漫画。" else "可添加压缩包、PDF，或装有图片的子文件夹。", Modifier.padding(top = 12.dp),
-            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(if (filtered) "试试其他筛选条件，\n或收藏一本喜欢的漫画。" else "可添加压缩包、PDF，或装有图片的子文件夹。", Modifier.fillMaxWidth().padding(top = 12.dp),
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         if (!filtered && !scanning) TextButton(onClick = onChooseLibrary, Modifier.padding(top = 12.dp)) { Text("选择其他文件夹") }
     }
 }
@@ -255,7 +248,7 @@ private fun ContinueCard(book: Book, progress: ReadingProgress, onClick: () -> U
         Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.AutoMirrored.Outlined.MenuBook, null, Modifier.size(30.dp))
             Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-                Text("继续上次的故事", style = MaterialTheme.typography.labelMedium)
+                Text("继续阅读", style = MaterialTheme.typography.labelMedium)
                 Text(book.title, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text("第 ${progress.page + 1} / ${progress.total} 页", Modifier.padding(top = 3.dp), style = MaterialTheme.typography.bodySmall)
             }
