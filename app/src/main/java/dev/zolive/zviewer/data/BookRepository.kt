@@ -210,8 +210,11 @@ class BookRepository(private val context: Context) {
             val output = File(folder, "pdf-${page.pdfPage}-$width.png")
             if (!output.isFile) {
                 val bitmap = renderPdf(File(session.pdfPath!!), page.pdfPage, width)
-                try { output.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } }
-                finally { bitmap.recycle() }
+                val temporary = File(folder, "${output.name}.part")
+                try {
+                    temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                    if (!temporary.renameTo(output)) throw ReaderException("页面缓存写入失败，请检查剩余存储空间。")
+                } finally { bitmap.recycle(); temporary.delete() }
             }
             return@withContext output
         }

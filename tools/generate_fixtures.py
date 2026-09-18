@@ -12,7 +12,7 @@ from reportlab.pdfgen import canvas
 ROOT = Path(__file__).resolve().parent / "fixtures"
 LIBRARY = ROOT / "书库"
 ASSETS = ROOT / "formats"
-FONT = "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf"
+FONT = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
 pillow_heif.register_heif_opener()
 
 
@@ -51,6 +51,9 @@ def generate():
     for extension in ("png", "webp", "gif", "avif"):
         frames[0].save(ASSETS / f"animated.{extension}", save_all=True, append_images=frames[1:], duration=160, loop=0)
     shutil.copyfile(ASSETS / "animated.png", ASSETS / "animated.apng")
+    large_frames = [Image.new("RGB", (4800, 3200), color) for color in ("#38574E", "#E8EDDE")]
+    large_frames[0].save(ASSETS / "large.apng", format="PNG", save_all=True,
+                         append_images=large_frames[1:], duration=150, loop=0)
     for extension, title, colors in (
         ("cbz", "01 山野来信", ("#E8EDDE", "#38574E")),
         ("zip", "02 海边慢车", ("#E0EAF1", "#385873")),

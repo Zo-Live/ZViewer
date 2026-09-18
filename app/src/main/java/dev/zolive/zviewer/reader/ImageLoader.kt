@@ -2,6 +2,7 @@ package dev.zolive.zviewer.reader
 
 import android.graphics.ImageDecoder
 import android.graphics.drawable.Drawable
+import com.github.penfeizhou.animation.FrameAnimationDrawable
 import com.github.penfeizhou.animation.apng.APNGDrawable
 import com.github.penfeizhou.animation.avif.AVIFDrawable
 import dev.zolive.zviewer.data.ReaderException
@@ -25,6 +26,13 @@ object ImageLoader {
         if (drawable.intrinsicWidth <= 0 || drawable.intrinsicHeight <= 0) throw ReaderException("图片解码失败，文件可能损坏或编码不受设备支持。")
         if (drawable.intrinsicWidth.toLong() * drawable.intrinsicHeight > 100_000_000L) {
             throw ReaderException("图片分辨率过高，请先缩小图片。")
+        }
+        if (drawable is FrameAnimationDrawable<*>) {
+            val scale = minOf(1f, width.toFloat() / drawable.intrinsicWidth,
+                kotlin.math.sqrt(4_000_000f / (drawable.intrinsicWidth.toFloat() * drawable.intrinsicHeight)))
+            if (scale < 1f) return SampledAnimationDrawable(drawable,
+                (drawable.intrinsicWidth * scale).roundToInt().coerceAtLeast(1),
+                (drawable.intrinsicHeight * scale).roundToInt().coerceAtLeast(1))
         }
         return drawable
     }

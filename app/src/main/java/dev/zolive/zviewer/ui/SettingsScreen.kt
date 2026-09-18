@@ -35,6 +35,7 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
     var customColor by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var about by remember { mutableStateOf(false) }
+    var licenses by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val cacheSize by produceState(0L, state.cacheRevision) { value = model.repository.cacheSize() }
     Scaffold(topBar = { TopAppBar(title = { Text("设置") }, navigationIcon = {
@@ -115,7 +116,18 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
         dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } })
     if (about) AlertDialog(onDismissRequest = { about = false }, title = { Text("ZViewer · 本地漫画阅读器") },
         text = { Text("版本 1.0.0\n\n支持 ZIP / CBZ、RAR / CBR、7Z、PDF 与图片文件夹。支持 APNG、动态 WebP、GIF、AVIF 及常用静态图片。\n\n全部阅读数据仅保存在本机，不联网、不上传文件。密码保护、分卷压缩包及 DRM 文件请先自行转换。\n\n开源组件：AndroidX / Compose（Apache 2.0）、APNG4Android（Apache 2.0）、libarchive（BSD）、libavif（BSD）。\n\nHEIF / HEIC 的可解码范围取决于设备系统解码器。") },
-        confirmButton = { TextButton(onClick = { about = false }) { Text("知道了") } })
+        confirmButton = { TextButton(onClick = { about = false }) { Text("知道了") } },
+        dismissButton = { TextButton(onClick = { about = false; licenses = true }) { Text("开源许可") } })
+    if (licenses) {
+        val notices by produceState("正在读取许可文本…") {
+            value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                context.assets.open("open_source_notices.txt").bufferedReader().use { it.readText() }
+            }
+        }
+        AlertDialog(onDismissRequest = { licenses = false }, title = { Text("开源许可") },
+            text = { Text(notices, Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall) },
+            confirmButton = { TextButton(onClick = { licenses = false }) { Text("关闭") } })
+    }
 }
 
 @Composable

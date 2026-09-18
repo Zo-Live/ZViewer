@@ -1,6 +1,7 @@
 package dev.zolive.zviewer.reader
 
 import android.content.Context
+import android.annotation.SuppressLint
 import android.graphics.Matrix
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
@@ -8,7 +9,6 @@ import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.widget.ImageView
-import kotlin.math.abs
 
 class ZoomImageView(context: Context) : ImageView(context) {
     var onTap: () -> Unit = {}
@@ -88,6 +88,7 @@ class ZoomImageView(context: Context) : ImageView(context) {
         imageMatrix = transform
     }
 
+    @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
         scaleDetector.onTouchEvent(event)
         gestureDetector.onTouchEvent(event)

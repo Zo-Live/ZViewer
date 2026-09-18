@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -87,18 +88,24 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         else activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose { activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
-    DisposableEffect(controls, settings.readerDark) {
+    val lightSystemBars = if (controls) MaterialTheme.colorScheme.surface.luminance() > .5f else !settings.readerDark
+    DisposableEffect(controls, lightSystemBars) {
         val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
         controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        controller.isAppearanceLightStatusBars = !settings.readerDark
-        controller.isAppearanceLightNavigationBars = !settings.readerDark
+        controller.isAppearanceLightStatusBars = lightSystemBars
+        controller.isAppearanceLightNavigationBars = lightSystemBars
         if (controls) controller.show(WindowInsetsCompat.Type.systemBars()) else controller.hide(WindowInsetsCompat.Type.systemBars())
         onDispose { controller.show(WindowInsetsCompat.Type.systemBars()) }
     }
 
     LaunchedEffect(settings.vertical) {
         if (settings.vertical) listState.scrollToItem(currentPage) else pagerState.scrollToPage(currentPage)
-        snapshotFlow { if (settings.vertical) listState.firstVisibleItemIndex else pagerState.settledPage }
+        snapshotFlow {
+            if (settings.vertical) {
+                if (!listState.canScrollForward && listState.canScrollBackward) session.pages.lastIndex
+                else listState.firstVisibleItemIndex
+            } else pagerState.settledPage
+        }
             .distinctUntilChanged().collect { page -> currentPage = page; onProgress(page) }
     }
     val jump: (Int) -> Unit = { target ->

@@ -9,4 +9,6 @@ dist/*.apk
 dist/*.idsig
 test-output/
 tools/fixtures/
+__pycache__/
+tools/__pycache__/
 *.hprof

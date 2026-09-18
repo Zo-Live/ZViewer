@@ -5,6 +5,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.core.graphics.ColorUtils
 import dev.zolive.zviewer.data.ReaderSettings
@@ -13,7 +14,15 @@ private fun tone(seed: Long, lightness: Float, saturation: Float = 1f): Color {
     val hsl = FloatArray(3)
     ColorUtils.colorToHSL(seed.toInt(), hsl)
     hsl[1] = (hsl[1] * saturation).coerceIn(0f, 1f)
-    hsl[2] = lightness
+    val lab = DoubleArray(3)
+    var minimum = 0f
+    var maximum = 1f
+    repeat(14) {
+        hsl[2] = (minimum + maximum) / 2
+        ColorUtils.colorToLAB(ColorUtils.HSLToColor(hsl), lab)
+        if (lab[0] < lightness * 100) minimum = hsl[2] else maximum = hsl[2]
+    }
+    hsl[2] = (minimum + maximum) / 2
     return Color(ColorUtils.HSLToColor(hsl))
 }
 
@@ -21,7 +30,7 @@ private fun tone(seed: Long, lightness: Float, saturation: Float = 1f): Color {
 fun ZViewerTheme(settings: ReaderSettings, content: @Composable () -> Unit) {
     val dark = when (settings.theme) { "light" -> false; "dark" -> true; else -> isSystemInDarkTheme() }
     val seed = settings.accent
-    val colors = if (dark) darkColorScheme(
+    val colors = remember(seed, dark) { if (dark) darkColorScheme(
         primary = tone(seed, .77f), onPrimary = tone(seed, .16f),
         primaryContainer = tone(seed, .28f), onPrimaryContainer = tone(seed, .90f),
         secondary = tone(seed, .78f, .45f), onSecondary = tone(seed, .18f, .45f),
@@ -45,6 +54,6 @@ fun ZViewerTheme(settings: ReaderSettings, content: @Composable () -> Unit) {
         surfaceContainer = tone(seed, .935f, .30f), surfaceContainerHigh = tone(seed, .915f, .30f),
         surfaceContainerHighest = tone(seed, .89f, .30f), outline = tone(seed, .47f, .18f),
         outlineVariant = tone(seed, .79f, .20f),
-    )
+    ) }
     MaterialTheme(colorScheme = colors, content = content)
 }

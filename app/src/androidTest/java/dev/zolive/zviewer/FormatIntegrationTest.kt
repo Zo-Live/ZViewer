@@ -99,6 +99,19 @@ class FormatIntegrationTest {
         assertFalse(ImageLoader.isApng(fixture("static.png")))
     }
 
+    @Test fun largeAnimationUsesBoundedCanvasAndPlays() {
+        val drawable = ImageLoader.load(fixture("large.apng"), 1200)
+        assertEquals(1200, drawable.intrinsicWidth)
+        assertEquals(800, drawable.intrinsicHeight)
+        assertTrue(drawable is Animatable)
+        instrumentation.runOnMainSync {
+            drawable.setBounds(0, 0, 1200, 800)
+            (drawable as Animatable).start()
+        }
+        Thread.sleep(500)
+        instrumentation.runOnMainSync { (drawable as Animatable).stop() }
+    }
+
     @Test fun emptyAndBrokenArchivesFailWithoutCreatingPages() = runBlocking {
         for (name in listOf("empty.cbz", "broken.cbz")) {
             val uri = DocumentsContract.buildDocumentUri("dev.zolive.zviewer.test.documents", "root/formats/$name")

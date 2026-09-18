@@ -5,14 +5,16 @@ import android.database.MatrixCursor;
 import android.os.CancellationSignal;
 import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
-import android.provider.DocumentsProvider;
+import android.content.ContentProvider;
+import android.content.ContentValues;
+import android.net.Uri;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-public class FixtureDocumentsProvider extends DocumentsProvider {
+public class FixtureDocumentsProvider extends ContentProvider {
     private File base;
     private static final String[] DOCUMENT_COLUMNS = {
         DocumentsContract.Document.COLUMN_DOCUMENT_ID,
@@ -83,7 +85,7 @@ public class FixtureDocumentsProvider extends DocumentsProvider {
         }
     }
 
-    @Override public Cursor queryRoots(String[] projection) {
+    public Cursor queryRoots(String[] projection) {
         String[] columns = projection != null ? projection : new String[] {
             DocumentsContract.Root.COLUMN_ROOT_ID, DocumentsContract.Root.COLUMN_DOCUMENT_ID,
             DocumentsContract.Root.COLUMN_TITLE, DocumentsContract.Root.COLUMN_FLAGS
@@ -102,24 +104,31 @@ public class FixtureDocumentsProvider extends DocumentsProvider {
         return cursor;
     }
 
-    @Override public Cursor queryDocument(String documentId, String[] projection) throws FileNotFoundException {
+    public Cursor queryDocument(String documentId, String[] projection) throws FileNotFoundException {
         MatrixCursor cursor = new MatrixCursor(projection != null ? projection : DOCUMENT_COLUMNS);
         addDocument(cursor, documentId);
         return cursor;
     }
 
-    @Override public Cursor queryChildDocuments(String parentDocumentId, String[] projection, String sortOrder) throws FileNotFoundException {
+    public Cursor queryChildDocuments(String parentDocumentId, String[] projection, String sortOrder) throws FileNotFoundException {
         MatrixCursor cursor = new MatrixCursor(projection != null ? projection : DOCUMENT_COLUMNS);
         File[] children = file(parentDocumentId).listFiles();
         if (children != null) for (File child : children) addDocument(cursor, parentDocumentId + "/" + child.getName());
         return cursor;
     }
 
-    @Override public ParcelFileDescriptor openDocument(String documentId, String mode, CancellationSignal signal) throws FileNotFoundException {
-        return ParcelFileDescriptor.open(file(documentId), ParcelFileDescriptor.MODE_READ_ONLY);
+    @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
+        return ParcelFileDescriptor.open(file(DocumentsContract.getDocumentId(uri)), ParcelFileDescriptor.MODE_READ_ONLY);
     }
 
-    @Override public boolean isChildDocument(String parentDocumentId, String documentId) {
-        return documentId.startsWith(parentDocumentId + "/");
+    @Override public Cursor query(Uri uri, String[] projection, String selection, String[] selectionArgs, String sortOrder) {
+        try {
+            String id = DocumentsContract.getDocumentId(uri);
+            return "children".equals(uri.getLastPathSegment()) ? queryChildDocuments(id, projection, sortOrder) : queryDocument(id, projection);
+        } catch (FileNotFoundException error) { throw new IllegalStateException(error); }
     }
+    @Override public String getType(Uri uri) { return "application/octet-stream"; }
+    @Override public Uri insert(Uri uri, ContentValues values) { throw new UnsupportedOperationException(); }
+    @Override public int delete(Uri uri, String selection, String[] selectionArgs) { throw new UnsupportedOperationException(); }
+    @Override public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) { throw new UnsupportedOperationException(); }
 }
