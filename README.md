@@ -1,5 +1,7 @@
 # ZViewer
 
+[**简体中文**](README.md) | [English](README.en.md)
+
 一个原生 Android 本地漫画阅读器，支持常见压缩格式、PDF 与图片文件夹。
 
 ## 安装与开始阅读
