@@ -1,0 +1,12 @@
+.gradle/
+.kotlin/
+**/build/
+local.properties
+.idea/
+*.iml
+.signing/
+dist/*.apk
+dist/*.idsig
+test-output/
+tools/fixtures/
+*.hprof

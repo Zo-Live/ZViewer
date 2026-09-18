@@ -1,0 +1,3 @@
+-keep class me.zhanghai.android.libarchive.** { *; }
+-keep class org.aomedia.avif.android.** { *; }
+-keepclasseswithmembernames class * { native <methods>; }
