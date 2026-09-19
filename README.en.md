@@ -1,8 +1,14 @@
+<div align="center">
+
 # ZViewer
 
 [简体中文](README.md) | [**English**](README.en.md)
 
-A native Android local comic reader with support for common archive formats, PDF, and image folders.
+[![Release](https://img.shields.io/github/v/release/Zo-Live/ZViewer?label=release&style=flat-square)](https://github.com/Zo-Live/ZViewer/releases/latest) [![License](https://img.shields.io/github/license/Zo-Live/ZViewer?style=flat-square)](LICENSE) [![Platform](https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android&logoColor=white&style=flat-square)](#install-and-start-reading) [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.21-7F52FF?logo=kotlin&logoColor=white&style=flat-square)](https://kotlinlang.org) [![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white&style=flat-square)](https://developer.android.com/compose)
+
+**A native Android local comic reader with support for common archive formats, PDF, and image folders.**
+
+</div>
 
 ## Install and Start Reading
 
@@ -76,7 +82,7 @@ The private key and passwords must not be committed to Git, and `.signing/` must
 
 ## Open Source Components
 
-Built on open source components including AndroidX / Compose, Kotlin, libarchive, APNG4Android, and libavif.
+Built on open source components including [AndroidX / Compose](https://github.com/androidx/androidx), [Kotlin](https://github.com/JetBrains/kotlin), [libarchive](https://github.com/libarchive/libarchive), [APNG4Android](https://github.com/penfeizhou/APNG4Android), and [libavif](https://github.com/AOMediaCodec/libavif).
 
 ## License
 
