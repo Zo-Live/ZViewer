@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108" role="img" aria-label="ZViewer">
+  <title>ZViewer</title>
+  <!--
+    ZViewer app icon.
+    Faithfully exported from the Android VectorDrawable sources:
+      app/src/main/res/drawable/ic_launcher_background.xml
+      app/src/main/res/drawable/ic_launcher_foreground.xml
+    The only addition is a 24/108 corner radius, since the adaptive icon is
+    full-bleed on Android and gets its shape from the launcher mask.
+    Set rx/ry to 0 for an edge-to-edge square.
+  -->
+  <defs>
+    <clipPath id="zviewer-icon-shape">
+      <rect width="108" height="108" rx="24" ry="24" />
+    </clipPath>
+    <clipPath id="zviewer-z-right-half">
+      <path d="M256,0 H512 V512 H256 Z" />
+    </clipPath>
+  </defs>
+  <g clip-path="url(#zviewer-icon-shape)">
+    <!-- background: left half #123022, right half #0A1F16 -->
+    <rect width="108" height="108" fill="#123022" />
+    <rect x="54" width="54" height="108" fill="#0A1F16" />
+    <!-- foreground "Z" -->
+    <g transform="translate(18,18) scale(0.140625)">
+      <path fill="#ADDCAE" d="M122,102 L390,102 L390,156 L233,340 L392,340 L392,408 L118,408 L118,356 L274,170 L122,170 Z" />
+      <path fill="#7DA17F" clip-path="url(#zviewer-z-right-half)" d="M122,102 L390,102 L390,156 L233,340 L392,340 L392,408 L118,408 L118,356 L274,170 L122,170 Z" />
+    </g>
+  </g>
+</svg>

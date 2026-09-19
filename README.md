@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="assets/icon.svg" alt="ZViewer 图标" width="96" height="96">
+
 # ZViewer
 
 [**简体中文**](README.md) | [English](README.en.md)
