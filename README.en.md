@@ -18,16 +18,16 @@ Android usually does not allow granting access to the internal storage root, the
 
 ## Features
 
-| Category | Support |
-| -------- | ------- |
-| Comic sources | ZIP / CBZ, RAR / CBR, 7Z, PDF, image folders |
-| Static images | JPG, JPEG, PNG, WebP, BMP, HEIF, HEIC, AVIF |
-| Animated images | APNG, Animated WebP, GIF, Animated AVIF |
-| Library | Recursive scan, natural sorting, HD covers, search, reading-status filter, recently read, favorites, 2–5 column grid |
-| Reading | Vertical continuous, horizontal paging, left/right reading direction, zoom, draggable progress, page jumping, automatic progress memory, keep screen on |
-| Appearance | Follow system / light / dark theme, preset accent colors, custom accent color, separate light/dark reading backgrounds |
-| System | Immersive reading, portrait and landscape, remembered library permission |
-| Storage | Cache clearing and automatic reclamation |
+| Category        | Support                                                                                                                                                 |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Comic sources   | ZIP / CBZ, RAR / CBR, 7Z, PDF, image folders                                                                                                            |
+| Static images   | JPG, JPEG, PNG, WebP, BMP, HEIF, HEIC, AVIF                                                                                                             |
+| Animated images | APNG, Animated WebP, GIF, Animated AVIF                                                                                                                 |
+| Library         | Recursive scan, natural sorting, HD covers, search, reading-status filter, recently read, favorites, 2–5 column grid                                   |
+| Reading         | Vertical continuous, horizontal paging, left/right reading direction, zoom, draggable progress, page jumping, automatic progress memory, keep screen on |
+| Appearance      | Follow system / light / dark theme, preset accent colors, custom accent color, separate light/dark reading backgrounds                                  |
+| System          | Immersive reading, portrait and landscape, remembered library permission                                                                                |
+| Storage         | Cache clearing and automatic reclamation                                                                                                                |
 
 While reading, the zoom range goes from fit-to-screen up to 5x, and you can return to fit-to-screen at any time.
 
@@ -80,4 +80,4 @@ Built on open source components including AndroidX / Compose, Kotlin, libarchive
 
 ## License
 
-Apache-2.0
+MIT

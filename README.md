@@ -80,4 +80,4 @@ SDK 路径不同时调整 `ANDROID_HOME`，或在未跟踪的 `local.properties`
 
 ## 许可证
 
-Apache-2.0
+MIT
