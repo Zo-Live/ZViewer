@@ -1,30 +1,46 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108" role="img" aria-label="ZViewer">
-  <title>ZViewer</title>
-  <!--
-    ZViewer app icon.
-    Faithfully exported from the Android VectorDrawable sources:
-      app/src/main/res/drawable/ic_launcher_background.xml
-      app/src/main/res/drawable/ic_launcher_foreground.xml
-    The only addition is a 24/108 corner radius, since the adaptive icon is
-    full-bleed on Android and gets its shape from the launcher mask.
-    Set rx/ry to 0 for an edge-to-edge square.
-  -->
-  <defs>
-    <clipPath id="zviewer-icon-shape">
-      <rect width="108" height="108" rx="24" ry="24" />
-    </clipPath>
-    <clipPath id="zviewer-z-right-half">
-      <path d="M256,0 H512 V512 H256 Z" />
-    </clipPath>
-  </defs>
-  <g clip-path="url(#zviewer-icon-shape)">
-    <!-- background: left half #123022, right half #0A1F16 -->
-    <rect width="108" height="108" fill="#123022" />
-    <rect x="54" width="54" height="108" fill="#0A1F16" />
-    <!-- foreground "Z" -->
-    <g transform="translate(18,18) scale(0.140625)">
-      <path fill="#ADDCAE" d="M122,102 L390,102 L390,156 L233,340 L392,340 L392,408 L118,408 L118,356 L274,170 L122,170 Z" />
-      <path fill="#7DA17F" clip-path="url(#zviewer-z-right-half)" d="M122,102 L390,102 L390,156 L233,340 L392,340 L392,408 L118,408 L118,356 L274,170 L122,170 Z" />
-    </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254">
+  <rect width="1254" height="1254" rx="278.388" ry="278.388" fill="#49684D"/>
+  <g fill="#FFFFFF" transform="translate(627 627) scale(1.96) translate(-627 -627)">
+    <path d="M 462 403
+      H 709
+      C 742 403 771 429 788 460
+      C 811 502 805 542 772 573
+      C 738 609 694 650 656 678
+      C 641 690 625 692 597 694
+      L 539 698
+      C 508 699 485 709 474 729
+      C 460 751 468 777 481 796
+      C 499 823 521 837 544 837
+      H 787
+      C 789 837 793 844 792 847
+      C 792 850 790 851 787 851
+      H 541
+      C 513 851 487 829 468 802
+      C 448 774 446 747 461 716
+      C 468 702 478 693 489 685
+      L 633 577
+      C 660 558 710 540 749 525
+      C 774 516 784 506 784 489
+      C 784 459 748 420 710 420
+      H 463
+      C 460 420 456 414 456 410
+      C 456 405 458 403 462 403
+      Z"/>
+    <path d="M 481 439
+      H 709
+      C 732 439 752 448 752 461
+      C 754 476 739 487 726 496
+      L 632 554
+      L 485 558
+      Q 479 558 480 552
+      Z"/>
+    <path d="M 598 714
+      L 780 711
+      Q 784 711 784 715
+      L 782 820
+      H 546
+      C 522 820 509 810 513 791
+      C 516 768 551 744 598 714
+      Z"/>
   </g>
 </svg>
