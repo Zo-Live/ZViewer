@@ -1,5 +1,6 @@
 package dev.zolive.zviewer.ui
 
+import android.content.Context
 import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -10,7 +11,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -33,15 +33,21 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     var playing by mutableStateOf(false)
     var playRequested by mutableStateOf(false)
     var playbackState by mutableIntStateOf(Player.STATE_IDLE)
+    var ready by mutableStateOf(false)
+    var surfaceReady by mutableStateOf(false)
+    var firstFrameReady by mutableStateOf(false)
     var failed by mutableStateOf(false)
     var seekable by mutableStateOf(false)
     var saveProgress: (Int, Long) -> Unit = { _, _ -> }
+    var preparedIndex by mutableIntStateOf(-1)
+    private var released = false
 
     fun refresh() {
         position = player.currentPosition.coerceAtLeast(0L)
         duration = player.duration.coerceAtLeast(0L)
         playing = player.isPlaying
         playbackState = player.playbackState
+        ready = playbackState == Player.STATE_READY && player.videoSize.width > 0 && player.videoSize.height > 0
         seekable = player.isCurrentMediaItemSeekable
     }
 
@@ -59,16 +65,33 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     fun togglePlayback() {
         if (player.playbackState == Player.STATE_ENDED) player.seekTo(0L)
         playRequested = !playRequested
+        if (!playRequested) player.pause()
     }
+
+    fun pause() {
+        player.playWhenReady = false
+        player.pause()
+        refresh()
+    }
+
+    fun release() {
+        if (released) return
+        released = true
+        save()
+        player.release()
+    }
+
+    fun isReleased(): Boolean = released
 }
+
+internal fun createVideoPlaybackState(context: Context): VideoPlaybackState =
+    VideoPlaybackState(ExoPlayer.Builder(context).build())
 
 @Composable
 internal fun rememberVideoPlayback(
-    session: BookSession, index: Int, active: Boolean, settings: ReaderSettings,
+    state: VideoPlaybackState, session: BookSession, index: Int, active: Boolean, allowPlayback: Boolean, settings: ReaderSettings,
     videoPosition: (Int) -> Long, onProgress: (Int, Long) -> Unit, onEnded: () -> Unit,
-): VideoPlaybackState {
-    val context = LocalContext.current
-    val state = remember(session.book.cacheKey) { VideoPlaybackState(ExoPlayer.Builder(context).build()) }
+) {
     val latestProgress by rememberUpdatedState(onProgress)
     val latestEnded by rememberUpdatedState(onEnded)
     val latestActive by rememberUpdatedState(active)
@@ -85,16 +108,18 @@ internal fun rememberVideoPlayback(
                     if (latestActive) latestEnded()
                 }
             }
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) { state.refresh() }
+            override fun onRenderedFirstFrame() { state.firstFrameReady = true }
             override fun onPlayerError(error: PlaybackException) { state.failed = true }
         }
         state.player.addListener(listener)
         onDispose {
-            state.save()
             state.player.removeListener(listener)
-            state.player.release()
         }
     }
     LaunchedEffect(state, index) {
+        if (state.preparedIndex == index || state.isReleased()) return@LaunchedEffect
+        state.preparedIndex = index
         state.save()
         state.player.stop()
         state.index = index
@@ -102,19 +127,26 @@ internal fun rememberVideoPlayback(
         state.position = 0L
         state.duration = 0L
         state.seekable = false
+        state.ready = false
+        state.firstFrameReady = false
         state.playRequested = !settings.videoPreview
         val page = session.pages[index]
         val uri = page.filePath?.let { Uri.fromFile(File(it)) } ?: Uri.parse(page.uri!!)
         state.player.setMediaItem(MediaItem.fromUri(uri), videoPosition(index).coerceAtLeast(0L))
-        state.player.playWhenReady = active && state.playRequested
+        state.player.playWhenReady = false
         state.player.prepare()
     }
     LaunchedEffect(state, settings.videoLoopSingle, settings.loopMode) {
         state.player.repeatMode = if (settings.videoLoopSingle || settings.loopMode && session.pages.size == 1) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
-    LaunchedEffect(state, settings.videoPreview) { state.playRequested = !settings.videoPreview }
-    LaunchedEffect(state, active, state.playRequested) {
-        state.player.playWhenReady = active && state.playRequested
+    LaunchedEffect(state, settings.videoPreview) {
+        state.playRequested = !settings.videoPreview
+    }
+    LaunchedEffect(state, active, allowPlayback, state.playRequested, state.ready, state.surfaceReady, state.firstFrameReady, state.failed) {
+        val shouldPlay = active && allowPlayback && state.playRequested && state.ready && state.surfaceReady && state.firstFrameReady && !state.failed
+        state.player.playWhenReady = shouldPlay
+        if (!shouldPlay) state.player.pause()
+        state.refresh()
         if (!active) state.save()
     }
     LaunchedEffect(state, active) {
@@ -125,23 +157,29 @@ internal fun rememberVideoPlayback(
             delay(200)
         }
     }
-    return state
 }
 
 @Composable
 internal fun VideoPage(
     state: VideoPlaybackState, index: Int, settings: ReaderSettings, foreground: Color,
-    zoomSequence: Int, zoomAction: Int, onTap: () -> Unit, onPage: (Int) -> Unit,
+    zoomSequence: Int, zoomAction: Int, onTap: () -> Unit, onPage: (Int) -> Unit, modifier: Modifier = Modifier,
 ) {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         AndroidView(factory = { ZoomVideoView(it) }, modifier = Modifier.fillMaxSize(),
-            onRelease = { it.playerView.player = null }, update = { view ->
+            onRelease = { view ->
+                state.surfaceReady = false
+                state.firstFrameReady = false
+                view.onLayoutReady = {}
+                view.playerView.player = null
+            }, update = { view ->
                 view.playerView.player = state.player
                 view.bindPage(index)
                 view.vertical = settings.vertical
                 view.rightToLeft = settings.rightToLeft
                 view.onTap = onTap
                 view.onPage = onPage
+                view.onLayoutReady = { ready -> state.surfaceReady = ready }
+                state.surfaceReady = view.isVideoLayoutReady
                 if (zoomSequence > 0) view.command(zoomSequence, zoomAction)
             })
         if (state.failed) Text("视频无法播放，文件可能无法读取或设备不支持此编码。", Modifier.padding(28.dp), color = foreground)

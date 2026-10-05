@@ -16,6 +16,17 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     val playerView = LayoutInflater.from(context).inflate(R.layout.reader_video, this, false) as PlayerView
     var onTap: () -> Unit = {}
     var onPage: (Int) -> Unit = {}
+    var onLayoutReady: (Boolean) -> Unit = {}
+    @get:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    val isVideoLayoutReady: Boolean
+        get() {
+            val surface = playerView.videoSurfaceView ?: return false
+            val videoSize = playerView.player?.videoSize ?: return false
+            if (width <= 0 || height <= 0 || surface.width <= 0 || surface.height <= 0 ||
+                videoSize.width <= 0 || videoSize.height <= 0) return false
+            val expectedRatio = videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height
+            return abs(surface.width.toFloat() / surface.height - expectedRatio) <= expectedRatio * .02f
+        }
     var vertical = true
     var rightToLeft = false
     private var page = -1
@@ -97,7 +108,14 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         playerView.translationY = offsetY
     }
 
-    override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) { updateTransform() }
+    override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
+        updateTransform()
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        onLayoutReady(isVideoLayoutReady)
+    }
     override fun onInterceptTouchEvent(event: MotionEvent): Boolean = true
 
     @SuppressLint("ClickableViewAccessibility")

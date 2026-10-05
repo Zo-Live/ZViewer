@@ -3,7 +3,9 @@ package dev.zolive.zviewer
 import android.view.View
 import android.view.ViewGroup
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.graphics.Rect
+import android.provider.DocumentsContract
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
@@ -16,6 +18,7 @@ import dev.zolive.zviewer.data.*
 import dev.zolive.zviewer.reader.ZoomVideoView
 import dev.zolive.zviewer.reader.ZoomImageView
 import dev.zolive.zviewer.ui.ReaderScreen
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -25,9 +28,10 @@ class ReaderInteractionTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
     private var currentPage = 0
     private val saved = mutableMapOf<Int, Long>()
+    private lateinit var session: BookSession
 
     private fun open(video: Boolean = true, vertical: Boolean = true, loop: Boolean = true,
-        rightToLeft: Boolean = false, preview: Boolean = true, initialPage: Int = 0) {
+        rightToLeft: Boolean = false, preview: Boolean = true, initialPage: Int = 0, archive: Boolean = false) {
         val context = rule.activity
         val assets = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().context.assets
         val names = if (video) listOf("video-folder/video2.mp4", "video-folder/video10.mp4", "rotated.mp4")
@@ -39,10 +43,16 @@ class ReaderInteractionTest {
         }
         val book = Book("reader-test", "test", "阅读手势测试", "folder", 0, 0)
         val repository = BookRepository(context)
+        session = if (archive) {
+            val tree = DocumentsContract.buildTreeDocumentUri("dev.zolive.zviewer.test.documents", "root/formats")
+            val uri = DocumentsContract.buildDocumentUriUsingTree(tree, "root/formats/videos.zip")
+            runBlocking { repository.open(Book("archive-test", uri.toString(), "视频压缩包测试", "zip", 0, 0)) }
+        } else BookSession(book, pages)
+        currentPage = initialPage
         rule.setContent {
             var settings by remember { mutableStateOf(ReaderSettings(vertical = vertical, loopMode = loop,
                 rightToLeft = rightToLeft, videoPreview = preview)) }
-            ReaderScreen(BookSession(book, pages), initialPage, settings, repository,
+            ReaderScreen(session, initialPage, settings, repository,
                 onSettings = { settings = it }, onProgress = { currentPage = it },
                 videoPosition = { saved[it] ?: 0L }, onVideoProgress = { page, position -> saved[page] = position }, onBack = {})
         }
@@ -70,9 +80,9 @@ class ReaderInteractionTest {
             var ready = false
             rule.runOnUiThread {
                 val player = videoViews().singleOrNull()?.playerView?.player
-                val name = listOf("video2.mp4", "video10.mp4", "rotated.mp4")[currentPage]
+                val path = session.pages[currentPage].filePath
                 ready = player?.playbackState == Player.STATE_READY && player.videoSize.height > 0 &&
-                    player.currentMediaItem?.localConfiguration?.uri?.lastPathSegment == "reader-test-$name"
+                    player.currentMediaItem?.localConfiguration?.uri?.path == path
             }
             ready
         }
@@ -101,17 +111,97 @@ class ReaderInteractionTest {
         return bitmap
     }
 
-    @Test fun verticalVideoSwipesAndButtonsAlwaysShowOnePlayer() {
+    private fun waitForPlayback() {
+        rule.waitUntil(5000) {
+            var playing = false
+            rule.runOnUiThread {
+                val player = videoViews().singleOrNull()?.playerView?.player
+                playing = player?.isPlaying == true && player.currentPosition > 0L
+            }
+            playing
+        }
+    }
+
+    @Test fun openingVideoArchiveAutoplaysWithoutInteraction() {
+        open(archive = true, preview = false)
+        waitForPlayback()
+        rule.runOnIdle { assertEquals(0, currentPage) }
+    }
+
+    @Test fun reopeningVideoArchiveAutoplaysAtSavedPosition() {
+        saved[1] = 4000L
+        open(archive = true, preview = false, initialPage = 1)
+        waitForPlayback()
+        rule.runOnIdle {
+            assertEquals(1, currentPage)
+            assertTrue(videoViews().single().playerView.player!!.currentPosition >= 4000L)
+        }
+    }
+
+    @Test fun videoTransitionKeepsBothViewsUntilIncomingFrameIsReady() {
+        open(preview = false)
+        waitForPlayback()
+        lateinit var outgoing: ZoomVideoView
+        rule.runOnIdle { outgoing = videoViews().single() }
+        rule.mainClock.autoAdvance = false
+        try {
+            rule.runOnUiThread { outgoing.onPage(1) }
+            rule.mainClock.advanceTimeByFrame()
+            rule.waitUntil(5000) {
+                var ready = false
+                rule.runOnUiThread {
+                    val views = videoViews()
+                    assertTrue("翻页开始时应保留原视频视图和画面", views.contains(outgoing))
+                    assertTrue("过渡期间两个播放器均应暂停", views.all { it.playerView.player?.playWhenReady == false })
+                    val incoming = views.singleOrNull { it !== outgoing }
+                    ready = incoming?.playerView?.player?.playbackState == Player.STATE_READY
+                }
+                ready
+            }
+            lateinit var incoming: ZoomVideoView
+            rule.runOnUiThread { incoming = videoViews().single { it !== outgoing } }
+            repeat(18) { frame ->
+                rule.mainClock.advanceTimeByFrame()
+                rule.runOnUiThread {
+                    val views = videoViews()
+                    if (views.size == 2) {
+                        assertTrue(views.all { it.playerView.player?.playWhenReady == false })
+                        assertTrue(views.contains(outgoing))
+                        assertTrue(views.contains(incoming))
+                    }
+                }
+                val bitmap = screenshot("video-transition-$frame")
+                var coloredPixels = 0
+                for (pixelY in 0 until bitmap.height step 40) {
+                    for (pixelX in 0 until bitmap.width step 40) {
+                        val color = bitmap.getPixel(pixelX, pixelY)
+                        if (Color.green(color) < 50 && (Color.red(color) > 200 || Color.blue(color) > 200)) coloredPixels++
+                    }
+                }
+                bitmap.recycle()
+                assertTrue("第 $frame 帧应保留视频画面，不能整屏闪黑", coloredPixels > 20)
+            }
+            rule.mainClock.autoAdvance = true
+            rule.waitUntil(5000) { currentPage == 1 }
+            waitForVideo()
+            rule.runOnIdle { assertSame("过渡结束时应保留已显示首帧的新视频视图", incoming, videoViews().single()) }
+            waitForPlayback()
+        } finally {
+            rule.mainClock.autoAdvance = true
+        }
+    }
+
+    @Test fun verticalVideoSwipesAndButtonsShowOnePlayerAfterTransition() {
         open()
-        var original: Player? = null
-        rule.runOnIdle { original = videoViews().single().playerView.player }
+        var previous: Player? = null
         repeat(9) { step ->
             swipe()
             rule.waitUntil(5000) { currentPage == (step + 1) % 3 }
             waitForVideo()
             rule.runOnIdle {
                 val view = videoViews().single()
-                assertSame(original, view.playerView.player)
+                if (previous != null) assertNotSame(previous, view.playerView.player)
+                previous = view.playerView.player
                 assertEquals(rule.activity.window.decorView.height, view.height)
                 assertEquals(1f, view.playerView.scaleX, .001f)
                 val surface = view.playerView.videoSurfaceView!!
@@ -237,7 +327,10 @@ class ReaderInteractionTest {
             assertFalse(player.playWhenReady)
             assertEquals(position, player.currentPosition)
         }
-        repeat(2) { rule.onNodeWithContentDescription("下一页").performClick() }
+        repeat(2) { step ->
+            rule.onNodeWithContentDescription("下一页").performClick()
+            rule.waitUntil(5000) { currentPage == step + 1 }
+        }
         waitForVideo()
         rule.onNodeWithContentDescription("下一页").assertIsNotEnabled()
         toggleControls(visible = false)

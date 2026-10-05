@@ -79,6 +79,8 @@ SDK 路径不同时调整 `ANDROID_HOME`，或在未跟踪的 `local.properties`
 
 产物为 `app/build/outputs/apk/release/app-release.apk`。
 
+当前正式版本为 `1.2.2`（`versionCode=7`），发布安装包为 `dist/ZViewer-1.2.2-release.apk`，SHA-256 校验文件为 `dist/ZViewer-1.2.2-release.apk.sha256`。
+
 私钥与口令不得提交到 Git，`.signing/` 必须单独安全备份。后续发布必须使用同一密钥并递增 `versionCode`，已安装应用才能覆盖升级并保留数据；若在新机器上生成新密钥，则只能全新安装。
 
 ## 测试与实现文档

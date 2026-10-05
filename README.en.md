@@ -79,6 +79,8 @@ The key is located at `.signing/zviewer-release.jks` with alias `zviewer`; passw
 
 The artifact is `app/build/outputs/apk/release/app-release.apk`.
 
+The current release is `1.2.2` (`versionCode=7`). The distribution APK is `dist/ZViewer-1.2.2-release.apk`, with its SHA-256 checksum in `dist/ZViewer-1.2.2-release.apk.sha256`.
+
 The private key and passwords must not be committed to Git, and `.signing/` must be backed up separately and securely. Subsequent releases must use the same key and an incremented `versionCode` so that installed apps can be upgraded in place with their data preserved; a new key generated on a new machine means fresh installs only.
 
 ## Testing and Implementation Docs
