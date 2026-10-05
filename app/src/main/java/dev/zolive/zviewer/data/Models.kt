@@ -14,6 +14,8 @@ fun isImage(name: String): Boolean = name.extensionLower() in imageExtensions &&
     name.replace('\\', '/').split('/').none { it.startsWith('.') || it == "__MACOSX" }
 fun isVideo(name: String): Boolean = name.extensionLower() in videoExtensions &&
     name.replace('\\', '/').split('/').none { it.startsWith('.') || it == "__MACOSX" }
+fun isPdf(name: String): Boolean = name.extensionLower() == "pdf" &&
+    name.replace('\\', '/').split('/').none { it.startsWith('.') || it == "__MACOSX" }
 
 object NaturalOrder : Comparator<String> {
     private val parts = Regex("[0-9]+|[^0-9]+")

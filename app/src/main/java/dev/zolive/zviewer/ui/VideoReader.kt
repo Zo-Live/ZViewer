@@ -47,7 +47,7 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
         duration = player.duration.coerceAtLeast(0L)
         playing = player.isPlaying
         playbackState = player.playbackState
-        ready = playbackState == Player.STATE_READY && player.videoSize.width > 0 && player.videoSize.height > 0
+        ready = playbackState == Player.STATE_READY
         seekable = player.isCurrentMediaItemSeekable
     }
 
@@ -142,14 +142,21 @@ internal fun rememberVideoPlayback(
     LaunchedEffect(state, settings.videoPreview) {
         state.playRequested = !settings.videoPreview
     }
-    LaunchedEffect(state, active, allowPlayback, state.playRequested, state.ready, state.surfaceReady, state.firstFrameReady, state.failed) {
-        val shouldPlay = active && allowPlayback && state.playRequested && state.ready && state.surfaceReady && state.firstFrameReady && !state.failed
+    LaunchedEffect(state, active, allowPlayback, state.playRequested, state.ready, state.failed) {
+        val shouldPlay = active && allowPlayback && state.playRequested && state.ready && !state.failed
         state.player.playWhenReady = shouldPlay
         if (!shouldPlay) state.player.pause()
         state.refresh()
         if (!active) state.save()
     }
     LaunchedEffect(state, active) {
+        // 混合内容会保留已创建的播放器；视频播完后自动进入下一项，再次回到该项时播放器停在结尾帧。
+        // 重新激活已播完的播放器时回到开头并按设置恢复播放；用户手动暂停（非 ENDED）不受影响。
+        if (active && state.player.playbackState == Player.STATE_ENDED) {
+            state.player.seekTo(0L)
+            state.playRequested = !settings.videoPreview
+            state.refresh()
+        }
         var ticks = 0
         while (active) {
             state.refresh()

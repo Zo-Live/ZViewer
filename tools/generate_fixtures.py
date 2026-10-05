@@ -102,6 +102,26 @@ def generate():
     with zipfile.ZipFile(ASSETS / "empty.cbz", "w") as archive:
         archive.writestr("README.txt", "无图片")
     generate_videos()
+    video = ASSETS / "video-folder" / "video2.mp4"
+    document = LIBRARY / "06 远方的灯塔.pdf"
+    for output, entries in (
+        (ASSETS / "mixed-pdf.zip", (("chapter1/page1.png", ASSETS / "page1.png"),
+                                    ("chapter1/video2.mp4", video),
+                                    ("chapter1/说明.pdf", document),
+                                    ("chapter1/page2.png", ASSETS / "page2.png"))),
+        (ASSETS / "mixed-pdf-ascii.zip", (("chapter1/page1.png", ASSETS / "page1.png"),
+                                          ("chapter1/video2.mp4", video),
+                                          ("chapter1/document.pdf", document),
+                                          ("chapter1/page2.png", ASSETS / "page2.png"))),
+        (ASSETS / "chinese-mixed-pdf.zip", (("第 1 页.png", ASSETS / "page1.png"),
+                                            ("视频 2.mp4", video),
+                                            ("说明.pdf", document))),
+        (ASSETS / "chinese-images.zip", (("第 1 页.png", ASSETS / "page1.png"),
+                                         ("第 2 页.png", ASSETS / "page2.png"))),
+    ):
+        with zipfile.ZipFile(output, "w", zipfile.ZIP_DEFLATED) as archive:
+            for name, source in entries:
+                archive.write(source, name)
     print(f"已生成测试书库：{LIBRARY}")
 
 

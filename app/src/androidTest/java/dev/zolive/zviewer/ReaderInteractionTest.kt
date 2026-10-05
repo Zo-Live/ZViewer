@@ -31,15 +31,18 @@ class ReaderInteractionTest {
     private lateinit var session: BookSession
 
     private fun open(video: Boolean = true, vertical: Boolean = true, loop: Boolean = true,
-        rightToLeft: Boolean = false, preview: Boolean = true, initialPage: Int = 0, archive: Boolean = false) {
+        rightToLeft: Boolean = false, preview: Boolean = true, initialPage: Int = 0, archive: Boolean = false,
+        mixed: Boolean = false, mixedVideos: Boolean = false, names: List<String>? = null) {
         val context = rule.activity
         val assets = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().context.assets
-        val names = if (video) listOf("video-folder/video2.mp4", "video-folder/video10.mp4", "rotated.mp4")
+        val names = names ?: if (mixed && mixedVideos) listOf("page1.png", "video-folder/video2.mp4", "video-folder/video10.mp4", "page2.png")
+            else if (mixed) listOf("page1.png", "video-folder/video2.mp4", "page2.png")
+            else if (video) listOf("video-folder/video2.mp4", "video-folder/video10.mp4", "rotated.mp4")
             else listOf("page1.png", "page2.png", "page10.png")
         val pages = names.map { name ->
             val file = File(context.cacheDir, "reader-test-${name.substringAfterLast('/')}")
             assets.open("formats/$name").use { input -> file.outputStream().use { input.copyTo(it) } }
-            PageSource(name, filePath = file.absolutePath, mediaType = if (video) "video" else "image")
+            PageSource(name, filePath = file.absolutePath, mediaType = if (name.extensionLower() in videoExtensions) "video" else "image")
         }
         val book = Book("reader-test", "test", "阅读手势测试", "folder", 0, 0)
         val repository = BookRepository(context)
@@ -56,7 +59,7 @@ class ReaderInteractionTest {
                 onSettings = { settings = it }, onProgress = { currentPage = it },
                 videoPosition = { saved[it] ?: 0L }, onVideoProgress = { page, position -> saved[page] = position }, onBack = {})
         }
-        if (video) waitForVideo() else rule.waitUntil(10_000) {
+        if (video && !mixed || mixed && session.pages[initialPage].isVideo) waitForVideo() else rule.waitUntil(10_000) {
             var ready = false
             rule.runOnUiThread {
                 ready = descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>()
@@ -79,10 +82,12 @@ class ReaderInteractionTest {
         rule.waitUntil(15_000) {
             var ready = false
             rule.runOnUiThread {
-                val player = videoViews().singleOrNull()?.playerView?.player
                 val path = session.pages[currentPage].filePath
-                ready = player?.playbackState == Player.STATE_READY && player.videoSize.height > 0 &&
-                    player.currentMediaItem?.localConfiguration?.uri?.path == path
+                ready = videoViews().any { view ->
+                    val player = view.playerView.player
+                    player?.playbackState == Player.STATE_READY && player.videoSize.height > 0 &&
+                        player.currentMediaItem?.localConfiguration?.uri?.path == path
+                }
             }
             ready
         }
@@ -115,8 +120,12 @@ class ReaderInteractionTest {
         rule.waitUntil(5000) {
             var playing = false
             rule.runOnUiThread {
-                val player = videoViews().singleOrNull()?.playerView?.player
-                playing = player?.isPlaying == true && player.currentPosition > 0L
+                val path = session.pages[currentPage].filePath
+                playing = videoViews().any { view ->
+                    val player = view.playerView.player
+                    player?.isPlaying == true && player.currentPosition > 0L &&
+                        player.currentMediaItem?.localConfiguration?.uri?.path == path
+                }
             }
             playing
         }
@@ -152,8 +161,9 @@ class ReaderInteractionTest {
                 rule.runOnUiThread {
                     val views = videoViews()
                     assertTrue("翻页开始时应保留原视频视图和画面", views.contains(outgoing))
-                    assertTrue("过渡期间两个播放器均应暂停", views.all { it.playerView.player?.playWhenReady == false })
+                    assertTrue("切换前视频应在过渡期间继续播放", outgoing.playerView.player?.playWhenReady == true)
                     val incoming = views.singleOrNull { it !== outgoing }
+                    assertTrue("切换目标视频应在过渡期间暂停", incoming?.playerView?.player?.playWhenReady == false)
                     ready = incoming?.playerView?.player?.playbackState == Player.STATE_READY
                 }
                 ready
@@ -165,7 +175,8 @@ class ReaderInteractionTest {
                 rule.runOnUiThread {
                     val views = videoViews()
                     if (views.size == 2) {
-                        assertTrue(views.all { it.playerView.player?.playWhenReady == false })
+                        assertTrue("切换前视频应继续播放", outgoing.playerView.player?.playWhenReady == true)
+                        assertTrue("切换目标视频应暂停", incoming.playerView.player?.playWhenReady == false)
                         assertTrue(views.contains(outgoing))
                         assertTrue(views.contains(incoming))
                     }
@@ -350,6 +361,122 @@ class ReaderInteractionTest {
             assertEquals(1, videoViews().size)
             assertTrue(videoViews().single().playerView.player!!.playWhenReady)
             assertEquals(0L, saved[2])
+        }
+    }
+
+    @Test fun mixedContentUsesHorizontalPagingAndPageSpecificVideoControls() {
+        open(video = true, mixed = true, vertical = true, preview = false, initialPage = 0)
+        swipe(vertical = true)
+        rule.runOnIdle { assertEquals("混合内容应锁定水平翻页", 0, currentPage) }
+        swipe(vertical = false)
+        rule.waitUntil(5000) { currentPage == 1 }
+        waitForVideo()
+        waitForPlayback()
+        toggleControls()
+        rule.onNodeWithContentDescription("视频播放进度").assertIsDisplayed()
+        toggleControls(visible = false)
+        swipe(vertical = false)
+        rule.waitUntil(5000) { currentPage == 2 }
+        toggleControls(visible = false)
+        rule.onNodeWithContentDescription("视频播放进度").assertDoesNotExist()
+    }
+
+    @Test fun mixedContentStartsVideoAfterImageAndKeepsNextVideoPlayable() {
+        open(video = true, mixed = true, mixedVideos = true, vertical = true, preview = false, initialPage = 0)
+        swipe(vertical = false)
+        rule.waitUntil(5000) { currentPage == 1 }
+        waitForVideo()
+        waitForPlayback()
+        var firstPosition = 0L
+        val firstPath = session.pages[currentPage].filePath
+        rule.runOnIdle {
+            firstPosition = videoViews().first {
+                it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == firstPath
+            }.playerView.player!!.currentPosition
+        }
+        rule.waitUntil(5000) {
+            var advanced = false
+            rule.runOnUiThread {
+                advanced = videoViews().any {
+                    it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == firstPath &&
+                        (it.playerView.player?.currentPosition ?: 0L) > firstPosition
+                }
+            }
+            advanced
+        }
+        swipe(vertical = false)
+        rule.waitUntil(5000) { currentPage == 2 }
+        waitForVideo()
+        waitForPlayback()
+        rule.runOnIdle {
+            val views = videoViews()
+            assertEquals("混合视频切换后同一时间只能有一个播放中的视频", 1, views.count { it.playerView.player?.isPlaying == true })
+            val path = session.pages[currentPage].filePath
+            assertTrue("图片切视频后下一个视频应自动播放", views.any {
+                it.playerView.player?.isPlaying == true &&
+                    it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path
+            })
+        }
+    }
+
+    @Test fun mixedContentPausesVideoAfterLeavingIt() {
+        open(video = true, mixed = true, vertical = true, preview = false, initialPage = 0,
+            names = listOf("page1.png", "video-folder/video2.mp4", "page2.png", "video-folder/video10.mp4", "page10.png"))
+        swipe(vertical = false)
+        rule.waitUntil(5000) { currentPage == 1 }
+        waitForVideo()
+        waitForPlayback()
+        val path = session.pages[1].filePath
+        var position = 0L
+        rule.runOnIdle {
+            position = videoViews().first {
+                it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path
+            }.playerView.player!!.currentPosition
+        }
+        swipe(vertical = false)
+        rule.waitUntil(5000) { currentPage == 2 }
+        rule.waitUntil(5000) {
+            var paused = false
+            rule.runOnUiThread {
+                paused = videoViews().firstOrNull {
+                    it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path
+                }?.playerView?.player?.playWhenReady == false
+            }
+            paused
+        }
+        var pausedPosition = 0L
+        rule.runOnIdle {
+            pausedPosition = videoViews().first {
+                it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path
+            }.playerView.player!!.currentPosition
+        }
+        Thread.sleep(2000)
+        rule.runOnIdle {
+            val player = videoViews().first {
+                it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path
+            }.playerView.player!!
+            val detail = "start=$position paused=$pausedPosition now=${player.currentPosition}," +
+                " isPlaying=${player.isPlaying}, playWhenReady=${player.playWhenReady}, state=${player.playbackState}"
+            assertFalse("离开视频后不应继续播放：$detail", player.isPlaying)
+            assertTrue("离屏暂停后播放位置不应继续前进：$detail", player.currentPosition <= pausedPosition + 200L)
+        }
+    }
+
+    @Test fun mixedContentReplaysEndedVideoWhenReturning() {
+        open(video = true, mixed = true, vertical = true, preview = false, initialPage = 0,
+            names = listOf("page1.png", "video-folder/video2.mp4", "page2.png"))
+        swipe(vertical = false)
+        rule.waitUntil(5000) { currentPage == 1 }
+        waitForVideo()
+        waitForPlayback()
+        rule.waitUntil(15_000) { currentPage == 2 }
+        swipe(forward = false, vertical = false)
+        rule.waitUntil(5000) { currentPage == 1 }
+        waitForVideo()
+        waitForPlayback()
+        rule.runOnIdle {
+            val player = videoViews().single().playerView.player!!
+            assertTrue("返回已播完的视频应从头重新播放", player.currentPosition > 0L)
         }
     }
 }

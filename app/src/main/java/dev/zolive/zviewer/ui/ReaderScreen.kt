@@ -96,17 +96,25 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     val activity = LocalActivity.current ?: return
     val context = LocalContext.current
     val videoBook = session.pages.any(PageSource::isVideo)
-    val verticalReading = settings.vertical
-    val pageUnit = if (videoBook) "个视频" else "页"
-    var currentVideoState by remember(session.book.cacheKey, videoBook) {
-        mutableStateOf(if (videoBook) createVideoPlaybackState(context) else null)
+    val mixedBook = videoBook && session.pages.any { !it.isVideo }
+    val pureVideoBook = videoBook && !mixedBook
+    val verticalReading = settings.vertical && !mixedBook
+    val pageUnit = when {
+        mixedBook -> "项"
+        videoBook -> "个视频"
+        else -> "页"
     }
-    var videoTransition by remember(session.book.cacheKey, videoBook) { mutableStateOf<VideoTransition?>(null) }
+    val pageSettings = if (mixedBook) settings.copy(vertical = false) else settings
+    var currentVideoState by remember(session.book.cacheKey, pureVideoBook) {
+        mutableStateOf(if (pureVideoBook) createVideoPlaybackState(context) else null)
+    }
+    val mixedVideoStates = remember(session.book.cacheKey, mixedBook) { mutableMapOf<Int, VideoPlaybackState>() }
+    var videoTransition by remember(session.book.cacheKey, pureVideoBook) { mutableStateOf<VideoTransition?>(null) }
     val transitionProgress = remember(videoTransition) { AnimationValue(0f) }
     val latestVideoState = rememberUpdatedState(currentVideoState)
     val latestVideoTransition = rememberUpdatedState(videoTransition)
 
-    DisposableEffect(session.book.cacheKey, videoBook) {
+    DisposableEffect(session.book.cacheKey, pureVideoBook) {
         onDispose {
             latestVideoState.value?.release()
             latestVideoTransition.value?.let { transition ->
@@ -114,6 +122,9 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 transition.toState.release()
             }
         }
+    }
+    DisposableEffect(session.book.cacheKey, mixedBook) {
+        onDispose { mixedVideoStates.values.forEach(VideoPlaybackState::release) }
     }
 
     PredictiveBackHandler(enabled = !preferences && !jumpDialog) { events ->
@@ -139,8 +150,8 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         onDispose { controller.show(WindowInsetsCompat.Type.systemBars()) }
     }
 
-    LaunchedEffect(verticalReading, paging, videoBook) {
-        if (videoBook) return@LaunchedEffect
+    LaunchedEffect(verticalReading, paging, pureVideoBook) {
+        if (pureVideoBook) return@LaunchedEffect
         jumpJob?.cancel()
         val item = paging.anchor(currentPage)
         if (verticalReading) listState.scrollToItem(item) else pagerState.scrollToPage(item)
@@ -150,6 +161,11 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 else paging.pageAt(listState.firstVisibleItemIndex)
             } else paging.pageAt(pagerState.settledPage)
         }.distinctUntilChanged().collect { page -> currentPage = page; onProgress(page) }
+    }
+    LaunchedEffect(mixedBook, pagerState.settledPage, active) {
+        if (!mixedBook || !active) return@LaunchedEffect
+        val settledIndex = paging.pageAt(pagerState.settledPage)
+        mixedVideoStates.forEach { (index, state) -> if (index != settledIndex) state.pause() }
     }
     LaunchedEffect(videoTransition) {
         val transition = videoTransition ?: return@LaunchedEffect
@@ -167,10 +183,9 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     }
     val jump: (Int) -> Unit = { target ->
         val page = paging.destination(target)
-        if (videoBook) {
+        if (pureVideoBook) {
             val current = currentVideoState
             if (current != null && videoTransition == null && page != currentPage) {
-                current.pause()
                 videoTransition = VideoTransition(
                     fromPage = currentPage,
                     fromState = current,
@@ -180,16 +195,23 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 )
             }
         } else {
-            currentPage = page
-            onProgress(page)
+            if (!mixedBook) {
+                currentPage = page
+                onProgress(page)
+            }
             jumpJob?.cancel()
             jumpJob = scope.launch {
                 if (verticalReading) listState.scrollToItem(paging.nearestItem(page, listState.firstVisibleItemIndex))
+                else if (mixedBook) pagerState.animateScrollToPage(paging.nearestItem(page, pagerState.currentPage))
                 else pagerState.scrollToPage(paging.nearestItem(page, pagerState.currentPage))
             }
         }
     }
-    val videoState = if (videoBook) currentVideoState else null
+    val videoState = if (pureVideoBook) currentVideoState else null
+    val toolbarVideoState = if (session.pages.getOrNull(currentPage)?.isVideo == true) {
+        if (pureVideoBook) videoState else mixedVideoStates.getOrPut(currentPage) { createVideoPlaybackState(context) }
+    } else null
+    val currentPageIsVideo = toolbarVideoState != null
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         Box(Modifier.fillMaxSize().graphicsLayer {
@@ -205,7 +227,9 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 Box(Modifier.fillMaxSize().clipToBounds()) {
                     for ((page, state) in slots) {
                         key(state) {
-                            VideoPlaybackSlot(state, page, session, active && transition == null, transition == null, settings,
+                            val outgoing = state === transition?.fromState
+                            VideoPlaybackSlot(state, page, session,
+                                active && (transition == null || outgoing), transition == null || outgoing, pageSettings,
                                 videoPosition, onVideoProgress, foreground, zoomSequence, zoomAction,
                                 modifier = Modifier.graphicsLayer {
                                     val distance = if (verticalReading) size.height else size.width
@@ -222,6 +246,28 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                                     }
                                 })
                         }
+                    }
+                }
+            } else if (mixedBook) {
+                HorizontalPager(state = pagerState, reverseLayout = settings.rightToLeft, modifier = Modifier.fillMaxSize(),
+                    beyondViewportPageCount = 1, key = { "${session.book.cacheKey}-$it" }) { item ->
+                    val index = paging.pageAt(item)
+                    val page = session.pages[index]
+                    val settled = pagerState.settledPage == item
+                    if (page.isVideo) {
+                        val state = mixedVideoStates.getOrPut(index) { createVideoPlaybackState(context) }
+                        VideoPlaybackSlot(state, index, session, active && settled, active && settled, pageSettings,
+                            videoPosition, onVideoProgress, foreground, zoomSequence, zoomAction,
+                            onTap = { controls = !controls }, onPage = { jump(currentPage + it) },
+                            onEnded = {
+                                if (!settings.videoLoopSingle && (settings.loopMode || currentPage < session.pages.lastIndex)) {
+                                    jump(currentPage + 1)
+                                }
+                            })
+                    } else {
+                        ReaderPage(session, index, repository, vertical = false, active = active && settled,
+                            foreground = foreground, zoomSequence = if (settled) zoomSequence else 0,
+                            zoomAction = zoomAction, onTap = { controls = !controls })
                     }
                 }
             } else if (verticalReading) {
@@ -256,7 +302,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 TopAppBar(title = {
                     Column {
                         Text(session.book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                        Text(if (verticalReading) { if (videoBook) "垂直翻页" else "垂直连续" } else if (settings.rightToLeft) "水平翻页 · 从右向左" else "水平翻页",
+                        Text(if (mixedBook) { if (settings.rightToLeft) "水平翻页 · 从右向左" else "水平翻页" } else if (verticalReading) { if (videoBook) "垂直翻页" else "垂直连续" } else if (settings.rightToLeft) "水平翻页 · 从右向左" else "水平翻页",
                             style = MaterialTheme.typography.labelSmall)
                     }
                 }, navigationIcon = {
@@ -271,7 +317,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                     Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) {
                         Box(Modifier.align(Alignment.CenterHorizontally).size(32.dp, 4.dp).clip(RoundedCornerShape(2.dp))
                             .background(MaterialTheme.colorScheme.outlineVariant))
-                        if (videoState != null) VideoProgressControls(videoState)
+                        if (toolbarVideoState != null) VideoProgressControls(toolbarVideoState)
                         var slider by remember { mutableFloatStateOf(currentPage.toFloat()) }
                         var dragging by remember { mutableStateOf(false) }
                         LaunchedEffect(currentPage) { if (!dragging) slider = currentPage.toFloat() }
@@ -287,12 +333,12 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                             modifier = Modifier.fillMaxWidth())
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { jump(currentPage - 1) }, enabled = settings.loopMode || currentPage > 0) { Icon(Icons.AutoMirrored.Outlined.NavigateBefore, "上一页") }
-                            IconButton(onClick = { zoomAction = -1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomOut, if (videoBook) "缩小视频" else "缩小图片") }
+                            IconButton(onClick = { zoomAction = -1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomOut, if (currentPageIsVideo) "缩小视频" else "缩小图片") }
                             TextButton(onClick = { zoomAction = 0; zoomSequence++ }) { Text("适合屏幕") }
-                            IconButton(onClick = { zoomAction = 1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomIn, if (videoBook) "放大视频" else "放大图片") }
+                            IconButton(onClick = { zoomAction = 1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomIn, if (currentPageIsVideo) "放大视频" else "放大图片") }
                             IconButton(onClick = { jump(currentPage + 1) }, enabled = settings.loopMode || currentPage < session.pages.lastIndex) { Icon(Icons.AutoMirrored.Outlined.NavigateNext, "下一页") }
                         }
-                        Text(if (videoBook) "轻点画面收起 · 双击缩放，拖动播放进度条定位" else "轻点画面收起 · 双指缩放，双击缩放图片",
+                        Text(if (currentPageIsVideo) "轻点画面收起 · 双击缩放，拖动播放进度条定位" else "轻点画面收起 · 双指缩放，双击缩放图片",
                             Modifier.align(Alignment.CenterHorizontally).padding(bottom = 2.dp),
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -312,7 +358,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         var text by remember { mutableStateOf((currentPage + 1).toString()) }
         val page = text.toIntOrNull()
         AlertDialog(onDismissRequest = { jumpDialog = false }, title = { Text("跳转到指定$pageUnit") }, text = {
-            OutlinedTextField(text, { text = it.filter(Char::isDigit).take(6) }, label = { Text("${if (videoBook) "视频序号" else "页码"}（1–${session.pages.size}）") },
+            OutlinedTextField(text, { text = it.filter(Char::isDigit).take(6) }, label = { Text("${when { mixedBook -> "内容序号"; videoBook -> "视频序号"; else -> "页码" }}（1–${session.pages.size}）") },
                 singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
         }, confirmButton = { TextButton(enabled = page != null && page in 1..session.pages.size,
             onClick = { jump(page!! - 1); jumpDialog = false }) { Text("跳转") } },

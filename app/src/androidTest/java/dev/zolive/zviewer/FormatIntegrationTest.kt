@@ -136,6 +136,22 @@ class FormatIntegrationTest {
         }
     }
 
+    @Test fun archiveWithPdfReportsExtractionPromptEvenWhenMixed() = runBlocking {
+        for (name in listOf("mixed-pdf.zip", "mixed-pdf-ascii.zip", "chinese-mixed-pdf.zip")) {
+            val uri = DocumentsContract.buildDocumentUri("dev.zolive.zviewer.test.documents", "root/formats/$name")
+            val result = runCatching { repository.open(Book(name.stableId(), uri.toString(), name, "zip", 0, 0)) }
+            val error = result.exceptionOrNull()
+            assertTrue("$name 应提示先解压 PDF，实际：$error",
+                error is ReaderException && error.message!!.contains("PDF"))
+        }
+    }
+
+    @Test fun archiveWithUtf8ChineseNamesExtractsInOrder() = runBlocking {
+        val uri = DocumentsContract.buildDocumentUri("dev.zolive.zviewer.test.documents", "root/formats/chinese-images.zip")
+        val session = repository.open(Book("chinese-images", uri.toString(), "chinese-images", "zip", 0, 0))
+        assertEquals(listOf("第 1 页.png", "第 2 页.png"), session.pages.map { it.name })
+    }
+
     @Test fun archivePathsCannotEscapePrivateCache() = runBlocking {
         val uri = DocumentsContract.buildDocumentUri("dev.zolive.zviewer.test.documents", "root/formats/unsafe.zip")
         val book = Book("unsafe", uri.toString(), "unsafe", "zip", 0, 0)

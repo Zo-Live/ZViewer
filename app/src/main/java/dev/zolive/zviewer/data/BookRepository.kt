@@ -97,14 +97,10 @@ class BookRepository(private val context: Context) {
             when (book.kind) {
                 "folder", "video-folder", "mixed-folder" -> {
                     val entries = children(Uri.parse(book.uri)).filter { !it.directory && (isImage(it.name) || isVideo(it.name)) }
-                    val images = entries.filter { isImage(it.name) }
-                    val videos = entries.filter { isVideo(it.name) }
-                    if (images.isNotEmpty() && videos.isNotEmpty()) {
-                        throw ReaderException("这个文件夹同时包含图片和视频，无法作为一本漫画打开。请分开存放后重试。")
-                    }
-                    val mediaType = if (videos.isNotEmpty()) "video" else "image"
                     val pages = entries.sortedWith { first, second -> NaturalOrder.compare(first.name, second.name) }
-                        .map { PageSource(it.name, uri = it.uri.toString(), mediaType = mediaType) }
+                        .map { entry ->
+                            PageSource(entry.name, uri = entry.uri.toString(), mediaType = if (isVideo(entry.name)) "video" else "image")
+                        }
                     if (pages.isEmpty()) throw ReaderException("这个文件夹中没有可阅读的图片或视频。")
                     BookSession(book, pages)
                 }
@@ -146,21 +142,17 @@ class BookRepository(private val context: Context) {
                     try {
                         val extracted = mutableListOf<Triple<String, File, String>>()
                         var totalBytes = 0L
-                        var foundImages = false
-                        var foundVideos = false
+                        var foundPdf = false
                         withArchive(book) { archive ->
                             var entry = Archive.readNextHeader(archive)
                             while (entry != 0L) {
                                 currentCoroutineContext().ensureActive()
                                 val name = entryName(entry)
-                                val image = ArchiveEntry.filetype(entry) == 0x8000 && isImage(name)
-                                val video = ArchiveEntry.filetype(entry) == 0x8000 && isVideo(name)
+                                val regular = ArchiveEntry.filetype(entry) == 0x8000
+                                val image = regular && isImage(name)
+                                val video = regular && isVideo(name)
+                                foundPdf = foundPdf || (regular && isPdf(name))
                                 if (image || video) {
-                                    foundImages = foundImages || image
-                                    foundVideos = foundVideos || video
-                                    if (foundImages && foundVideos) {
-                                        throw ReaderException("这个压缩包同时包含图片和视频，无法作为一本漫画打开。请分开存放后重试。")
-                                    }
                                     if (extracted.size >= 20_000) throw ReaderException("漫画超过 20,000 页，无法继续解压。")
                                     checkEntrySize(entry, if (video) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024)
                                     val output = File(folder, "${extracted.size}.${name.extensionLower()}")
@@ -172,6 +164,7 @@ class BookRepository(private val context: Context) {
                                 entry = Archive.readNextHeader(archive)
                             }
                         }
+                        if (foundPdf) throw ReaderException("压缩包本身可以读取，但其中的 PDF 暂不支持直接阅读，请先解压到书库目录后再打开。")
                         if (extracted.isEmpty()) throw ReaderException("压缩包中没有支持的图片或视频。")
                         val sorted = extracted.sortedWith { first, second -> NaturalOrder.compare(first.first, second.first) }
                         manifest.writeText(JSONArray(sorted.map { (name, file, type) ->
@@ -212,11 +205,18 @@ class BookRepository(private val context: Context) {
                                 ?: throw ReaderException("视频文件夹为空。")
                             videoCover(first.uri)
                         }
-                        "mixed-folder" -> throw ReaderException("请将图片和视频分开存放后生成封面。")
+                        "mixed-folder" -> {
+                            val first = children(Uri.parse(book.uri)).filter { !it.directory && (isImage(it.name) || isVideo(it.name)) }
+                                .minWithOrNull { first, second -> NaturalOrder.compare(first.name, second.name) }
+                                ?: throw ReaderException("图片和视频文件夹为空。")
+                            if (isVideo(first.name)) videoCover(first.uri)
+                            else decodeBitmap(ImageDecoder.createSource(resolver, first.uri), 1000)
+                        }
                         else -> {
                             var firstName: String? = null
-                            var foundImages = false
+                            var firstVideo = false
                             var foundVideos = false
+                            var foundPdf = false
                             withArchive(book) { archive ->
                                 var entry = Archive.readNextHeader(archive)
                                 while (entry != 0L) {
@@ -225,15 +225,18 @@ class BookRepository(private val context: Context) {
                                     if (ArchiveEntry.filetype(entry) == 0x8000) {
                                         val image = isImage(name)
                                         val video = isVideo(name)
-                                        foundImages = foundImages || image
+                                        foundPdf = foundPdf || isPdf(name)
                                         foundVideos = foundVideos || video
-                                        if ((image || video) && (firstName == null || NaturalOrder.compare(name, firstName!!) < 0)) firstName = name
+                                        if ((image || video) && (firstName == null || NaturalOrder.compare(name, firstName!!) < 0)) {
+                                            firstName = name
+                                            firstVideo = video
+                                        }
                                     }
                                     entry = Archive.readNextHeader(archive)
                                 }
                             }
+                            if (foundPdf) throw ReaderException("压缩包本身可以读取，但其中的 PDF 暂不支持直接阅读，请先解压到书库目录后再打开。")
                             if (firstName == null) throw ReaderException("未找到封面。")
-                            if (foundImages && foundVideos) throw ReaderException("请将图片和视频分开存放后生成封面。")
                             val limit = if (foundVideos) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024
                             withArchive(book) { archive ->
                                 var entry = Archive.readNextHeader(archive)
@@ -247,7 +250,7 @@ class BookRepository(private val context: Context) {
                                     entry = Archive.readNextHeader(archive)
                                 }
                             }
-                            if (foundVideos) videoCover(Uri.fromFile(scratch))
+                            if (firstVideo) videoCover(Uri.fromFile(scratch))
                             else decodeBitmap(ImageDecoder.createSource(scratch), 1000)
                         }
                     }
@@ -327,6 +330,9 @@ class BookRepository(private val context: Context) {
             try {
                 Archive.readSupportFilterAll(archive)
                 Archive.readSupportFormatAll(archive)
+                // Android 的 C locale 无法把 UTF-8 文件名转换为当前 locale，libarchive 会因此在读取中文名条目时抛出 ARCHIVE_WARN。
+                // libarchive-android 提供 setCharset 覆盖当前 locale，使中文 UTF-8 文件名可以正常读取。
+                Archive.setCharset(archive, "UTF-8".toByteArray(Charsets.UTF_8))
                 Archive.readOpenFd(archive, descriptor.fd, 128 * 1024)
                 block(archive)
             } finally { Archive.free(archive) }

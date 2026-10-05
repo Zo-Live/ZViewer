@@ -33,6 +33,13 @@ class NaturalOrderTest {
         assertFalse(isVideo("视频/说明.txt"))
     }
 
+    @Test fun pdfEntriesFollowMediaMetadataFiltering() {
+        assertTrue(isPdf("章节/1.PDF"))
+        assertFalse(isPdf("章节/.hidden.pdf"))
+        assertFalse(isPdf("__MACOSX/1.pdf"))
+        assertFalse(isPdf("章节/说明.txt"))
+    }
+
     @Test fun contentChangesInvalidateCoverCache() {
         val book = Book("book", "content://book", "漫画", "cbz", 1, 20)
         assertNotEquals(book.cacheKey, book.copy(modified = 2).cacheKey)
