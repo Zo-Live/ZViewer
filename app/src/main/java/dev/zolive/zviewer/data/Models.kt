@@ -4,12 +4,15 @@ import java.security.MessageDigest
 import java.util.Locale
 
 val imageExtensions = setOf("jpg", "jpeg", "png", "apng", "webp", "bmp", "heif", "heic", "gif", "avif")
+val videoExtensions = setOf("mp4", "m4v", "mkv", "webm", "avi", "mov", "3gp", "3g2", "mpg", "mpeg", "mpe", "ts", "mts", "m2ts", "mpegts", "flv", "wmv", "ogv", "vob", "rm", "rmvb")
 val archiveExtensions = setOf("zip", "cbz", "rar", "cbr", "7z")
 
 fun String.extensionLower(): String = substringAfterLast('.', "").lowercase(Locale.ROOT)
 fun String.stableId(): String = MessageDigest.getInstance("SHA-256")
     .digest(toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
 fun isImage(name: String): Boolean = name.extensionLower() in imageExtensions &&
+    name.replace('\\', '/').split('/').none { it.startsWith('.') || it == "__MACOSX" }
+fun isVideo(name: String): Boolean = name.extensionLower() in videoExtensions &&
     name.replace('\\', '/').split('/').none { it.startsWith('.') || it == "__MACOSX" }
 
 object NaturalOrder : Comparator<String> {
@@ -41,7 +44,12 @@ data class Book(
     val size: Long,
 ) {
     val cacheKey: String get() = "$id-$modified-$size".stableId()
-    val formatLabel: String get() = if (kind == "folder") "图片集" else kind.uppercase(Locale.ROOT)
+    val formatLabel: String get() = when (kind) {
+        "folder" -> "图片集"
+        "video-folder" -> "视频集"
+        "mixed-folder" -> "混合内容"
+        else -> kind.uppercase(Locale.ROOT)
+    }
 }
 
 data class ReadingProgress(val page: Int = 0, val total: Int = 0, val updated: Long = 0L) {
@@ -56,9 +64,20 @@ data class ReaderSettings(
     val rightToLeft: Boolean = false,
     val keepScreenOn: Boolean = true,
     val gridColumns: Int = 3,
+    val videoLoopSingle: Boolean = false,
+    val videoPreview: Boolean = false,
+    val loopMode: Boolean = false,
 )
 
-data class PageSource(val name: String, val filePath: String? = null, val uri: String? = null, val pdfPage: Int? = null)
+data class PageSource(
+    val name: String,
+    val filePath: String? = null,
+    val uri: String? = null,
+    val pdfPage: Int? = null,
+    val mediaType: String = "image",
+) {
+    val isVideo: Boolean get() = mediaType == "video"
+}
 data class BookSession(val book: Book, val pages: List<PageSource>, val pdfPath: String? = null)
 
 class ReaderException(message: String, cause: Throwable? = null) : Exception(message, cause)

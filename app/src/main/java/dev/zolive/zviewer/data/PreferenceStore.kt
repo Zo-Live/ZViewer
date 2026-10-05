@@ -18,13 +18,19 @@ class PreferenceStore(context: Context) {
         rightToLeft = preferences.getBoolean("rtl", false),
         keepScreenOn = preferences.getBoolean("keep_screen", true),
         gridColumns = preferences.getInt("columns", 3).coerceIn(2, 5),
+        videoLoopSingle = preferences.getBoolean("video_loop_single", false),
+        videoPreview = preferences.getBoolean("video_preview", false),
+        loopMode = preferences.getBoolean("loop_mode", false),
     )
 
     fun saveSettings(settings: ReaderSettings) {
         preferences.edit().putString("theme", settings.theme).putLong("accent", settings.accent)
             .putBoolean("reader_dark", settings.readerDark).putBoolean("vertical", settings.vertical)
             .putBoolean("rtl", settings.rightToLeft).putBoolean("keep_screen", settings.keepScreenOn)
-            .putInt("columns", settings.gridColumns).apply()
+            .putInt("columns", settings.gridColumns)
+            .putBoolean("video_loop_single", settings.videoLoopSingle)
+            .putBoolean("video_preview", settings.videoPreview)
+            .putBoolean("loop_mode", settings.loopMode).apply()
     }
 
     fun progress(bookId: String): ReadingProgress = ReadingProgress(
@@ -35,6 +41,19 @@ class PreferenceStore(context: Context) {
     fun saveProgress(bookId: String, page: Int, total: Int) {
         preferences.edit().putInt("page_$bookId", page).putInt("total_$bookId", total)
             .putLong("read_$bookId", System.currentTimeMillis()).apply()
+    }
+
+    fun videoPosition(bookId: String, page: Int): Long = preferences.getLong("video_${bookId}_$page", 0L)
+
+    fun saveVideoPosition(bookId: String, page: Int, position: Long) {
+        preferences.edit().putLong("video_${bookId}_$page", position.coerceAtLeast(0L)).apply()
+    }
+
+    fun clearProgress() {
+        val editor = preferences.edit()
+        preferences.all.keys.filter { it.startsWith("page_") || it.startsWith("total_") ||
+            it.startsWith("read_") || it.startsWith("video_") }.forEach(editor::remove)
+        editor.apply()
     }
 
     fun favorites(): Set<String> = preferences.getStringSet("favorites", emptySet())!!.toSet()

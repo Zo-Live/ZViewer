@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 
 package dev.zolive.zviewer.ui
 
@@ -7,6 +7,7 @@ import android.text.format.Formatter
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -90,6 +91,12 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
                     Text("${Formatter.formatShortFileSize(context, cacheSize)} · 保留漫画原件和阅读记录")
                 }, leadingContent = { Icon(Icons.Outlined.CleaningServices, null) },
                     modifier = Modifier.clickable { confirmClear = true }, colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                ListItem(headlineContent = { Text("清除阅读记录") }, supportingContent = {
+                    Text("双击清除所有漫画的页码和视频播放进度")
+                }, leadingContent = { Icon(Icons.Outlined.History, null) },
+                    modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearReadingProgress),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent))
             }
             TextButton(onClick = { about = true }, Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp, bottom = 32.dp)) { Text("关于 ZViewer ${BuildConfig.VERSION_NAME}") }
         }
@@ -112,7 +119,7 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
         confirmButton = { TextButton(onClick = { model.clearCache(); confirmClear = false }) { Text("清理") } },
         dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } })
     if (about) AlertDialog(onDismissRequest = { about = false }, title = { Text("ZViewer · 本地漫画阅读器") },
-        text = { Text("版本 ${BuildConfig.VERSION_NAME}\n\n支持 ZIP / CBZ、RAR / CBR、7Z、PDF 与图片文件夹。支持 APNG、动态 WebP、GIF、AVIF 及常用静态图片。\n\n全部阅读数据仅保存在本机，不联网、不上传文件。密码保护、分卷压缩包及 DRM 文件请先自行转换。\n\n开源组件：AndroidX / Compose（Apache 2.0）、APNG4Android（Apache 2.0）、libarchive（BSD）、libavif（BSD）。\n\nHEIF / HEIC 的可解码范围取决于设备系统解码器。") },
+        text = { Text("版本 ${BuildConfig.VERSION_NAME}\n\n支持 ZIP / CBZ、RAR / CBR、7Z、PDF、图片文件夹与常见视频格式。支持 APNG、动态 WebP、GIF、AVIF 及常用静态图片。\n\n全部阅读数据仅保存在本机，不联网、不上传文件。密码保护、分卷压缩包及 DRM 文件请先自行转换。\n\n开源组件：AndroidX / Compose（Apache 2.0）、Media3（Apache 2.0）、APNG4Android（Apache 2.0）、libarchive（BSD）、libavif（BSD）。\n\nHEIF / HEIC 的可解码范围取决于设备系统解码器。") },
         confirmButton = { TextButton(onClick = { about = false }) { Text("知道了") } },
         dismissButton = { TextButton(onClick = { about = false; licenses = true }) { Text("开源许可") } })
     if (licenses) {
@@ -146,6 +153,9 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
     PreferenceSwitch("深色阅读背景", "关闭后使用浅色画布，与应用主题独立", settings.readerDark) { onSettings(settings.copy(readerDark = it)) }
     PreferenceSwitch("从右向左翻页", "适用于日漫的水平阅读模式", settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }
     PreferenceSwitch("阅读时屏幕常亮", "离开阅读器后恢复系统设置", settings.keepScreenOn) { onSettings(settings.copy(keepScreenOn = it)) }
+    PreferenceSwitch("单个视频循环播放", "视频播放完后留在当前视频并重新开始", settings.videoLoopSingle) { onSettings(settings.copy(videoLoopSingle = it)) }
+    PreferenceSwitch("视频默认仅预览", "切换视频时暂停，双击视频中央后开始播放", settings.videoPreview) { onSettings(settings.copy(videoPreview = it)) }
+    PreferenceSwitch("循环模式", "读到漫画结尾后继续翻页回到第一页", settings.loopMode) { onSettings(settings.copy(loopMode = it)) }
 }
 
 @Composable

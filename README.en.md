@@ -8,7 +8,7 @@
 
 [![Release](https://img.shields.io/github/v/release/Zo-Live/ZViewer?label=release&style=flat-square)](https://github.com/Zo-Live/ZViewer/releases/latest) [![License](https://img.shields.io/github/license/Zo-Live/ZViewer?style=flat-square)](LICENSE) [![Platform](https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android&logoColor=white&style=flat-square)](#install-and-start-reading) [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.21-7F52FF?logo=kotlin&logoColor=white&style=flat-square)](https://kotlinlang.org) [![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white&style=flat-square)](https://developer.android.com/compose)
 
-**A native Android local comic reader with support for common archive formats, PDF, and image folders.**
+**A native Android local comic reader with support for common archive formats, PDF, image folders, and video folders.**
 
 </div>
 
@@ -19,7 +19,7 @@ Supports Android 10 and later; the universal APK works on mainstream phones and 
 1. On first launch, tap "Select library folder", navigate to your comic directory in the system file picker, tap "Use this folder", and grant access.
 2. The app scans the directory and shows the cover and title of each comic; later launches open directly to this library.
 3. Tap a comic to start reading. Tap the screen to show the floating progress bar and tap again to hide it; drag the progress bar or tap the page number to jump pages.
-4. Pinch to zoom, double-tap the image, or use the zoom in / zoom out buttons in the progress panel to adjust the image. Tap "Fit to screen" to restore the original scale.
+4. For images, pinch, double-tap, or use the zoom buttons. Videos autoplay by default; pinch to zoom, swipe horizontally to seek, double-tap the left or right third to seek 15 seconds, and double-tap the center to pause or resume.
 5. In reading settings, switch between vertical continuous, horizontal paging, and right-to-left paging. Use the system edge back gesture or the back button in the top-left corner to return to the library.
 
 Android usually does not allow granting access to the internal storage root, the Download root, or Android/data. Create a specific comic subfolder, such as `Download/comics`, and select that. The app does not need the "All files access" permission.
@@ -28,11 +28,12 @@ Android usually does not allow granting access to the internal storage root, the
 
 | Category        | Support                                                                                                                                                 |
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Comic sources   | ZIP / CBZ, RAR / CBR, 7Z, PDF, image folders                                                                                                            |
+| Comic sources   | ZIP / CBZ, RAR / CBR, 7Z, PDF, image folders, video folders                                                                                              |
 | Static images   | JPG, JPEG, PNG, WebP, BMP, HEIF, HEIC, AVIF                                                                                                             |
 | Animated images | APNG, Animated WebP, GIF, Animated AVIF                                                                                                                 |
+| Video           | MP4, M4V, MKV, WebM, AVI, MOV, 3GP, MPG, MPEG, TS, MTS, M2TS, FLV, WMV, OGV, and more                                                                   |
 | Library         | Recursive scan, natural sorting, HD covers, search, reading-status filter, recently read, favorites, 2–5 column grid                                   |
-| Reading         | Vertical continuous, horizontal paging, left/right reading direction, zoom, draggable progress, page jumping, automatic progress memory, keep screen on |
+| Reading         | Vertical image/video reading, horizontal image paging, zoom, page jumping, per-video positions, loop mode, keep screen on                                |
 | Appearance      | Follow system / light / dark theme, preset accent colors, custom accent color, separate light/dark reading backgrounds                                  |
 | System          | Immersive reading, portrait and landscape, remembered library permission                                                                                |
 | Storage         | Cache clearing and automatic reclamation                                                                                                                |
@@ -43,11 +44,14 @@ While reading, the zoom range goes from fit-to-screen up to 5x, and you can retu
 
 - Images inside archives are sorted naturally by file name, so `2.jpg` comes before `10.jpg`.
 - Images directly contained in an image folder form one book; each subdirectory is scanned separately.
+- A folder or archive containing only videos forms one book; mixed image/video content prompts you to separate the files. Video archives are extracted to the app's temporary cache before playback.
+- Videos autoplay in order and remember an individual position. Settings can loop one video or open videos in preview mode until a double-tap starts playback.
+- With Loop mode enabled, continuing past the last page or video returns to the first. Double-tap Clear reading history in Settings to remove all progress without affecting favorites.
 - 7Z solid archives need their whole content prepared on first open, so larger books take longer to open.
 - Encrypted archives, multi-volume files, password-protected PDFs, and DRM content are not supported yet; decrypt or extract them to an image folder first.
 - Whether HEIF / HEIC can be displayed depends on the device, and animated HEIF is not supported; APNG, GIF, animated WebP, and animated AVIF all play normally.
 - If files are too large, have too many pages, or are corrupted, the app reports a clear error instead of freezing or filling up storage.
-- Reading progress is saved per page; after the app is killed by the system, reopening it continues from where you left off.
+- Reading progress is saved per page (or per video index); after the app is killed by the system, reopening it continues from the saved page and video position.
 
 ## Privacy and Data
 

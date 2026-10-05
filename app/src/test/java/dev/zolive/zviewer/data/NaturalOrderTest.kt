@@ -25,6 +25,14 @@ class NaturalOrderTest {
             .forEach { assertTrue(isImage("漫画/1.$it")) }
     }
 
+    @Test fun commonVideoExtensionsAreRecognizedAndMetadataIsIgnored() {
+        listOf("mp4", "m4v", "mkv", "webm", "avi", "mov", "3gp", "mpg", "mpeg", "ts", "mts", "m2ts", "flv", "wmv", "ogv", "vob", "rmvb")
+            .forEach { assertTrue(it, isVideo("视频/1.$it")) }
+        assertFalse(isVideo("视频/.hidden.mp4"))
+        assertFalse(isVideo("__MACOSX/1.mp4"))
+        assertFalse(isVideo("视频/说明.txt"))
+    }
+
     @Test fun contentChangesInvalidateCoverCache() {
         val book = Book("book", "content://book", "漫画", "cbz", 1, 20)
         assertNotEquals(book.cacheKey, book.copy(modified = 2).cacheKey)

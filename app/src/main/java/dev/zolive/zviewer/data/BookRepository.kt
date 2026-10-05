@@ -63,9 +63,15 @@ class BookRepository(private val context: Context) {
             if (depth > 32) throw ReaderException("目录层级超过 32 层，请选择更具体的书库目录。")
             val entries = children(uri)
             val images = entries.filter { !it.directory && isImage(it.name) }
-            if (images.isNotEmpty()) {
-                books += Book(uri.toString().stableId(), uri.toString(), name, "folder",
-                    images.maxOf { it.modified }, images.sumOf { it.size })
+            val videos = entries.filter { !it.directory && isVideo(it.name) }
+            if (images.isNotEmpty() || videos.isNotEmpty()) {
+                val kind = when {
+                    images.isNotEmpty() && videos.isNotEmpty() -> "mixed-folder"
+                    videos.isNotEmpty() -> "video-folder"
+                    else -> "folder"
+                }
+                books += Book(uri.toString().stableId(), uri.toString(), name, kind,
+                    (images + videos).maxOf { it.modified }, (images + videos).sumOf { it.size })
             }
             for (entry in entries) {
                 currentCoroutineContext().ensureActive()
@@ -87,11 +93,17 @@ class BookRepository(private val context: Context) {
         locks.getOrPut(book.cacheKey) { Mutex() }.withLock {
             val folder = File(cache, book.cacheKey).apply { mkdirs(); setLastModified(System.currentTimeMillis()) }
             when (book.kind) {
-                "folder" -> {
-                    val pages = children(Uri.parse(book.uri)).filter { !it.directory && isImage(it.name) }
-                        .sortedWith { first, second -> NaturalOrder.compare(first.name, second.name) }
-                        .map { PageSource(it.name, uri = it.uri.toString()) }
-                    if (pages.isEmpty()) throw ReaderException("这个图片文件夹中没有可阅读的图片。")
+                "folder", "video-folder", "mixed-folder" -> {
+                    val entries = children(Uri.parse(book.uri)).filter { !it.directory && (isImage(it.name) || isVideo(it.name)) }
+                    val images = entries.filter { isImage(it.name) }
+                    val videos = entries.filter { isVideo(it.name) }
+                    if (images.isNotEmpty() && videos.isNotEmpty()) {
+                        throw ReaderException("这个文件夹同时包含图片和视频，无法作为一本漫画打开。请分开存放后重试。")
+                    }
+                    val mediaType = if (videos.isNotEmpty()) "video" else "image"
+                    val pages = entries.sortedWith { first, second -> NaturalOrder.compare(first.name, second.name) }
+                        .map { PageSource(it.name, uri = it.uri.toString(), mediaType = mediaType) }
+                    if (pages.isEmpty()) throw ReaderException("这个文件夹中没有可阅读的图片或视频。")
                     BookSession(book, pages)
                 }
                 "pdf" -> {
@@ -102,10 +114,25 @@ class BookRepository(private val context: Context) {
                     BookSession(book, List(count) { PageSource("第 ${it + 1} 页", pdfPage = it) }, file.absolutePath)
                 }
                 else -> {
-                    val manifest = File(folder, "pages.json")
+                    val manifest = File(folder, "media.json")
                     if (manifest.exists()) {
                         val files = runCatching {
                             val array = JSONArray(manifest.readText())
+                            (0 until array.length()).map { index ->
+                                val item = array.getJSONObject(index)
+                                Triple(item.getString("name"), item.getString("path"), item.optString("type", "image"))
+                            }
+                        }.getOrDefault(emptyList())
+                        if (files.isNotEmpty() && files.all { File(folder, it.second).isFile }) {
+                            return@withLock BookSession(book, files.map { (name, path, type) ->
+                                PageSource(name, File(folder, path).absolutePath, mediaType = type)
+                            })
+                        }
+                    }
+                    val legacyManifest = File(folder, "pages.json")
+                    if (legacyManifest.exists()) {
+                        val files = runCatching {
+                            val array = JSONArray(legacyManifest.readText())
                             (0 until array.length()).map { array.getString(it) }
                         }.getOrDefault(emptyList())
                         if (files.isNotEmpty() && files.all { File(folder, it).isFile }) {
@@ -115,28 +142,40 @@ class BookRepository(private val context: Context) {
                     folder.deleteRecursively()
                     folder.mkdirs()
                     try {
-                        val extracted = mutableListOf<Pair<String, File>>()
+                        val extracted = mutableListOf<Triple<String, File, String>>()
                         var totalBytes = 0L
+                        var foundImages = false
+                        var foundVideos = false
                         withArchive(book) { archive ->
                             var entry = Archive.readNextHeader(archive)
                             while (entry != 0L) {
                                 currentCoroutineContext().ensureActive()
                                 val name = entryName(entry)
-                                if (ArchiveEntry.filetype(entry) == 0x8000 && isImage(name)) {
+                                val image = ArchiveEntry.filetype(entry) == 0x8000 && isImage(name)
+                                val video = ArchiveEntry.filetype(entry) == 0x8000 && isVideo(name)
+                                if (image || video) {
+                                    foundImages = foundImages || image
+                                    foundVideos = foundVideos || video
+                                    if (foundImages && foundVideos) {
+                                        throw ReaderException("这个压缩包同时包含图片和视频，无法作为一本漫画打开。请分开存放后重试。")
+                                    }
                                     if (extracted.size >= 20_000) throw ReaderException("漫画超过 20,000 页，无法继续解压。")
-                                    checkEntrySize(entry)
+                                    checkEntrySize(entry, if (video) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024)
                                     val output = File(folder, "${extracted.size}.${name.extensionLower()}")
-                                    totalBytes += extract(archive, output, 4L * 1024 * 1024 * 1024 - totalBytes)
-                                    extracted += name to output
-                                    status("正在准备第 ${extracted.size} 页…")
+                                    totalBytes += extract(archive, output, 4L * 1024 * 1024 * 1024 - totalBytes,
+                                        if (video) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024)
+                                    extracted += Triple(name, output, if (video) "video" else "image")
+                                    status("正在准备第 ${extracted.size} ${if (video) "个视频" else "页"}…")
                                 }
                                 entry = Archive.readNextHeader(archive)
                             }
                         }
-                        if (extracted.isEmpty()) throw ReaderException("压缩包中没有支持的图片。")
+                        if (extracted.isEmpty()) throw ReaderException("压缩包中没有支持的图片或视频。")
                         val sorted = extracted.sortedWith { first, second -> NaturalOrder.compare(first.first, second.first) }
-                        manifest.writeText(JSONArray(sorted.map { it.second.name }).toString())
-                        BookSession(book, sorted.map { PageSource(it.first, it.second.absolutePath) })
+                        manifest.writeText(JSONArray(sorted.map { (name, file, type) ->
+                            org.json.JSONObject().put("name", name).put("path", file.name).put("type", type)
+                        }).toString())
+                        BookSession(book, sorted.map { (name, file, type) -> PageSource(name, file.absolutePath, mediaType = type) })
                     } catch (error: Exception) {
                         folder.deleteRecursively()
                         throw error
@@ -164,6 +203,7 @@ class BookRepository(private val context: Context) {
                         val folder = File(cache, book.cacheKey).apply { mkdirs() }
                         renderPdf(localPdf(book, folder), 0, 1000)
                     }
+                    "video-folder", "mixed-folder" -> throw ReaderException("视频内容没有可生成的图片封面。")
                     else -> {
                         var firstName: String? = null
                         withArchive(book) { archive ->
@@ -219,7 +259,8 @@ class BookRepository(private val context: Context) {
             return@withContext output
         }
         val output = File(folder, "image-$index.${page.name.extensionLower()}")
-        if (!output.isFile) copyUri(Uri.parse(page.uri!!), output, 256L * 1024 * 1024)
+        if (!output.isFile) copyUri(Uri.parse(page.uri!!), output,
+            if (page.isVideo) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024)
         output
     }
 
@@ -265,11 +306,11 @@ class BookRepository(private val context: Context) {
     private fun entryName(entry: Long): String = ArchiveEntry.pathnameUtf8(entry)
         ?: ArchiveEntry.pathname(entry)?.toString(Charsets.UTF_8) ?: ""
 
-    private fun checkEntrySize(entry: Long) {
-        if (ArchiveEntry.size(entry) > 256L * 1024 * 1024) throw ReaderException("单张图片超过 256 MB，无法安全解码。")
+    private fun checkEntrySize(entry: Long, limit: Long = 256L * 1024 * 1024) {
+        if (ArchiveEntry.size(entry) > limit) throw ReaderException("单个媒体文件超过安全大小限制，无法解压。")
     }
 
-    private suspend fun extract(archive: Long, output: File, remaining: Long): Long {
+    private suspend fun extract(archive: Long, output: File, remaining: Long, entryLimit: Long = 256L * 1024 * 1024): Long {
         var total = 0L
         val buffer = ByteBuffer.allocateDirect(128 * 1024)
         FileOutputStream(output).channel.use { channel ->
@@ -280,7 +321,7 @@ class BookRepository(private val context: Context) {
                 buffer.flip()
                 if (!buffer.hasRemaining()) break
                 total += buffer.remaining()
-                if (total > minOf(remaining, 256L * 1024 * 1024)) throw ReaderException("解压大小超过安全限制（单页 256 MB / 每本 4 GB）。")
+                if (total > minOf(remaining, entryLimit)) throw ReaderException("解压大小超过安全限制（单个媒体 4 GB / 每本 4 GB）。")
                 while (buffer.hasRemaining()) channel.write(buffer)
             }
         }

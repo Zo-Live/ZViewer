@@ -11,8 +11,8 @@ android {
         applicationId = "dev.zolive.zviewer"
         minSdk = 29
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 4
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
@@ -55,6 +55,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.vectordrawable:vectordrawable-animated:1.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    implementation("androidx.media3:media3-exoplayer:1.6.1")
+    implementation("androidx.media3:media3-ui:1.6.1")
     implementation("me.zhanghai.android.libarchive:library:1.1.6")
     implementation("com.github.penfeizhou.android.animation:apng:3.0.5")
     implementation("com.github.penfeizhou.android.animation:avif:3.0.5")
