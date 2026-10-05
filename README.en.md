@@ -1,17 +1,5 @@
 <div align="center">
 
-<img src="assets/icon.svg" alt="ZViewer icon" width="96" height="96">
-
-# ZViewer
-
-[简体中文](README.md) | [**English**](README.en.md)
-
-[![Release](https://img.shields.io/github/v/release/Zo-Live/ZViewer?label=release&style=flat-square)](https://github.com/Zo-Live/ZViewer/releases/latest) [![License](https://img.shields.io/github/license/Zo-Live/ZViewer?style=flat-square)](LICENSE) [![Platform](https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android&logoColor=white&style=flat-square)](#install-and-start-reading) [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.21-7F52FF?logo=kotlin&logoColor=white&style=flat-square)](https://kotlinlang.org) [![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white&style=flat-square)](https://developer.android.com/compose)
-
-**A native Android local comic reader with support for common archive formats, PDF, image folders, and video folders.**
-
-</div>
-
 ## Install and Start Reading
 
 Supports Android 10 and later; the universal APK works on mainstream phones and emulators.
@@ -46,7 +34,6 @@ While reading, the zoom range goes from fit-to-screen up to 5x, and you can retu
 - Images directly contained in an image folder form one book; each subdirectory is scanned separately.
 - A folder or archive containing only videos forms one book; mixed image/video content prompts you to separate the files. Video archives are extracted to the app's temporary cache before playback.
 - Videos autoplay in order and remember an individual position. Settings can loop one video or open videos in preview mode until the play button starts playback. Video folders and archives use a frame from the naturally sorted first video as their cover.
-- Videos switch instantly in the selected vertical or horizontal direction, including right-to-left paging.
 - With Loop mode enabled, the first and last image pages are adjacent in both directions and scroll naturally across the boundary; videos switch directly across the boundary. Double-tap Clear reading history in Settings to remove all progress without affecting favorites.
 - 7Z solid archives need their whole content prepared on first open, so larger books take longer to open.
 - Encrypted archives, multi-volume files, password-protected PDFs, and DRM content are not supported yet; decrypt or extract them to a folder first.

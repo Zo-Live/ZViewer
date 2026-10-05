@@ -1,17 +1,5 @@
 <div align="center">
 
-<img src="assets/icon.svg" alt="ZViewer 图标" width="96" height="96">
-
-# ZViewer
-
-[**简体中文**](README.md) | [English](README.en.md)
-
-[![Release](https://img.shields.io/github/v/release/Zo-Live/ZViewer?label=release&style=flat-square)](https://github.com/Zo-Live/ZViewer/releases/latest) [![License](https://img.shields.io/github/license/Zo-Live/ZViewer?style=flat-square)](LICENSE) [![Platform](https://img.shields.io/badge/Android-10%2B-3DDC84?logo=android&logoColor=white&style=flat-square)](#安装与开始阅读) [![Kotlin](https://img.shields.io/badge/Kotlin-2.1.21-7F52FF?logo=kotlin&logoColor=white&style=flat-square)](https://kotlinlang.org) [![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material%203-4285F4?logo=jetpackcompose&logoColor=white&style=flat-square)](https://developer.android.com/compose)
-
-**一个原生 Android 本地漫画阅读器，支持常见压缩格式、PDF、图片与视频文件夹。**
-
-</div>
-
 ## 安装与开始阅读
 
 支持 Android 10 及以上，通用安装包适用于主流手机与模拟器。
@@ -46,7 +34,6 @@ Android 通常不允许授权内部存储根目录、Download 根目录及 Andro
 - 图片文件夹中直接包含的图片组成一本书，子目录分别扫描。
 - 仅包含视频的文件夹或压缩包组成一本书；图片和视频混合时会提示分开存放。视频压缩包首次打开会解压到应用临时目录。
 - 视频默认按顺序自动播放下一段，每段视频会记住播放位置；设置可改为单个视频循环或仅预览后使用播放按钮开始播放。视频文件夹和压缩包以自然排序第一个视频的抽帧作为封面。
-- 视频按阅读设置支持上下或左右滑动切换，也支持从右向左翻页。
 - 「循环模式」开启后，图片末页与首页在两个方向上连续衔接，可自然滑入相邻页；视频在首尾之间直接切换。「清除阅读记录」在设置中双击执行且不影响收藏。
 - 7Z 固实压缩包首次打开需要先准备整本内容，较大的书会等待较久。
 - 加密压缩包、分卷文件、密码 PDF 和 DRM 内容暂不支持，请先解密或解压为文件夹。
