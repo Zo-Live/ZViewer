@@ -3,7 +3,7 @@ from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = {
-    "AndroidX / Jetpack Compose / Kotlin / APNG4Android / libarchive-android / Mbed TLS (Apache 2.0)": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+    "AndroidX / Jetpack Compose / Media3 / Android Open Source Project / Kotlin / APNG4Android / libarchive-android / Mbed TLS (Apache 2.0)": "https://www.apache.org/licenses/LICENSE-2.0.txt",
     "libarchive (BSD)": "https://raw.githubusercontent.com/libarchive/libarchive/master/COPYING",
     "libavif (BSD)": "https://raw.githubusercontent.com/AOMediaCodec/libavif/main/LICENSE",
     "dav1d (BSD)": "https://raw.githubusercontent.com/videolan/dav1d/master/COPYING",

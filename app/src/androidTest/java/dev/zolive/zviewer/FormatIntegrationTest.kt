@@ -9,6 +9,8 @@ import com.github.penfeizhou.animation.FrameAnimationDrawable
 import dev.zolive.zviewer.data.*
 import dev.zolive.zviewer.reader.ImageLoader
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -65,6 +67,18 @@ class FormatIntegrationTest {
             }
             assertTrue(repository.cover(book).length() > 0)
         }
+    }
+
+    @Test fun repeatedLoopPagesShareCompleteFileCache() = runBlocking {
+        val book = repository.scan(tree).first { it.title.startsWith("07") }
+        val session = repository.open(book)
+        repository.pageFile(session, 0, 1200).delete()
+        val files = List(8) { async { repository.pageFile(session, 0, 1200) } }.awaitAll()
+        assertEquals(1, files.toSet().size)
+        val bitmap = BitmapFactory.decodeFile(files.first().absolutePath)
+        assertNotNull(bitmap)
+        assertEquals(1000, bitmap.width)
+        bitmap.recycle()
     }
 
     @Test fun everyStaticFormatDecodes() {

@@ -73,7 +73,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
         when {
             state.session != null -> ReaderScreen(state.session, state.initialPage, state.settings,
                 model.repository, model::settings, model::saveProgress, model::videoPosition,
-                model::saveVideoProgress, model::closeBook)
+                { page, position -> model.saveVideoProgress(state.session.book.id, page, position) }, model::closeBook)
             settingsOpen -> {
                 BackHandler { settingsOpen = false }
                 SettingsScreen(state, model, onBack = { settingsOpen = false }, onChooseLibrary = chooseLibrary)
@@ -183,7 +183,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, onSettin
                     }
                 }
                 if (books.isEmpty()) {
-                    EmptyLibrary(state.scanning, query.isNotEmpty() || filter != 0 || tab != 0, onChooseLibrary)
+                    EmptyLibrary(state.scanning, query.isNotEmpty() || filter != 0 || tab != 0, tab == 2, onChooseLibrary)
                 } else {
                     LazyVerticalGrid(columns = GridCells.Fixed(state.settings.gridColumns),
                         modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 88.dp),
@@ -231,12 +231,17 @@ private fun WelcomeScreen(onChooseLibrary: () -> Unit) {
 }
 
 @Composable
-private fun EmptyLibrary(scanning: Boolean, filtered: Boolean, onChooseLibrary: () -> Unit) {
+private fun EmptyLibrary(scanning: Boolean, filtered: Boolean, recent: Boolean, onChooseLibrary: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Icon(Icons.AutoMirrored.Outlined.MenuBook, null, Modifier.size(52.dp), tint = MaterialTheme.colorScheme.primary)
         Text(if (scanning) "正在整理你的书库…" else if (filtered) "还没有符合条件的漫画" else "这个文件夹还没有漫画", Modifier.padding(top = 20.dp),
             style = MaterialTheme.typography.titleMedium)
-        Text(if (filtered) "试试其他筛选条件，\n或收藏一本喜欢的漫画。" else "可添加压缩包、PDF，或装有图片、视频的子文件夹。", Modifier.fillMaxWidth().padding(top = 12.dp),
+        val hint = when {
+            !filtered -> "可添加压缩包、PDF，或装有图片、视频的子文件夹。"
+            recent -> "试试其他筛选条件，\n或打开一本喜欢的漫画。"
+            else -> "试试其他筛选条件，\n或收藏一本喜欢的漫画。"
+        }
+        Text(hint, Modifier.fillMaxWidth().padding(top = 12.dp),
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         if (!filtered && !scanning) TextButton(onClick = onChooseLibrary, Modifier.padding(top = 12.dp)) { Text("选择其他文件夹") }
     }

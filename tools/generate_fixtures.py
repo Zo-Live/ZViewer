@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw, ImageFont
 import pillow_heif
 import py7zr
 from reportlab.pdfgen import canvas
+from generate_video_fixtures import generate as generate_videos
 
 ROOT = Path(__file__).resolve().parent / "fixtures"
 LIBRARY = ROOT / "书库"
@@ -100,6 +101,7 @@ def generate():
     (ASSETS / "broken.cbz").write_bytes(b"invalid zip")
     with zipfile.ZipFile(ASSETS / "empty.cbz", "w") as archive:
         archive.writestr("README.txt", "无图片")
+    generate_videos()
     print(f"已生成测试书库：{LIBRARY}")
 
 

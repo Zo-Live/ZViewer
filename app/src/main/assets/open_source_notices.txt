@@ -3,7 +3,7 @@ ZViewer 开源组件许可
 以下为所使用组件及其原生依赖的许可文本。许可原文保留其原始语言。
 
 ========================================================================
-AndroidX / Jetpack Compose / Kotlin / APNG4Android / libarchive-android / Mbed TLS (Apache 2.0)
+AndroidX / Jetpack Compose / Media3 / Android Open Source Project / Kotlin / APNG4Android / libarchive-android / Mbed TLS (Apache 2.0)
 https://www.apache.org/licenses/LICENSE-2.0.txt
 ========================================================================
 
@@ -1113,4 +1113,3 @@ Copyright notice:
 
   Jean-loup Gailly        Mark Adler
   jloup@gzip.org          madler@alumni.caltech.edu
-

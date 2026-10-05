@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.graphics.pdf.PdfRenderer
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
@@ -31,6 +32,7 @@ class BookRepository(private val context: Context) {
     private val covers = File(context.cacheDir, "covers").apply { mkdirs() }
     private val locks = ConcurrentHashMap<String, Mutex>()
     private val coverSlots = Semaphore(2)
+    private val coverLocks = ConcurrentHashMap<String, Mutex>()
 
     private data class Document(val uri: Uri, val name: String, val directory: Boolean, val modified: Long, val size: Long)
 
@@ -188,80 +190,108 @@ class BookRepository(private val context: Context) {
     suspend fun cover(book: Book): File = withContext(Dispatchers.IO) {
         val cover = File(covers, "${book.cacheKey}.jpg")
         if (cover.isFile) return@withContext cover
-        coverSlots.withPermit {
-            if (cover.isFile) return@withPermit cover
-            val scratch = File(covers, "${book.cacheKey}.source")
-            try {
-                val bitmap = when (book.kind) {
-                    "folder" -> {
-                        val first = children(Uri.parse(book.uri)).filter { !it.directory && isImage(it.name) }
-                            .minWithOrNull { first, second -> NaturalOrder.compare(first.name, second.name) }
-                            ?: throw ReaderException("图片文件夹为空。")
-                        decodeBitmap(ImageDecoder.createSource(resolver, first.uri), 1000)
-                    }
-                    "pdf" -> locks.getOrPut(book.cacheKey) { Mutex() }.withLock {
-                        val folder = File(cache, book.cacheKey).apply { mkdirs() }
-                        renderPdf(localPdf(book, folder), 0, 1000)
-                    }
-                    "video-folder", "mixed-folder" -> throw ReaderException("视频内容没有可生成的图片封面。")
-                    else -> {
-                        var firstName: String? = null
-                        withArchive(book) { archive ->
-                            var entry = Archive.readNextHeader(archive)
-                            while (entry != 0L) {
-                                currentCoroutineContext().ensureActive()
-                                val name = entryName(entry)
-                                if (ArchiveEntry.filetype(entry) == 0x8000 && isImage(name) &&
-                                    (firstName == null || NaturalOrder.compare(name, firstName!!) < 0)) firstName = name
-                                entry = Archive.readNextHeader(archive)
-                            }
-                        }
-                        if (firstName == null) throw ReaderException("未找到封面。")
-                        withArchive(book) { archive ->
-                            var entry = Archive.readNextHeader(archive)
-                            while (entry != 0L) {
-                                currentCoroutineContext().ensureActive()
-                                if (entryName(entry) == firstName) {
-                                    checkEntrySize(entry)
-                                    extract(archive, scratch, 256L * 1024 * 1024)
-                                    break
-                                }
-                                entry = Archive.readNextHeader(archive)
-                            }
-                        }
-                        decodeBitmap(ImageDecoder.createSource(scratch), 1000)
-                    }
-                }
-                val temporary = File(covers, "${book.cacheKey}.tmp")
+        coverLocks.getOrPut(book.cacheKey) { Mutex() }.withLock {
+            coverSlots.withPermit {
+                if (cover.isFile) return@withPermit cover
+                val scratch = File(covers, "${book.cacheKey}.source")
                 try {
-                    temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 93, it) }
-                    if (!temporary.renameTo(cover)) throw ReaderException("封面缓存写入失败。")
-                } finally { bitmap.recycle(); temporary.delete() }
-                cover
-            } finally { scratch.delete() }
+                    val bitmap = when (book.kind) {
+                        "folder" -> {
+                            val first = children(Uri.parse(book.uri)).filter { !it.directory && isImage(it.name) }
+                                .minWithOrNull { first, second -> NaturalOrder.compare(first.name, second.name) }
+                                ?: throw ReaderException("图片文件夹为空。")
+                            decodeBitmap(ImageDecoder.createSource(resolver, first.uri), 1000)
+                        }
+                        "pdf" -> locks.getOrPut(book.cacheKey) { Mutex() }.withLock {
+                            val folder = File(cache, book.cacheKey).apply { mkdirs() }
+                            renderPdf(localPdf(book, folder), 0, 1000)
+                        }
+                        "video-folder" -> {
+                            val first = children(Uri.parse(book.uri)).filter { !it.directory && isVideo(it.name) }
+                                .minWithOrNull { first, second -> NaturalOrder.compare(first.name, second.name) }
+                                ?: throw ReaderException("视频文件夹为空。")
+                            videoCover(first.uri)
+                        }
+                        "mixed-folder" -> throw ReaderException("请将图片和视频分开存放后生成封面。")
+                        else -> {
+                            var firstName: String? = null
+                            var foundImages = false
+                            var foundVideos = false
+                            withArchive(book) { archive ->
+                                var entry = Archive.readNextHeader(archive)
+                                while (entry != 0L) {
+                                    currentCoroutineContext().ensureActive()
+                                    val name = entryName(entry)
+                                    if (ArchiveEntry.filetype(entry) == 0x8000) {
+                                        val image = isImage(name)
+                                        val video = isVideo(name)
+                                        foundImages = foundImages || image
+                                        foundVideos = foundVideos || video
+                                        if ((image || video) && (firstName == null || NaturalOrder.compare(name, firstName!!) < 0)) firstName = name
+                                    }
+                                    entry = Archive.readNextHeader(archive)
+                                }
+                            }
+                            if (firstName == null) throw ReaderException("未找到封面。")
+                            if (foundImages && foundVideos) throw ReaderException("请将图片和视频分开存放后生成封面。")
+                            val limit = if (foundVideos) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024
+                            withArchive(book) { archive ->
+                                var entry = Archive.readNextHeader(archive)
+                                while (entry != 0L) {
+                                    currentCoroutineContext().ensureActive()
+                                    if (entryName(entry) == firstName) {
+                                        checkEntrySize(entry, limit)
+                                        extract(archive, scratch, limit, limit)
+                                        break
+                                    }
+                                    entry = Archive.readNextHeader(archive)
+                                }
+                            }
+                            if (foundVideos) videoCover(Uri.fromFile(scratch))
+                            else decodeBitmap(ImageDecoder.createSource(scratch), 1000)
+                        }
+                    }
+                    val temporary = File(covers, "${book.cacheKey}.tmp")
+                    try {
+                        temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 93, it) }
+                        if (!temporary.renameTo(cover)) throw ReaderException("封面缓存写入失败。")
+                    } finally { bitmap.recycle(); temporary.delete() }
+                    cover
+                } finally { scratch.delete() }
+            }
         }
+    }
+
+    private fun videoCover(uri: Uri): Bitmap = MediaMetadataRetriever().use { retriever ->
+        retriever.setDataSource(context, uri)
+        retriever.getScaledFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 1000, 1000)
+            ?: retriever.getScaledFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 1000, 1000)
+            ?: throw ReaderException("无法从第一个视频生成封面，设备可能不支持此编码。")
     }
 
     suspend fun pageFile(session: BookSession, index: Int, width: Int): File = withContext(Dispatchers.IO) {
         val page = session.pages[index]
         page.filePath?.let { return@withContext File(it) }
-        val folder = File(cache, session.book.cacheKey).apply { mkdirs() }
-        if (page.pdfPage != null) {
-            val output = File(folder, "pdf-${page.pdfPage}-$width.png")
-            if (!output.isFile) {
-                val bitmap = renderPdf(File(session.pdfPath!!), page.pdfPage, width)
-                val temporary = File(folder, "${output.name}.part")
-                try {
-                    temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                    if (!temporary.renameTo(output)) throw ReaderException("页面缓存写入失败，请检查剩余存储空间。")
-                } finally { bitmap.recycle(); temporary.delete() }
+        val lockKey = "${session.book.cacheKey}-page-$index-${if (page.pdfPage != null) width else 0}"
+        locks.getOrPut(lockKey) { Mutex() }.withLock {
+            val folder = File(cache, session.book.cacheKey).apply { mkdirs() }
+            if (page.pdfPage != null) {
+                val output = File(folder, "pdf-${page.pdfPage}-$width.png")
+                if (!output.isFile) {
+                    val bitmap = renderPdf(File(session.pdfPath!!), page.pdfPage, width)
+                    val temporary = File(folder, "${output.name}.part")
+                    try {
+                        temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                        if (!temporary.renameTo(output)) throw ReaderException("页面缓存写入失败，请检查剩余存储空间。")
+                    } finally { bitmap.recycle(); temporary.delete() }
+                }
+                return@withLock output
             }
-            return@withContext output
+            val output = File(folder, "image-$index.${page.name.extensionLower()}")
+            if (!output.isFile) copyUri(Uri.parse(page.uri!!), output,
+                if (page.isVideo) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024)
+            output
         }
-        val output = File(folder, "image-$index.${page.name.extensionLower()}")
-        if (!output.isFile) copyUri(Uri.parse(page.uri!!), output,
-            if (page.isVideo) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024)
-        output
     }
 
     private suspend fun localPdf(book: Book, folder: File): File {

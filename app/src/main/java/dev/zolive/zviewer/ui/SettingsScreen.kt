@@ -154,7 +154,7 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
     PreferenceSwitch("从右向左翻页", "适用于日漫的水平阅读模式", settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }
     PreferenceSwitch("阅读时屏幕常亮", "离开阅读器后恢复系统设置", settings.keepScreenOn) { onSettings(settings.copy(keepScreenOn = it)) }
     PreferenceSwitch("单个视频循环播放", "视频播放完后留在当前视频并重新开始", settings.videoLoopSingle) { onSettings(settings.copy(videoLoopSingle = it)) }
-    PreferenceSwitch("视频默认仅预览", "切换视频时暂停，双击视频中央后开始播放", settings.videoPreview) { onSettings(settings.copy(videoPreview = it)) }
+    PreferenceSwitch("视频默认仅预览", "切换视频时暂停，轻点画面后使用播放按钮开始播放", settings.videoPreview) { onSettings(settings.copy(videoPreview = it)) }
     PreferenceSwitch("循环模式", "读到漫画结尾后继续翻页回到第一页", settings.loopMode) { onSettings(settings.copy(loopMode = it)) }
 }
 

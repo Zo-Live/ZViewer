@@ -4,7 +4,6 @@ package dev.zolive.zviewer.ui
 
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
-import android.net.Uri
 import android.view.WindowManager
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.LocalActivity
@@ -16,17 +15,10 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.unit.Velocity
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.NavigateBefore
@@ -42,7 +34,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -57,18 +48,14 @@ import dev.zolive.zviewer.data.BookSession
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.PageSource
 import dev.zolive.zviewer.reader.ImageLoader
+import dev.zolive.zviewer.reader.ReaderPaging
 import dev.zolive.zviewer.reader.ZoomImageView
-import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.Locale
 import kotlin.math.roundToInt
 
 @Composable
@@ -76,22 +63,25 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     onSettings: (ReaderSettings) -> Unit, onProgress: (Int) -> Unit,
     videoPosition: (Int) -> Long = { 0L }, onVideoProgress: (Int, Long) -> Unit = { _, _ -> }, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
-    var currentPage by rememberSaveable(session.book.id) { mutableIntStateOf(initialPage) }
+    var currentPage by rememberSaveable(session.book.id) { mutableIntStateOf(initialPage.coerceIn(session.pages.indices)) }
     var controls by rememberSaveable(session.book.id) { mutableStateOf(false) }
     var preferences by remember { mutableStateOf(false) }
     var jumpDialog by remember { mutableStateOf(false) }
     var zoomSequence by remember { mutableIntStateOf(0) }
     var zoomAction by remember { mutableIntStateOf(0) }
     var backProgress by remember { mutableFloatStateOf(0f) }
-    val listState = rememberLazyListState(initialPage)
-    val pagerState = rememberPagerState(initialPage = initialPage) { session.pages.size }
+    val paging = remember(session.pages.size, settings.loopMode) { ReaderPaging(session.pages.size, settings.loopMode) }
+    val listState = rememberLazyListState(paging.anchor(currentPage))
+    val pagerState = rememberPagerState(initialPage = paging.anchor(currentPage)) { paging.itemCount }
+    var jumpJob by remember { mutableStateOf<Job?>(null) }
+    val ratios = remember(session.book.cacheKey) { mutableStateMapOf<Int, Float>() }
     val background = if (settings.readerDark) Color(0xFF101110) else Color(0xFFFAF9F6)
     val foreground = if (settings.readerDark) Color(0xFFE6E5E1) else Color(0xFF262724)
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
     val active = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
     val activity = LocalActivity.current ?: return
     val videoBook = session.pages.any(PageSource::isVideo)
-    val verticalReading = settings.vertical || videoBook
+    val verticalReading = settings.vertical
     val pageUnit = if (videoBook) "个视频" else "页"
 
     PredictiveBackHandler(enabled = !preferences && !jumpDialog) { events ->
@@ -117,50 +107,34 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         onDispose { controller.show(WindowInsetsCompat.Type.systemBars()) }
     }
 
-    LaunchedEffect(verticalReading) {
-        if (verticalReading) listState.scrollToItem(currentPage) else pagerState.scrollToPage(currentPage)
+    LaunchedEffect(verticalReading, paging, videoBook) {
+        if (videoBook) return@LaunchedEffect
+        jumpJob?.cancel()
+        val item = paging.anchor(currentPage)
+        if (verticalReading) listState.scrollToItem(item) else pagerState.scrollToPage(item)
         snapshotFlow {
             if (verticalReading) {
-                if (!listState.canScrollForward && listState.canScrollBackward) session.pages.lastIndex
-                else listState.firstVisibleItemIndex
-            } else pagerState.settledPage
-        }
-            .distinctUntilChanged().collect { page -> currentPage = page; onProgress(page) }
+                if (!paging.looping && !listState.canScrollForward && listState.canScrollBackward) paging.pageCount - 1
+                else paging.pageAt(listState.firstVisibleItemIndex)
+            } else paging.pageAt(pagerState.settledPage)
+        }.distinctUntilChanged().collect { page -> currentPage = page; onProgress(page) }
     }
     val jump: (Int) -> Unit = { target ->
-        val page = if (settings.loopMode && session.pages.isNotEmpty()) {
-            when {
-                target < 0 -> session.pages.lastIndex
-                target > session.pages.lastIndex -> 0
-                else -> target
-            }
-        } else target.coerceIn(session.pages.indices)
+        val page = paging.destination(target)
         currentPage = page
         onProgress(page)
-        scope.launch { if (verticalReading) listState.scrollToItem(page) else pagerState.scrollToPage(page) }
-    }
-    val loopConnection = remember(settings.loopMode, verticalReading) {
-        object : NestedScrollConnection {
-            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity {
-                if (!settings.loopMode) return Velocity.Zero
-                val forward = if (verticalReading) {
-                    !listState.canScrollForward && (consumed.y < -1f || available.y < -1f)
-                } else {
-                    !pagerState.canScrollForward && (consumed.x < -1f || available.x < -1f)
-                }
-                val backward = if (verticalReading) {
-                    !listState.canScrollBackward && (consumed.y > 1f || available.y > 1f)
-                } else {
-                    !pagerState.canScrollBackward && (consumed.x > 1f || available.x > 1f)
-                }
-                when {
-                    forward -> scope.launch { jump(0) }
-                    backward -> scope.launch { jump(session.pages.lastIndex) }
-                }
-                return Velocity.Zero
+        if (!videoBook) {
+            jumpJob?.cancel()
+            jumpJob = scope.launch {
+                if (verticalReading) listState.scrollToItem(paging.nearestItem(page, listState.firstVisibleItemIndex))
+                else pagerState.scrollToPage(paging.nearestItem(page, pagerState.currentPage))
             }
         }
     }
+    val videoState = if (videoBook) rememberVideoPlayback(session, currentPage, active, settings,
+        videoPosition, onVideoProgress, onEnded = {
+            if (!settings.videoLoopSingle && (settings.loopMode || currentPage < session.pages.lastIndex)) jump(currentPage + 1)
+        }) else null
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         Box(Modifier.fillMaxSize().graphicsLayer {
@@ -169,27 +143,27 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             scaleY = 1f - backProgress * .08f
             alpha = 1f - backProgress * .25f
         }.background(background)) {
-            if (verticalReading) {
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize().nestedScroll(loopConnection), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    itemsIndexed(session.pages, key = { index, _ -> "${session.book.cacheKey}-$index" }) { index, page ->
-                        val visible by remember(index) { derivedStateOf { listState.layoutInfo.visibleItemsInfo.any { it.index == index } } }
-                        if (page.isVideo) {
-                            VideoPage(session, index, repository, active && visible && index == currentPage, settings, foreground,
-                                zoomSequence = if (index == currentPage) zoomSequence else 0, zoomAction = zoomAction,
-                                initialPosition = videoPosition(index), onProgress = onVideoProgress,
-                                onTap = { controls = !controls }, onEnded = {
-                                    if (settings.videoLoopSingle) Unit else jump(index + 1)
-                                })
-                        } else ReaderPage(session, index, repository, vertical = true, active = active && visible,
-                            foreground = foreground, zoomSequence = if (index == currentPage) zoomSequence else 0,
-                            zoomAction = zoomAction, onTap = { controls = !controls })
+            if (videoState != null) {
+                VideoPage(videoState, currentPage, settings, foreground, zoomSequence, zoomAction,
+                    onTap = { controls = !controls }, onPage = { jump(currentPage + it) })
+            } else if (verticalReading) {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    items(paging.itemCount, key = { "${session.book.cacheKey}-$it" }) { item ->
+                        val index = paging.pageAt(item)
+                        val visible by remember(item) { derivedStateOf { listState.layoutInfo.visibleItemsInfo.any { it.index == item } } }
+                        val current by remember(item) { derivedStateOf { item == listState.firstVisibleItemIndex } }
+                        ReaderPage(session, index, repository, vertical = true, active = active && visible,
+                            foreground = foreground, zoomSequence = if (current) zoomSequence else 0,
+                            zoomAction = zoomAction, initialRatio = ratios[index], onRatio = { ratios[index] = it },
+                            onTap = { controls = !controls })
                     }
                 }
             } else {
-                HorizontalPager(state = pagerState, reverseLayout = settings.rightToLeft, modifier = Modifier.fillMaxSize().nestedScroll(loopConnection),
-                    beyondViewportPageCount = 0, key = { "${session.book.cacheKey}-$it" }) { index ->
-                    ReaderPage(session, index, repository, vertical = false, active = active && pagerState.currentPage == index,
-                        foreground = foreground, zoomSequence = if (index == currentPage) zoomSequence else 0,
+                HorizontalPager(state = pagerState, reverseLayout = settings.rightToLeft, modifier = Modifier.fillMaxSize(),
+                    beyondViewportPageCount = 1, key = { "${session.book.cacheKey}-$it" }) { item ->
+                    val index = paging.pageAt(item)
+                    ReaderPage(session, index, repository, vertical = false, active = active && pagerState.currentPage == item,
+                        foreground = foreground, zoomSequence = if (item == pagerState.currentPage) zoomSequence else 0,
                         zoomAction = zoomAction, onTap = { controls = !controls })
                 }
             }
@@ -204,7 +178,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 TopAppBar(title = {
                     Column {
                         Text(session.book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                        Text(if (verticalReading) "垂直连续" else if (settings.rightToLeft) "水平翻页 · 从右向左" else "水平翻页",
+                        Text(if (verticalReading) { if (videoBook) "垂直翻页" else "垂直连续" } else if (settings.rightToLeft) "水平翻页 · 从右向左" else "水平翻页",
                             style = MaterialTheme.typography.labelSmall)
                     }
                 }, navigationIcon = {
@@ -219,6 +193,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                     Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) {
                         Box(Modifier.align(Alignment.CenterHorizontally).size(32.dp, 4.dp).clip(RoundedCornerShape(2.dp))
                             .background(MaterialTheme.colorScheme.outlineVariant))
+                        if (videoState != null) VideoProgressControls(videoState)
                         var slider by remember { mutableFloatStateOf(currentPage.toFloat()) }
                         var dragging by remember { mutableStateOf(false) }
                         LaunchedEffect(currentPage) { if (!dragging) slider = currentPage.toFloat() }
@@ -239,7 +214,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                             IconButton(onClick = { zoomAction = 1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomIn, if (videoBook) "放大视频" else "放大图片") }
                             IconButton(onClick = { jump(currentPage + 1) }, enabled = settings.loopMode || currentPage < session.pages.lastIndex) { Icon(Icons.AutoMirrored.Outlined.NavigateNext, "下一页") }
                         }
-                        Text(if (videoBook) "轻点画面收起 · 双指缩放，双击控制播放" else "轻点画面收起 · 双指缩放，双击缩放图片",
+                        Text(if (videoBook) "轻点画面收起 · 双击缩放，拖动播放进度条定位" else "轻点画面收起 · 双指缩放，双击缩放图片",
                             Modifier.align(Alignment.CenterHorizontally).padding(bottom = 2.dp),
                             style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
@@ -268,209 +243,9 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
 }
 
 @Composable
-private fun VideoPage(
-    session: BookSession,
-    index: Int,
-    repository: BookRepository,
-    active: Boolean,
-    settings: ReaderSettings,
-    foreground: Color,
-    zoomSequence: Int,
-    zoomAction: Int,
-    initialPosition: Long,
-    onProgress: (Int, Long) -> Unit,
-    onTap: () -> Unit,
-    onEnded: () -> Unit,
-) {
-    val width = (LocalWindowInfo.current.containerSize.width * 2).coerceIn(480, 3200)
-    var loadFailure by remember(session.book.cacheKey, index) { mutableStateOf(false) }
-    val file by produceState<java.io.File?>(null, session.book.cacheKey, index, width) {
-        try {
-            value = repository.pageFile(session, index, width)
-        } catch (_: Exception) {
-            loadFailure = true
-        }
-    }
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val containerWidth = LocalWindowInfo.current.containerSize.width.toFloat().coerceAtLeast(1f)
-    val containerHeight = LocalWindowInfo.current.containerSize.height
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val player = remember(file?.absolutePath) {
-        file?.let {
-            ExoPlayer.Builder(context).build().apply {
-                setMediaItem(MediaItem.fromUri(Uri.fromFile(it)))
-                repeatMode = if (settings.videoLoopSingle) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
-                prepare()
-                playWhenReady = false
-            }
-        }
-    }
-    var ready by remember(player) { mutableStateOf(false) }
-    var playbackFailure by remember(player) { mutableStateOf(false) }
-    var playing by remember(player) { mutableStateOf(false) }
-    var dragging by remember(player) { mutableStateOf(false) }
-    var dragPosition by remember(player) { mutableLongStateOf(0L) }
-    var zoom by remember(player) { mutableFloatStateOf(1f) }
-
-    DisposableEffect(player) {
-        if (player == null) {
-            onDispose {}
-        } else {
-            val listener = object : Player.Listener {
-                override fun onPlaybackStateChanged(state: Int) {
-                    ready = state == Player.STATE_READY
-                    if (state == Player.STATE_ENDED && player.repeatMode != Player.REPEAT_MODE_ONE) onEnded()
-                }
-                override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) { playbackFailure = true }
-            }
-            player.addListener(listener)
-            onDispose {
-                onProgress(index, player.currentPosition)
-                player.removeListener(listener)
-                player.release()
-            }
-        }
-    }
-    LaunchedEffect(player, active) {
-        val current = player ?: return@LaunchedEffect
-        if (active) {
-            if (initialPosition > 0L) current.seekTo(initialPosition)
-            if (!settings.videoPreview) current.playWhenReady = true
-        } else current.pause()
-    }
-    LaunchedEffect(player, active, settings.videoLoopSingle) {
-        val current = player ?: return@LaunchedEffect
-        current.repeatMode = if (settings.videoLoopSingle) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
-        while (active) {
-            onProgress(index, current.currentPosition)
-            delay(1000)
-        }
-    }
-    LaunchedEffect(zoomSequence) {
-        if (zoomSequence > 0) zoom = when (zoomAction) {
-            1 -> (zoom * 1.5f).coerceAtMost(4f)
-            -1 -> (zoom / 1.5f).coerceAtLeast(1f)
-            else -> 1f
-        }
-    }
-    if (player == null) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            if (loadFailure) Text("视频文件暂时无法读取，请确认文件完整且设备支持此编码。", color = foreground)
-            else CircularProgressIndicator(color = foreground)
-        }
-        return
-    }
-    val duration = player.duration.takeIf { it > 0L } ?: 1L
-    val displayedPosition = if (dragging) dragPosition else player.currentPosition
-    Box(
-        Modifier.fillMaxWidth().height(with(density) { containerHeight.toDp() })
-            .graphicsLayer { scaleX = zoom; scaleY = zoom }
-            .pointerInput(player) {
-                awaitEachGesture {
-                    var previousDistance = 0f
-                    while (true) {
-                        val event = awaitPointerEvent()
-                        val pointers = event.changes.filter { it.pressed }
-                        if (pointers.size >= 2) {
-                            val first = pointers[0].position
-                            val second = pointers[1].position
-                            val distance = kotlin.math.hypot(
-                                (first.x - second.x).toDouble(), (first.y - second.y).toDouble()).toFloat()
-                            if (previousDistance > 0f) zoom = (zoom * distance / previousDistance).coerceIn(1f, 4f)
-                            previousDistance = distance
-                            pointers.forEach { it.consume() }
-                        } else if (pointers.isEmpty()) break else previousDistance = 0f
-                    }
-                }
-            }
-            .pointerInput(player) {
-                detectTapGestures(
-                    onTap = { onTap() },
-                    onDoubleTap = { offset ->
-                        val third = containerWidth / 3f
-                        if (!player.isPlaying) {
-                            player.play()
-                        } else when {
-                            offset.x < third -> player.seekTo((player.currentPosition - 15_000L).coerceAtLeast(0L))
-                            offset.x > third * 2f -> player.seekTo((player.currentPosition + 15_000L).coerceAtMost(duration))
-                            else -> player.pause()
-                        }
-                    },
-                )
-            }
-            .pointerInput(player) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(requireUnconsumed = false)
-                    var lastX = down.position.x
-                    var horizontalDrag = false
-                    var multiTouch = false
-                    try {
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            val change = event.changes.firstOrNull() ?: break
-                            if (event.changes.count { it.pressed } > 1) {
-                                multiTouch = true
-                                horizontalDrag = false
-                                dragging = false
-                            }
-                            if (!change.pressed) {
-                                if (horizontalDrag) player.seekTo(dragPosition)
-                                dragging = false
-                                break
-                            }
-                            if (!multiTouch) {
-                                val deltaX = change.position.x - lastX
-                                lastX = change.position.x
-                                if (!horizontalDrag && kotlin.math.abs(change.position.x - down.position.x) > 12f) {
-                                    horizontalDrag = true
-                                    dragging = true
-                                    dragPosition = player.currentPosition
-                                }
-                                if (horizontalDrag) {
-                                    change.consume()
-                                    dragPosition = (dragPosition + (deltaX / containerWidth * duration).toLong())
-                                        .coerceIn(0L, duration)
-                                }
-                            }
-                        }
-                    } finally {
-                        dragging = false
-                    }
-                }
-            },
-        contentAlignment = Alignment.Center,
-    ) {
-        AndroidView(factory = { PlayerView(it).apply {
-            useController = false
-        } }, modifier = Modifier.fillMaxSize(), update = { it.player = player })
-        if (!ready) {
-            if (playbackFailure) Text("视频无法播放，设备可能不支持此编码。", color = Color.White)
-            else CircularProgressIndicator(color = Color.White)
-        }
-        if (dragging) {
-            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = .28f)))
-            Text("${formatVideoTime(displayedPosition)} / ${formatVideoTime(duration)}",
-                color = Color.White, style = MaterialTheme.typography.titleLarge)
-        } else if (!playing && settings.videoPreview) {
-            Surface(color = Color.Black.copy(alpha = .42f), shape = RoundedCornerShape(50),
-                modifier = Modifier.size(64.dp)) { Icon(Icons.Outlined.PlayArrow, "播放", Modifier.padding(16.dp), Color.White) }
-        }
-    }
-}
-
-private fun formatVideoTime(milliseconds: Long): String {
-    val seconds = (milliseconds.coerceAtLeast(0L) / 1000L).toInt()
-    val hours = seconds / 3600
-    val minutes = (seconds % 3600) / 60
-    val remaining = seconds % 60
-    return if (hours > 0) String.format(Locale.ROOT, "%d:%02d:%02d", hours, minutes, remaining)
-    else String.format(Locale.ROOT, "%02d:%02d", minutes, remaining)
-}
-
-@Composable
 private fun ReaderPage(session: BookSession, index: Int, repository: BookRepository, vertical: Boolean, active: Boolean,
-    foreground: Color, zoomSequence: Int, zoomAction: Int, onTap: () -> Unit) {
+    foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float? = null,
+    onRatio: (Float) -> Unit = {}, onTap: () -> Unit) {
     val width = (LocalWindowInfo.current.containerSize.width * 2).coerceIn(480, 3200)
     var retry by remember { mutableIntStateOf(0) }
     var failure by remember(session.book.cacheKey, index) { mutableStateOf<String?>(null) }
@@ -483,7 +258,8 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
         catch (error: Exception) { failure = "这一页暂时无法解码。请确认图片完整，且设备支持此编码。" }
     }
     DisposableEffect(drawable) { onDispose { (drawable as? Animatable)?.stop() } }
-    val ratio = drawable?.let { it.intrinsicWidth.toFloat() / it.intrinsicHeight.coerceAtLeast(1) } ?: .70f
+    val ratio = drawable?.let { it.intrinsicWidth.toFloat() / it.intrinsicHeight.coerceAtLeast(1) } ?: initialRatio ?: .70f
+    LaunchedEffect(drawable) { if (drawable != null) onRatio(ratio) }
     val layout = if (vertical) Modifier.fillMaxWidth().aspectRatio(ratio.coerceAtLeast(.03f)) else Modifier.fillMaxSize()
     Box(layout, contentAlignment = Alignment.Center) {
         val image = drawable

@@ -113,12 +113,8 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         return store.videoPosition(session.book.id, page)
     }
 
-    fun saveVideoProgress(page: Int, position: Long) {
-        val session = mutable.value.session ?: return
-        val index = page.coerceIn(session.pages.indices)
-        store.saveVideoPosition(session.book.id, index, position)
-        store.saveProgress(session.book.id, index, session.pages.size)
-        mutable.update { it.copy(progress = it.progress + (session.book.id to store.progress(session.book.id))) }
+    fun saveVideoProgress(bookId: String, page: Int, position: Long) {
+        store.saveVideoPosition(bookId, page, position)
     }
 
     fun clearReadingProgress() {
