@@ -1,0 +1,3 @@
+- 开发过程中更新相应文档
+- 除了单元测试，还需通过 Android Emulator 进行功能测试与端到端测试
+- 开发构建目录为 app/build/outputs/apk/release ，dist 为正式构建目录
