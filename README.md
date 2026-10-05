@@ -47,7 +47,7 @@ Android 通常不允许授权内部存储根目录、Download 根目录及 Andro
 - 仅包含视频的文件夹或压缩包组成一本书；图片和视频混合时也可直接打开，按自然排序锁定为水平翻页，视频页显示播放进度条，图片页不显示。压缩包成员按 UTF-8 解码，中文文件名可正常读取；视频播完自动进入下一段后，返回该视频会从头重播。视频压缩包首次打开会解压到应用临时目录。
 - PDF 只支持书库根目录或未压缩的子目录；若压缩包内含 PDF，应用会提示压缩包本身可读取但需先解压后阅读。
 
-> ⚠️ **图片与视频混合内容阅览目前为 WIP 功能**：混合书库项是实验性的。翻页、切换、循环、自动续播、后台恢复等操作及其组合可能产生非预期表现（例如画面与播放状态不同步）。纯图片或纯视频内容不受影响。
+> **图片与视频混合内容阅览目前为 WIP 功能**：混合书库项是实验性的。翻页、切换、循环、自动续播、后台恢复等操作及其组合可能产生非预期表现（例如画面与播放状态不同步）。纯图片或纯视频内容不受影响。
 - 视频默认按顺序自动播放下一段，每段视频会记住播放位置；设置可改为单个视频循环或仅预览后使用播放按钮开始播放。视频文件夹和压缩包以自然排序第一个视频的抽帧作为封面。
 - 「循环模式」开启后，图片末页与首页在两个方向上连续衔接，可自然滑入相邻页；视频在首尾之间直接切换。「清除阅读记录」在设置中双击执行且不影响收藏。
 - 7Z 固实压缩包首次打开需要先准备整本内容，较大的书会等待较久。
@@ -93,7 +93,7 @@ SDK 路径不同时调整 `ANDROID_HOME`，或在未跟踪的 `local.properties`
 
 ## 开源组件
 
-基于 [AndroidX / Compose](https://github.com/androidx/androidx)、[Media3](https://github.com/androidx/media)、[Android 开源项目](https://android.googlesource.com/platform/frameworks/base/)、[Kotlin](https://github.com/JetBrains/kotlin)、[libarchive](https://github.com/libarchive/libarchive)、[APNG4Android](https://github.com/penfeizhou/APNG4Android) 与 [libavif](https://github.com/AOMediaCodec/libavif) 等开源组件构建。视频播放使用 Media3，手势识别和视频封面抽帧使用 Android 开源框架中的 GestureDetector / ScaleGestureDetector 与 MediaMetadataRetriever。
+基于 [AndroidX / Compose](https://github.com/androidx/androidx)、[Media3](https://github.com/androidx/media)、[Android 开源项目](https://android.googlesource.com/platform/frameworks/base/)、[Kotlin](https://github.com/JetBrains/kotlin)、[libarchive](https://github.com/libarchive/libarchive)、[APNG4Android](https://github.com/penfeizhou/APNG4Android) 与 [libavif](https://github.com/AOMediaCodec/libavif) 等开源组件构建。视频播放使用 Media3；手势识别和视频封面抽帧使用上述 Android 开源项目中的 GestureDetector / ScaleGestureDetector 与 MediaMetadataRetriever。
 
 ## 许可证
 

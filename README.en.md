@@ -47,7 +47,7 @@ While reading, the zoom range goes from fit-to-screen up to 5x, and you can retu
 - A folder or archive containing only videos forms one book; mixed image/video content opens in a horizontal pager, with the video seek bar shown only on video pages. Archive member names are decoded as UTF-8, so Chinese filenames work; a finished video replays from the start when you return to it after auto-advancing. Video archives are extracted to the app's temporary cache before playback.
 - PDFs are supported only at the library root or in uncompressed subdirectories; any readable archive containing a PDF asks you to extract it before reading.
 
-> ⚠️ **Mixed image/video reading is a work in progress**: books that mix images and videos are experimental. Paging, switching, looping, autoplay, background-resume, and combinations of these interactions may produce unexpected results (for example, mismatched frames or playback state). Pure image or pure video content is unaffected.
+> **Mixed image/video reading is a work in progress**: books that mix images and videos are experimental. Paging, switching, looping, autoplay, background-resume, and combinations of these interactions may produce unexpected results (for example, mismatched frames or playback state). Pure image or pure video content is unaffected.
 - Videos autoplay in order and remember an individual position. Settings can loop one video or open videos in preview mode until the play button starts playback. Video folders and archives use a frame from the naturally sorted first video as their cover.
 - With Loop mode enabled, the first and last image pages are adjacent in both directions and scroll naturally across the boundary; videos switch directly across the boundary. Double-tap Clear reading history in Settings to remove all progress without affecting favorites.
 - 7Z solid archives need their whole content prepared on first open, so larger books take longer to open.
@@ -93,7 +93,7 @@ The private key and passwords must not be committed to Git, and `.signing/` must
 
 ## Open Source Components
 
-Built on open source components including [AndroidX / Compose](https://github.com/androidx/androidx), [Media3](https://github.com/androidx/media), the [Android Open Source Project](https://android.googlesource.com/platform/frameworks/base/), [Kotlin](https://github.com/JetBrains/kotlin), [libarchive](https://github.com/libarchive/libarchive), [APNG4Android](https://github.com/penfeizhou/APNG4Android), and [libavif](https://github.com/AOMediaCodec/libavif). Videos use Media3; gestures and thumbnail extraction use the Android framework's GestureDetector / ScaleGestureDetector and MediaMetadataRetriever.
+Built on open source components including [AndroidX / Compose](https://github.com/androidx/androidx), [Media3](https://github.com/androidx/media), the [Android Open Source Project](https://android.googlesource.com/platform/frameworks/base/), [Kotlin](https://github.com/JetBrains/kotlin), [libarchive](https://github.com/libarchive/libarchive), [APNG4Android](https://github.com/penfeizhou/APNG4Android), and [libavif](https://github.com/AOMediaCodec/libavif). Videos use Media3; gesture recognition and thumbnail extraction use GestureDetector / ScaleGestureDetector and MediaMetadataRetriever from the Android Open Source Project listed above.
 
 ## License
 
