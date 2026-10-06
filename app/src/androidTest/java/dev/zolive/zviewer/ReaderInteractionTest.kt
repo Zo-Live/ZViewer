@@ -163,28 +163,33 @@ class ReaderInteractionTest {
         open(preview = false)
         waitForPlayback()
         lateinit var outgoing: ZoomVideoView
-        var position = 0L
+        lateinit var incoming: ZoomVideoView
+        val incomingRect = Rect()
         rule.runOnIdle {
             outgoing = currentVideoView()
-            position = outgoing.playerView.player!!.currentPosition
+            val nextPath = session.pages[(currentPage + 1) % session.pages.size].filePath
+            incoming = videoViews().first { it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == nextPath }
         }
         // 拖动到过半之前并保持按住：此时还没有正式切换到下一段。
+        var position = 0L
         rule.onRoot().performTouchInput {
             down(Offset(centerX, height * .62f))
             moveTo(Offset(centerX, height * .34f), 450)
         }
         rule.waitForIdle()
-        lateinit var incoming: ZoomVideoView
-        val incomingRect = Rect()
         rule.runOnIdle {
             val views = videoViews()
+            position = outgoing.playerView.player!!.currentPosition
             assertTrue("拖动时应保留当前视频视图", views.contains(outgoing))
             assertTrue("拖动时当前视频应继续播放", outgoing.playerView.player!!.playWhenReady)
-            incoming = views.firstOrNull { it !== outgoing && it.playerView.player != null && it.getGlobalVisibleRect(incomingRect) }
-                ?: throw AssertionError("拖动时应为目标页预建播放器")
+            assertSame("下一段视频应沿用预载好的播放器", incoming, views.first {
+                it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path ==
+                    session.pages[(currentPage + 1) % session.pages.size].filePath
+            })
             assertFalse("拖动时下一段视频应保持暂停", incoming.playerView.player!!.playWhenReady)
-            // 同时最多保留当前页与目标页两个播放器，离屏预载页只显示封面。
-            assertTrue("同时存在的播放器不应超过两个", views.count { it.playerView.player != null } <= 2)
+            // 停靠页与左右相邻页各持有一个预载播放器，其余离屏页只显示封面。
+            assertTrue("同时存在的预载播放器不应超过三个", views.count { it.playerView.player != null } <= 3)
+            assertTrue("目标页应滑入可见区域", incoming.getGlobalVisibleRect(incomingRect))
         }
         rule.waitUntil(5_000) {
             var advancing = false
@@ -216,6 +221,78 @@ class ReaderInteractionTest {
         rule.waitUntil(5_000) { currentPage == 1 }
         waitForVideo()
         waitForPlayback()
+    }
+
+    /**
+     * 拖动到下一段视频再原路拉回：目标页在仍可见期间不能被回收，否则会看到画面闪断
+     * （Surface 被释放后再重建，画面跳回封面 / 首帧）。
+     */
+    @Test fun reversingDuringVideoDragKeepsIncomingPlayerAttached() {
+        open(preview = false)
+        waitForPlayback()
+        lateinit var incoming: ZoomVideoView
+        lateinit var incomingPlayer: Player
+        rule.runOnIdle {
+            val nextPath = session.pages[(currentPage + 1) % session.pages.size].filePath
+            incoming = videoViews().first { it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == nextPath }
+            incomingPlayer = incoming.playerView.player!!
+        }
+        // 先拖过中线让目标页进入可见区域，再在同一次手势里拉回（不松手），
+        // 但保留一小部分目标页可见，验证目标切换回上一页时播放器不会被回收。
+        rule.onRoot().performTouchInput {
+            down(Offset(centerX, height * .62f))
+            moveTo(Offset(centerX, height * .30f), 400)
+            moveTo(Offset(centerX, height * .44f), 200)
+            moveTo(Offset(centerX, height * .50f), 200)
+        }
+        rule.waitForIdle()
+        var visible = false
+        rule.runOnIdle {
+            assertSame("拉回过程中目标页应继续持有预载播放器", incomingPlayer, incoming.playerView.player)
+            assertFalse("目标页播放器应保持暂停", incomingPlayer.playWhenReady)
+            visible = incoming.getGlobalVisibleRect(Rect())
+        }
+        assertTrue("拉回过程中目标页仍应可见，才能验证回收时机", visible)
+        rule.onRoot().performTouchInput { up() }
+        rule.waitUntil(5_000) { currentPage == 0 }
+        rule.runOnIdle { assertSame("手势结束后相邻页的播放器仍可复用", incomingPlayer, incoming.playerView.player) }
+        swipe()
+        rule.waitUntil(15_000) { currentPage == 1 }
+        waitForVideo()
+        waitForPlayback()
+    }
+
+    /**
+     * 临近片尾时滑动切换不能重置播放器的视频输出。ExoPlayer 在快播完时切换 repeatMode
+     * 会重新初始化解码器（视频尺寸归零、画面重新渲染首帧），在真机与模拟器上都会闪屏；
+     * 切换期间播完由 onEnded 重新播放处理，因此不应根据滚动状态切换 repeatMode。
+     */
+    @Test fun switchingVideoNearEndDoesNotResetVideoOutput() {
+        open(preview = false)
+        waitForPlayback()
+        val player = rule.runOnIdle { currentVideoView().playerView.player!! }
+        val zeroSizes = java.util.concurrent.atomic.AtomicInteger(0)
+        val listener = object : Player.Listener {
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                if (videoSize.height == 0) zeroSizes.incrementAndGet()
+            }
+        }
+        rule.runOnIdle {
+            player.addListener(listener)
+            player.seekTo(player.duration - 900)
+        }
+        waitForPlayback()
+        // 拖过中线再拉回，覆盖切换的“开始 / 结束”两个阶段。
+        rule.onRoot().performTouchInput {
+            down(Offset(centerX, height * .62f))
+            moveTo(Offset(centerX, height * .32f), 250)
+            moveTo(Offset(centerX, height * .66f), 250)
+            up()
+        }
+        rule.waitForIdle()
+        Thread.sleep(800)
+        rule.runOnIdle { player.removeListener(listener) }
+        assertEquals("临近片尾切换视频不应重置解码器输出", 0, zeroSizes.get())
     }
 
     @Test fun currentVideoLoopsWhenEndedDuringTransition() {
@@ -470,11 +547,16 @@ class ReaderInteractionTest {
         rule.waitUntil(15_000) { (saved[1] ?: 0L) > 0L }
         swipe(vertical = false)
         rule.waitUntil(15_000) { currentPage == 2 }
-        // 离开后播放器被释放，位置不再前进；保存的进度停在离开时的位置。
+        // 相邻页会保留预载播放器，但必须保持暂停，位置不再前进；保存的进度停在离开时的位置。
         rule.waitUntil(15_000) {
-            var gone = false
-            rule.runOnUiThread { gone = videoViews().none { it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path } }
-            gone
+            var paused = false
+            rule.runOnUiThread {
+                val view = videoViews().firstOrNull {
+                    it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path
+                }
+                paused = view == null || view.playerView.player?.isPlaying == false
+            }
+            paused
         }
         val savedPosition = saved[1] ?: 0L
         Thread.sleep(2000)

@@ -2,7 +2,6 @@
 
 package dev.zolive.zviewer.ui
 
-import android.graphics.Bitmap
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import android.view.WindowManager
@@ -63,6 +62,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
@@ -99,6 +99,9 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         else -> "页"
     }
     val videoPool = remember(session.book.cacheKey, videoBook) { if (videoBook) VideoPlaybackPool(context) else null }
+    // 会话级封面缓存：同一真实页在循环模式下可能被多个虚拟项复用，
+    // 重建视图时直接取已解码的封面，避免异步解码造成一帧空档。
+    val videoCovers = remember(session.book.cacheKey) { VideoCoverCache() }
 
     DisposableEffect(videoPool) {
         onDispose { videoPool?.releaseAll() }
@@ -192,8 +195,8 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         }.background(background)) {
             if (videoBook) {
                 val itemContent: @Composable (Int) -> Unit = { item ->
-                    VideoPagerPage(item, session, paging, pagerState, repository, videoPool!!, active, settings,
-                        foreground, videoPosition, onVideoProgress, zoomSequence, zoomAction, zoomPage,
+                    VideoPagerPage(item, session, paging, pagerState, repository, videoPool!!, videoCovers,
+                        active, settings, foreground, videoPosition, onVideoProgress, zoomSequence, zoomAction, zoomPage,
                         onTap = { controls = !controls }, onEnded = onVideoEnded)
                 }
                 if (verticalReading) {
@@ -304,33 +307,35 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
 
 /**
  * 视频书的每个 Pager 页。视频页从池中取播放器、按页保存位置；图片页复用普通阅读页。
- * 只有停靠页允许播放，滑动中的前后视频保持暂停并显示首帧封面。
+ *
+ * 播放器按“停靠页 + 左右相邻页”预建：相邻视频在离屏时就把保存位置的首帧渲染到自己的
+ * TextureView，滑动进入时画面已经就绪。播放器在页面仍处于 Pager 组合窗口期间不会被回收，
+ * 因此拖动到一半再拉回、连续来回切换时不会反复销毁 / 重建 Surface 而闪屏。
  */
 @Composable
 private fun VideoPagerPage(
     item: Int, session: BookSession, paging: ReaderPaging, pagerState: PagerState, repository: BookRepository,
-    pool: VideoPlaybackPool, active: Boolean, settings: ReaderSettings, foreground: Color,
+    pool: VideoPlaybackPool, covers: VideoCoverCache,
+    active: Boolean, settings: ReaderSettings, foreground: Color,
     videoPosition: (Int) -> Long, onVideoProgress: (Int, Long) -> Unit,
     zoomSequence: Int, zoomAction: Int, zoomPage: Int, onTap: () -> Unit, onEnded: (VideoPlaybackState) -> Unit,
 ) {
     val index = paging.pageAt(item)
     val page = session.pages[index]
     val settled = pagerState.settledPage == item
+    val neighbor = abs(item - pagerState.settledPage) <= 1
     // 缩放指令只应用到当前页，避免相邻预载页被一起缩放。
     val sequence = if (settled && index == zoomPage) zoomSequence else 0
     if (page.isVideo) {
-        val cover = rememberVideoCover(session, index, repository)
-        // 停靠页始终有播放器；拖动 / 切换动画期间为将要停靠的目标页也预建播放器（总数最多两个），
-        // 让下一段在滑动过程中就渲染出首帧，不出现黑屏。其余页复用同一视图并只显示封面。
-        val hasPlayer = settled || (pagerState.isScrollInProgress && pagerState.targetPage == item)
-        LaunchedEffect(hasPlayer, settled, pagerState.targetPage, pagerState.isScrollInProgress) {
-            DiagnosticLog.log("Page", "item=$item index=$index video=true hasPlayer=$hasPlayer settled=$settled " +
-                "target=${pagerState.targetPage} scrolling=${pagerState.isScrollInProgress} pool=${pool.size} " +
-                "current=${pagerState.currentPage} frac=${pagerState.currentPageOffsetFraction}")
+        val cover = rememberVideoCover(session, index, repository, covers)
+        val state = if (neighbor) remember(item) { pool.acquire(item) } else null
+        LaunchedEffect(settled, neighbor, pagerState.targetPage, pagerState.isScrollInProgress) {
+            DiagnosticLog.log("Page", "item=$item index=$index video=true hasPlayer=${state != null} settled=$settled " +
+                "neighbor=$neighbor target=${pagerState.targetPage} scrolling=${pagerState.isScrollInProgress} " +
+                "pool=${pool.size} current=${pagerState.currentPage} frac=${pagerState.currentPageOffsetFraction}")
         }
-        val state = if (hasPlayer) remember(item) { pool.acquire(item) } else null
         DisposableEffect(state) { onDispose { if (state != null) pool.release(item) } }
-        VideoPage(state, index, session, cover, settings, switching = pagerState.isScrollInProgress,
+        VideoPage(state, index, session, cover, settings,
             videoPosition, onVideoProgress, foreground, active && settled,
             sequence, zoomAction, onTap = onTap, onEnded = onEnded)
     } else {

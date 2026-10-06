@@ -212,7 +212,7 @@ internal class VideoPlaybackPool(private val context: Context) {
 @Composable
 internal fun rememberVideoPlayback(
     state: VideoPlaybackState, session: BookSession, index: Int, active: Boolean, allowPlayback: Boolean, settings: ReaderSettings,
-    switching: Boolean = false, videoPosition: (Int) -> Long, onProgress: (Int, Long) -> Unit, onEnded: () -> Unit,
+    videoPosition: (Int) -> Long, onProgress: (Int, Long) -> Unit, onEnded: () -> Unit,
 ) {
     val latestProgress by rememberUpdatedState(onProgress)
     val latestEnded by rememberUpdatedState(onEnded)
@@ -280,9 +280,11 @@ internal fun rememberVideoPlayback(
         state.player.playWhenReady = false
         state.player.prepare()
     }
-    LaunchedEffect(state, settings.videoLoopSingle, settings.loopMode, switching) {
-        // 过渡（拖动或切换动画）期间当前视频循环播放，避免它在切换完成前播完停在结尾。
-        state.player.repeatMode = if (switching || settings.videoLoopSingle || settings.loopMode && session.pages.size == 1) {
+    LaunchedEffect(state, settings.videoLoopSingle, settings.loopMode) {
+        // 注意不要根据滚动 / 切换状态切换 repeatMode：ExoPlayer 在接近片尾时切换循环模式
+        // 会重新初始化解码器输出（视频尺寸归零、画面重新渲染首帧），在真机与模拟器上都会闪屏。
+        // 切换期间播完的情况由 onEnded 回调重新从头播放处理。
+        state.player.repeatMode = if (settings.videoLoopSingle || settings.loopMode && session.pages.size == 1) {
             Player.REPEAT_MODE_ONE
         } else Player.REPEAT_MODE_OFF
     }
@@ -324,9 +326,34 @@ private fun stateName(state: Int): String = when (state) {
     else -> "STATE_$state"
 }
 
+/**
+ * 会话级视频封面缓存。循环模式下同一真实页会出现在多个虚拟项里，缓存可以让重建的视图
+ * 立即拿到已解码的封面；只保留最近使用的几页，避免长视频书占用过多内存。
+ */
+internal class VideoCoverCache(private val maxEntries: Int = 4) {
+    private val values = mutableStateMapOf<Int, Bitmap>()
+    private val order = ArrayDeque<Int>()
+
+    operator fun get(index: Int): Bitmap? = values[index]
+
+    fun put(index: Int, bitmap: Bitmap) {
+        if (values[index] === bitmap) return
+        values[index] = bitmap
+        order.remove(index)
+        order.addLast(index)
+        while (order.size > maxEntries) {
+            val oldest = order.removeFirst()
+            if (oldest != index) values.remove(oldest)
+        }
+    }
+}
+
 @Composable
-internal fun rememberVideoCover(session: BookSession, index: Int, repository: BookRepository): Bitmap? {
-    val cover by produceState<Bitmap?>(null, session.book.cacheKey, index) {
+internal fun rememberVideoCover(session: BookSession, index: Int, repository: BookRepository,
+    cache: VideoCoverCache): Bitmap? {
+    val cached = cache[index]
+    LaunchedEffect(session.book.cacheKey, index, cached == null) {
+        if (cached != null) return@LaunchedEffect
         // 首次抽帧可能因解码器暂时繁忙失败，稍后重试一次。
         repeat(2) { attempt ->
             val started = android.os.SystemClock.elapsedRealtime()
@@ -334,15 +361,15 @@ internal fun rememberVideoCover(session: BookSession, index: Int, repository: Bo
                 repository.videoFrame(session, index)?.takeIf(File::isFile)?.let { BitmapFactory.decodeFile(it.absolutePath) }
             }
             if (bitmap != null) {
-                value = bitmap
+                cache.put(index, bitmap)
                 DiagnosticLog.log("Cover", "index=$index 封面 ${bitmap.width}x${bitmap.height} 耗时=${android.os.SystemClock.elapsedRealtime() - started}ms")
-                return@produceState
+                return@LaunchedEffect
             }
             DiagnosticLog.log("Cover", "index=$index 封面第 ${attempt + 1} 次加载失败")
             if (attempt == 0) delay(300)
         }
     }
-    return cover
+    return cached
 }
 
 /**
@@ -352,7 +379,7 @@ internal fun rememberVideoCover(session: BookSession, index: Int, repository: Bo
 @Composable
 internal fun VideoPage(
     state: VideoPlaybackState?, index: Int, session: BookSession, cover: Bitmap?,
-    settings: ReaderSettings, switching: Boolean,
+    settings: ReaderSettings,
     videoPosition: (Int) -> Long, onProgress: (Int, Long) -> Unit,
     foreground: Color, active: Boolean,
     zoomSequence: Int, zoomAction: Int, onTap: () -> Unit, onEnded: (VideoPlaybackState) -> Unit,
@@ -360,7 +387,7 @@ internal fun VideoPage(
 ) {
     val viewRef = remember { mutableStateOf<ZoomVideoView?>(null) }
     if (state != null) {
-        rememberVideoPlayback(state, session, index, active, active, settings, switching, videoPosition, onProgress) {
+        rememberVideoPlayback(state, session, index, active, active, settings, videoPosition, onProgress) {
             onEnded(state)
         }
     }
@@ -390,7 +417,9 @@ internal fun VideoPage(
                 }
             })
         if (state?.failed == true) Text("视频无法播放，文件可能无法读取或设备不支持此编码。", Modifier.padding(28.dp), color = foreground)
-        else if (state != null && (state.playbackState == Player.STATE_BUFFERING || state.playbackState == Player.STATE_IDLE)) {
+        // 只在停靠页且首帧尚未渲染时显示进度圈；预载、拖动中的页面只显示封面，避免切换时闪现进度圈。
+        else if (state != null && active && !state.firstFrameReady &&
+            (state.playbackState == Player.STATE_BUFFERING || state.playbackState == Player.STATE_IDLE)) {
             CircularProgressIndicator(color = foreground)
         }
     }

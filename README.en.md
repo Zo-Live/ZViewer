@@ -51,7 +51,7 @@ While reading, the zoom range goes from fit-to-screen up to 5x, and you can retu
 - PDFs are supported only at the library root or in uncompressed subdirectories; any readable archive containing a PDF asks you to extract it before reading.
 - Videos autoplay in order and remember an individual position. Settings can loop one video or open videos in preview mode until the play button starts playback. Video folders and archives use a frame from the naturally sorted first video as their cover.
 - With Loop mode enabled, the first and last image pages are adjacent in both directions and scroll naturally across the boundary; videos cross the boundary with the same transition. Double-tap Clear reading history in Settings to remove all progress without affecting favorites.
-- Settings can enable a diagnostic log and pick its folder (the app-specific directory by default, or any writable folder such as Download via the system picker). The log records app startup, library scans/opens, video switching, playback errors, and uncaught exceptions to help diagnose issues.
+- Settings can enable a diagnostic log and pick its folder (the app-specific directory by default, or any writable folder via the system picker). The log records app startup, library scans/opens, video switching, playback errors, and uncaught exceptions to help diagnose issues.
 - 7Z solid archives need their whole content prepared on first open, so larger books take longer to open.
 - Encrypted archives, multi-volume files, password-protected PDFs, and DRM content are not supported yet; decrypt or extract them to a folder first.
 - Whether HEIF / HEIC can be displayed depends on the device, and animated HEIF is not supported; APNG, GIF, animated WebP, and animated AVIF all play normally.
@@ -84,7 +84,7 @@ The key is located at `.signing/zviewer-release.jks` with alias `zviewer`; passw
 
 The artifact is `app/build/outputs/apk/release/app-release.apk`.
 
-The current release is `1.3.1` (`versionCode=9`). The distribution APK is `dist/ZViewer-1.3.1-release.apk`, with its SHA-256 checksum in `dist/ZViewer-1.3.1-release.apk.sha256`.
+The current release is `1.4.0` (`versionCode=10`). The distribution APK is `dist/ZViewer-1.4.0-release.apk`, with its SHA-256 checksum in `dist/ZViewer-1.4.0-release.apk.sha256`.
 
 The private key and passwords must not be committed to Git, and `.signing/` must be backed up separately and securely. Subsequent releases must use the same key and an incremented `versionCode` so that installed apps can be upgraded in place with their data preserved; a new key generated on a new machine means fresh installs only.
 
