@@ -2,20 +2,30 @@ package dev.zolive.zviewer.reader
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.graphics.drawable.BitmapDrawable
 import android.view.GestureDetector
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
-import android.view.ViewConfiguration
+import android.view.View
 import android.widget.FrameLayout
+import android.widget.ImageView
 import androidx.media3.ui.PlayerView
 import dev.zolive.zviewer.R
+import dev.zolive.zviewer.data.DiagnosticLog
 import kotlin.math.abs
 
 class ZoomVideoView(context: Context) : FrameLayout(context) {
     val playerView = LayoutInflater.from(context).inflate(R.layout.reader_video, this, false) as PlayerView
+
+    /**
+     * 首帧封面，位于播放器视图下方。播放器尚未渲染画面时 TextureView 是透明的，
+     * 因此离屏、暂停或仍在准备中的视频会显示这一帧，而不是黑屏。
+     */
+    private val coverView = ImageView(context).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
     var onTap: () -> Unit = {}
-    var onPage: (Int) -> Unit = {}
     var onLayoutReady: (Boolean) -> Unit = {}
     @get:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     val isSurfaceAvailable: Boolean
@@ -33,21 +43,12 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
             val expectedRatio = videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height
             return abs(surface.width.toFloat() / surface.height - expectedRatio) <= expectedRatio * .02f
         }
-    var vertical = true
-    var rightToLeft = false
     private var page = -1
     private var zoom = 1f
     private var offsetX = 0f
     private var offsetY = 0f
-    private var downX = 0f
-    private var downY = 0f
     private var multiTouch = false
-    private var gestureAxis = 0
-    private var fling = false
     private var lastCommand = 0
-    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
-    private val swipeDistance = 48f * resources.displayMetrics.density
-    private val flingVelocity = 600f * resources.displayMetrics.density
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(detector: ScaleGestureDetector): Boolean {
             setZoom(zoom * detector.scaleFactor, detector.focusX, detector.focusY)
@@ -70,25 +71,37 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
             }
             return true
         }
-        override fun onFling(first: MotionEvent?, second: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
-            fling = abs(if (vertical) velocityY else velocityX) >= flingVelocity
-            return true
-        }
     })
 
     init {
+        addView(coverView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(playerView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        // Media3 的黑色快门会盖住封面；设为透明后，首帧渲染前的空白 TextureView 能让封面透出。
+        playerView.findViewById<View>(androidx.media3.ui.R.id.exo_shutter)?.apply {
+            setBackgroundColor(Color.TRANSPARENT)
+            visibility = GONE
+        }
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
     }
 
     fun bindPage(index: Int) {
         if (page == index) return
+        DiagnosticLog.log("View", "bindPage index=$index view=${hashCode()}")
         page = index
         zoom = 1f
         offsetX = 0f
         offsetY = 0f
         updateTransform()
         contentDescription = "第 ${index + 1} 个视频，轻点显示阅读控制，双击缩放"
+    }
+
+    /** 设置或清除首帧封面；同一 Bitmap 重复设置时不做无谓刷新。 */
+    fun bindCover(bitmap: Bitmap?) {
+        val current = (coverView.drawable as? BitmapDrawable)?.bitmap
+        if (current === bitmap) return
+        DiagnosticLog.log("View", "bindCover index=$page view=${hashCode()} " +
+            (bitmap?.let { "${it.width}x${it.height}" } ?: "null"))
+        coverView.setImageBitmap(bitmap)
     }
 
     fun command(sequence: Int, action: Int) {
@@ -130,29 +143,21 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
-            downX = event.x
-            downY = event.y
-            multiTouch = false
-            gestureAxis = 0
-            fling = false
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                multiTouch = false
+                // 未放大时把手势交给外层 Pager，实现跟手的翻页过渡；放大后自行处理平移。
+                parent?.requestDisallowInterceptTouchEvent(zoom > 1f)
+            }
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                multiTouch = true
+                parent?.requestDisallowInterceptTouchEvent(true)
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> parent?.requestDisallowInterceptTouchEvent(false)
         }
         if (event.pointerCount > 1) multiTouch = true
         scaleDetector.onTouchEvent(event)
         gestureDetector.onTouchEvent(event)
-        val distanceX = event.x - downX
-        val distanceY = event.y - downY
-        if (gestureAxis == 0 && maxOf(abs(distanceX), abs(distanceY)) > touchSlop) {
-            gestureAxis = if (abs(distanceY) > abs(distanceX)) 1 else 2
-        }
-        if (event.actionMasked == MotionEvent.ACTION_UP && !multiTouch && zoom <= 1f &&
-            gestureAxis == if (vertical) 1 else 2) {
-            val distance = if (vertical) distanceY else distanceX
-            if (abs(distance) >= swipeDistance || fling && abs(distance) > touchSlop) {
-                val direction = if (distance < 0f) 1 else -1
-                onPage(if (!vertical && rightToLeft) -direction else direction)
-            }
-        }
         return true
     }
 

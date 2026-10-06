@@ -11,7 +11,7 @@ def generate():
         subprocess.run([
             "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
             "-i", f"color=c={color}:s={size}:r=15:d=12", "-c:v", "libx264",
-            "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(folder / name),
+            "-pix_fmt", "yuv420p", "-g", "15", "-movflags", "+faststart", str(folder / name),
         ], check=True)
     # Moving pattern used by the mixed-content surface regression: a frozen picture must be
     # distinguishable from active playback by comparing two screenshots. Kept in its own folder
@@ -20,8 +20,8 @@ def generate():
     moving.mkdir(parents=True, exist_ok=True)
     subprocess.run([
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
-        "-i", "testsrc2=size=320x240:rate=15:duration=12", "-c:v", "libx264",
-        "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(moving / "moving.mp4"),
+        "-i", "testsrc2=size=320x240:rate=15:duration=60", "-c:v", "libx264",
+        "-pix_fmt", "yuv420p", "-g", "15", "-movflags", "+faststart", str(moving / "moving.mp4"),
     ], check=True)
     with zipfile.ZipFile(formats / "videos.zip", "w", zipfile.ZIP_DEFLATED) as archive:
         for name in ("video10.mp4", "video2.mp4"):

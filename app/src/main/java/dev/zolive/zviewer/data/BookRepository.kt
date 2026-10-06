@@ -30,6 +30,7 @@ class BookRepository(private val context: Context) {
     private val resolver = context.contentResolver
     private val cache = File(context.cacheDir, "books").apply { mkdirs() }
     private val covers = File(context.cacheDir, "covers").apply { mkdirs() }
+    private val frames = File(covers, "frames").apply { mkdirs() }
     private val locks = ConcurrentHashMap<String, Mutex>()
     private val coverSlots = Semaphore(2)
     private val coverLocks = ConcurrentHashMap<String, Mutex>()
@@ -270,6 +271,41 @@ class BookRepository(private val context: Context) {
         retriever.getScaledFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 1000, 1000)
             ?: retriever.getScaledFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 1000, 1000)
             ?: throw ReaderException("无法从第一个视频生成封面，设备可能不支持此编码。")
+    }
+
+    /**
+     * 抽帧并缓存某个视频的首帧，用作切换过渡和离屏暂停时的封面。
+     * 视频页在播放器尚未渲染画面时显示这一帧，避免出现黑屏。
+     */
+    suspend fun videoFrame(session: BookSession, index: Int): File? = withContext(Dispatchers.IO) {
+        val page = session.pages.getOrNull(index) ?: return@withContext null
+        if (!page.isVideo) return@withContext null
+        frames.mkdirs()
+        val output = File(frames, "${session.book.cacheKey}-$index.jpg")
+        if (output.isFile) return@withContext output
+        locks.getOrPut("frame-${session.book.cacheKey}-$index") { Mutex() }.withLock {
+            if (output.isFile) return@withLock output
+            DiagnosticLog.log("Cover", "开始抽帧 index=$index name=${page.name}")
+            val started = android.os.SystemClock.elapsedRealtime()
+            val bitmap = runCatching {
+                MediaMetadataRetriever().use { retriever ->
+                    page.filePath?.let { retriever.setDataSource(it) }
+                        ?: retriever.setDataSource(context, Uri.parse(page.uri))
+                    retriever.getScaledFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 1280, 1280)
+                        ?: retriever.getFrameAtTime()
+                }
+            }.onFailure { DiagnosticLog.error("Cover", "视频抽帧失败 ${page.name}", it) }.getOrNull() ?: return@withLock null
+            DiagnosticLog.log("Cover", "抽帧完成 index=$index 耗时=${android.os.SystemClock.elapsedRealtime() - started}ms")
+            val temporary = File(frames, "${output.name}.part")
+            try {
+                temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 88, it) }
+                if (!temporary.renameTo(output)) return@withLock null
+            } finally {
+                bitmap.recycle()
+                temporary.delete()
+            }
+            output
+        }
     }
 
     suspend fun pageFile(session: BookSession, index: Int, width: Int): File = withContext(Dispatchers.IO) {

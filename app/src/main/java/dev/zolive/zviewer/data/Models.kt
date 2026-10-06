@@ -69,6 +69,8 @@ data class ReaderSettings(
     val videoLoopSingle: Boolean = false,
     val videoPreview: Boolean = false,
     val loopMode: Boolean = false,
+    val diagnosticLog: Boolean = false,
+    val logDirectory: String? = null,
 )
 
 data class PageSource(

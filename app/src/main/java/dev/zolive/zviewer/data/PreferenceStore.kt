@@ -21,6 +21,8 @@ class PreferenceStore(context: Context) {
         videoLoopSingle = preferences.getBoolean("video_loop_single", false),
         videoPreview = preferences.getBoolean("video_preview", false),
         loopMode = preferences.getBoolean("loop_mode", false),
+        diagnosticLog = preferences.getBoolean("diagnostic_log", false),
+        logDirectory = preferences.getString("log_directory", null),
     )
 
     fun saveSettings(settings: ReaderSettings) {
@@ -30,7 +32,9 @@ class PreferenceStore(context: Context) {
             .putInt("columns", settings.gridColumns)
             .putBoolean("video_loop_single", settings.videoLoopSingle)
             .putBoolean("video_preview", settings.videoPreview)
-            .putBoolean("loop_mode", settings.loopMode).apply()
+            .putBoolean("loop_mode", settings.loopMode)
+            .putBoolean("diagnostic_log", settings.diagnosticLog)
+            .putString("log_directory", settings.logDirectory).apply()
     }
 
     fun progress(bookId: String): ReadingProgress = ReadingProgress(

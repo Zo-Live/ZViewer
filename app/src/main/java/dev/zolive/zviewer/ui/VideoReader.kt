@@ -1,6 +1,8 @@
 package dev.zolive.zviewer.ui
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -19,10 +21,14 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
+import dev.zolive.zviewer.data.DiagnosticLog
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.reader.ZoomVideoView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
@@ -86,6 +92,14 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
         refresh()
     }
 
+    /** 重新从头播放。用于过渡期间当前视频播完时保持循环。 */
+    fun replay() {
+        player.seekTo(0L)
+        playRequested = true
+        player.play()
+        refresh()
+    }
+
     /** The settled/active view among the composed pages, used to fall back after a transient view. */
     private var activeView: ZoomVideoView? = null
 
@@ -95,16 +109,24 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
      * the new one bound), the previous view is detached first, so binding order stays deterministic.
      */
     fun bindOwner(view: ZoomVideoView, active: Boolean = false) {
+        if (released) {
+            DiagnosticLog.log("View", "bindOwner 已忽略（播放器已释放）index=$index view=${view.hashCode()}")
+            return
+        }
         if (active) activeView = view
         if (ownerView === view) {
             surfaceAttached = view.isSurfaceAvailable
             return
         }
+        DiagnosticLog.log("View", "bindOwner index=$index view=${view.hashCode()} active=$active " +
+            "from=${ownerView?.hashCode()} surface=${view.isSurfaceAvailable}")
         val previous = ownerView
         if (previous != null && previous.playerView.player === player) previous.playerView.player = null
         ownerView = view
         view.playerView.player = player
         surfaceAttached = view.isSurfaceAvailable
+        // 新视图的 TextureView 还没有任何内容，等待渲染器重新绘制首帧前继续显示封面。
+        firstFrameReady = false
     }
 
     /**
@@ -113,6 +135,8 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
      * back so a cancelled swipe cannot leave the player without a picture.
      */
     fun releaseOwner(view: ZoomVideoView) {
+        DiagnosticLog.log("View", "releaseOwner index=$index view=${view.hashCode()} " +
+            "active=${activeView === view} owner=${ownerView === view}")
         if (activeView === view) activeView = null
         if (ownerView !== view) return
         ownerView = null
@@ -127,6 +151,9 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     /** Updates layout/surface readiness for the owner view only; stale views are ignored. */
     fun surfaceStateChanged(view: ZoomVideoView, layoutReady: Boolean) {
         if (ownerView !== view) return
+        if (surfaceReady != layoutReady) {
+            DiagnosticLog.log("View", "布局就绪 index=$index view=${view.hashCode()} ready=$layoutReady surface=${view.isSurfaceAvailable}")
+        }
         surfaceReady = layoutReady
         surfaceAttached = view.isSurfaceAvailable
     }
@@ -134,6 +161,7 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     fun release() {
         if (released) return
         released = true
+        DiagnosticLog.log("Video", "释放播放器 index=$index position=${player.currentPosition} state=${player.playbackState}")
         save()
         player.release()
     }
@@ -144,10 +172,47 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
 internal fun createVideoPlaybackState(context: Context): VideoPlaybackState =
     VideoPlaybackState(ExoPlayer.Builder(context).build())
 
+/**
+ * 按 Pager 虚拟项管理播放器。循环模式下同一真实页面可能同时出现在相邻的两个虚拟项中，
+ * 每个虚拟项各自持有播放器，避免两个视图争抢同一个输出 Surface 而出现黑屏；离开可见范围后及时回收。
+ */
+internal class VideoPlaybackPool(private val context: Context) {
+    private class Entry(val state: VideoPlaybackState) { var refs = 0 }
+
+    private val entries = mutableMapOf<Int, Entry>()
+
+    val size: Int get() = entries.size
+
+    fun acquire(item: Int): VideoPlaybackState {
+        val entry = entries.getOrPut(item) { Entry(createVideoPlaybackState(context)) }
+        entry.refs++
+        DiagnosticLog.log("Pool", "创建/复用播放器 item=$item refs=${entry.refs} pool=${entries.size}")
+        return entry.state
+    }
+
+    fun release(item: Int) {
+        val entry = entries[item] ?: return
+        entry.refs--
+        if (entry.refs > 0) return
+        entries.remove(item)
+        DiagnosticLog.log("Pool", "释放播放器 item=$item pool=${entries.size}")
+        entry.state.release()
+    }
+
+    fun get(item: Int): VideoPlaybackState? = entries[item]?.state
+
+    fun snapshot(): List<Pair<Int, VideoPlaybackState>> = entries.map { it.key to it.value.state }
+
+    fun releaseAll() {
+        entries.values.forEach { it.state.release() }
+        entries.clear()
+    }
+}
+
 @Composable
 internal fun rememberVideoPlayback(
     state: VideoPlaybackState, session: BookSession, index: Int, active: Boolean, allowPlayback: Boolean, settings: ReaderSettings,
-    videoPosition: (Int) -> Long, onProgress: (Int, Long) -> Unit, onEnded: () -> Unit,
+    switching: Boolean = false, videoPosition: (Int) -> Long, onProgress: (Int, Long) -> Unit, onEnded: () -> Unit,
 ) {
     val latestProgress by rememberUpdatedState(onProgress)
     val latestEnded by rememberUpdatedState(onEnded)
@@ -159,15 +224,36 @@ internal fun rememberVideoPlayback(
             override fun onEvents(player: Player, events: Player.Events) { state.refresh() }
             override fun onPlaybackStateChanged(playbackState: Int) {
                 state.refresh()
+                DiagnosticLog.log("Video", "index=${state.index} playbackState=${stateName(playbackState)} " +
+                    "position=${state.position}/${state.duration}")
                 if (playbackState == Player.STATE_ENDED) {
                     state.playRequested = false
                     state.save()
                     if (latestActive) latestEnded()
                 }
             }
-            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) { state.refresh() }
-            override fun onRenderedFirstFrame() { state.firstFrameReady = true }
-            override fun onPlayerError(error: PlaybackException) { state.failed = true }
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                DiagnosticLog.log("Video", "index=${state.index} playWhenReady=$playWhenReady reason=$reason")
+            }
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                DiagnosticLog.log("Video", "index=${state.index} isPlaying=$isPlaying position=${state.player.currentPosition}")
+            }
+            override fun onVideoSizeChanged(videoSize: androidx.media3.common.VideoSize) {
+                state.refresh()
+                DiagnosticLog.log("Video", "index=${state.index} 视频尺寸 ${videoSize.width}x${videoSize.height} " +
+                    "旋转=${videoSize.unappliedRotationDegrees} 比例=${videoSize.pixelWidthHeightRatio}")
+            }
+            override fun onSurfaceSizeChanged(width: Int, height: Int) {
+                DiagnosticLog.log("Video", "index=${state.index} Surface 尺寸 ${width}x$height")
+            }
+            override fun onRenderedFirstFrame() {
+                state.firstFrameReady = true
+                DiagnosticLog.log("Video", "index=${state.index} 首帧已渲染 surface=${state.ownerView?.isSurfaceAvailable}")
+            }
+            override fun onPlayerError(error: PlaybackException) {
+                state.failed = true
+                DiagnosticLog.error("Video", "index=${state.index} 播放失败 uri=${state.player.currentMediaItem?.localConfiguration?.uri}", error)
+            }
         }
         state.player.addListener(listener)
         onDispose {
@@ -189,18 +275,24 @@ internal fun rememberVideoPlayback(
         state.playRequested = !settings.videoPreview
         val page = session.pages[index]
         val uri = page.filePath?.let { Uri.fromFile(File(it)) } ?: Uri.parse(page.uri!!)
+        DiagnosticLog.log("Video", "准备 index=$index name=${page.name} position=${videoPosition(index)} uri=$uri")
         state.player.setMediaItem(MediaItem.fromUri(uri), videoPosition(index).coerceAtLeast(0L))
         state.player.playWhenReady = false
         state.player.prepare()
     }
-    LaunchedEffect(state, settings.videoLoopSingle, settings.loopMode) {
-        state.player.repeatMode = if (settings.videoLoopSingle || settings.loopMode && session.pages.size == 1) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
+    LaunchedEffect(state, settings.videoLoopSingle, settings.loopMode, switching) {
+        // 过渡（拖动或切换动画）期间当前视频循环播放，避免它在切换完成前播完停在结尾。
+        state.player.repeatMode = if (switching || settings.videoLoopSingle || settings.loopMode && session.pages.size == 1) {
+            Player.REPEAT_MODE_ONE
+        } else Player.REPEAT_MODE_OFF
     }
     LaunchedEffect(state, settings.videoPreview) {
         state.playRequested = !settings.videoPreview
     }
     LaunchedEffect(state, active, allowPlayback, state.playRequested, state.ready, state.failed, state.surfaceAttached) {
         val shouldPlay = active && allowPlayback && state.playRequested && state.ready && !state.failed && state.surfaceAttached
+        DiagnosticLog.log("Gate", "index=${state.index} shouldPlay=$shouldPlay active=$active allow=$allowPlayback " +
+            "requested=${state.playRequested} ready=${state.ready} failed=${state.failed} surface=${state.surfaceAttached}")
         state.player.playWhenReady = shouldPlay
         if (!shouldPlay) state.player.pause()
         state.refresh()
@@ -224,37 +316,81 @@ internal fun rememberVideoPlayback(
     }
 }
 
+private fun stateName(state: Int): String = when (state) {
+    Player.STATE_IDLE -> "IDLE"
+    Player.STATE_BUFFERING -> "BUFFERING"
+    Player.STATE_READY -> "READY"
+    Player.STATE_ENDED -> "ENDED"
+    else -> "STATE_$state"
+}
+
+@Composable
+internal fun rememberVideoCover(session: BookSession, index: Int, repository: BookRepository): Bitmap? {
+    val cover by produceState<Bitmap?>(null, session.book.cacheKey, index) {
+        // 首次抽帧可能因解码器暂时繁忙失败，稍后重试一次。
+        repeat(2) { attempt ->
+            val started = android.os.SystemClock.elapsedRealtime()
+            val bitmap = withContext(Dispatchers.IO) {
+                repository.videoFrame(session, index)?.takeIf(File::isFile)?.let { BitmapFactory.decodeFile(it.absolutePath) }
+            }
+            if (bitmap != null) {
+                value = bitmap
+                DiagnosticLog.log("Cover", "index=$index 封面 ${bitmap.width}x${bitmap.height} 耗时=${android.os.SystemClock.elapsedRealtime() - started}ms")
+                return@produceState
+            }
+            DiagnosticLog.log("Cover", "index=$index 封面第 ${attempt + 1} 次加载失败")
+            if (attempt == 0) delay(300)
+        }
+    }
+    return cover
+}
+
+/**
+ * 视频页始终使用同一个 AndroidView：有播放器时挂上播放器，没有播放器（未停靠或仅预载）时
+ * 只显示缓存的封面。避免在“封面页 / 播放器页”之间切换视图结构造成闪屏。
+ */
 @Composable
 internal fun VideoPage(
-    state: VideoPlaybackState, index: Int, settings: ReaderSettings, foreground: Color, active: Boolean,
-    zoomSequence: Int, zoomAction: Int, onTap: () -> Unit, onPage: (Int) -> Unit, modifier: Modifier = Modifier,
+    state: VideoPlaybackState?, index: Int, session: BookSession, cover: Bitmap?,
+    settings: ReaderSettings, switching: Boolean,
+    videoPosition: (Int) -> Long, onProgress: (Int, Long) -> Unit,
+    foreground: Color, active: Boolean,
+    zoomSequence: Int, zoomAction: Int, onTap: () -> Unit, onEnded: (VideoPlaybackState) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val viewRef = remember { mutableStateOf<ZoomVideoView?>(null) }
-    // Pager item compositions can be skipped or reused (especially while looping, when two virtual
-    // items map to the same real page). The AndroidView update block is not guaranteed to re-run when
-    // this page becomes active again, so re-assert surface ownership whenever activation changes.
+    if (state != null) {
+        rememberVideoPlayback(state, session, index, active, active, settings, switching, videoPosition, onProgress) {
+            onEnded(state)
+        }
+    }
+    // The AndroidView update block is not guaranteed to re-run when this page becomes active again,
+    // so re-assert surface ownership whenever activation changes.
     LaunchedEffect(state, active) {
-        if (active) viewRef.value?.let { state.bindOwner(it, active = true) }
+        if (state != null && active) viewRef.value?.let { state.bindOwner(it, active = true) }
     }
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         AndroidView(factory = { ZoomVideoView(it).also { view -> viewRef.value = view } }, modifier = Modifier.fillMaxSize(),
             onRelease = { view ->
                 if (viewRef.value === view) viewRef.value = null
-                state.releaseOwner(view)
+                state?.releaseOwner(view)
             }, update = { view ->
                 viewRef.value = view
-                state.bindOwner(view, active = active)
                 view.bindPage(index)
-                view.vertical = settings.vertical
-                view.rightToLeft = settings.rightToLeft
+                view.bindCover(cover)
                 view.onTap = onTap
-                view.onPage = onPage
-                view.onLayoutReady = { ready -> state.surfaceStateChanged(view, ready) }
-                state.surfaceReady = view.isVideoLayoutReady
-                if (zoomSequence > 0) view.command(zoomSequence, zoomAction)
+                if (state != null) {
+                    state.bindOwner(view, active = active)
+                    view.onLayoutReady = { ready -> state.surfaceStateChanged(view, ready) }
+                    state.surfaceReady = view.isVideoLayoutReady
+                    if (zoomSequence > 0) view.command(zoomSequence, zoomAction)
+                } else {
+                    if (view.playerView.player != null) view.playerView.player = null
+                    view.onLayoutReady = {}
+                }
             })
-        if (state.failed) Text("视频无法播放，文件可能无法读取或设备不支持此编码。", Modifier.padding(28.dp), color = foreground)
-        else if (state.playbackState == Player.STATE_BUFFERING || state.playbackState == Player.STATE_IDLE) {
+        if (state?.failed == true) Text("视频无法播放，文件可能无法读取或设备不支持此编码。", Modifier.padding(28.dp), color = foreground)
+        else if (state != null && (state.playbackState == Player.STATE_BUFFERING || state.playbackState == Player.STATE_IDLE)) {
             CircularProgressIndicator(color = foreground)
         }
     }

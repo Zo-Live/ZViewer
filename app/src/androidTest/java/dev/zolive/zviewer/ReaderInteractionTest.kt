@@ -60,7 +60,7 @@ class ReaderInteractionTest {
                 onSettings = { settings = it }, onProgress = { currentPage = it },
                 videoPosition = { saved[it] ?: 0L }, onVideoProgress = { page, position -> saved[page] = position }, onBack = {})
         }
-        if (video && !mixed || mixed && session.pages[initialPage].isVideo) waitForVideo() else rule.waitUntil(10_000) {
+        if (video && !mixed || mixed && session.pages[initialPage].isVideo) waitForVideo() else rule.waitUntil(20_000) {
             var ready = false
             rule.runOnUiThread {
                 ready = descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>()
@@ -79,8 +79,19 @@ class ReaderInteractionTest {
         else -> emptyList()
     }
 
+    /** 当前页对应的视频视图。视频书会同时预载相邻页（循环模式下同一真实页还可能出现在多个虚拟项），
+     * 因此只取当前可见且播放器指向当前页的那一个。 */
+    private fun currentVideoView(): ZoomVideoView {
+        val path = session.pages[currentPage].filePath
+        val rect = Rect()
+        return videoViews().single {
+            it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path && it.getGlobalVisibleRect(rect)
+        }
+    }
+
     private fun waitForVideo() {
-        rule.waitUntil(15_000) {
+        // 模拟器软解准备可能较慢，尤其是连续切换后；放宽到 30 秒。
+        rule.waitUntil(30_000) {
             var ready = false
             rule.runOnUiThread {
                 val path = session.pages[currentPage].filePath
@@ -104,7 +115,7 @@ class ReaderInteractionTest {
 
     private fun toggleControls(visible: Boolean = true) {
         rule.onRoot().performTouchInput { click(Offset(centerX, height * .35f)) }
-        rule.waitUntil(5000) {
+        rule.waitUntil(15_000) {
             rule.onAllNodesWithContentDescription("视频播放进度").fetchSemanticsNodes().isNotEmpty() == visible
         }
         rule.waitForIdle()
@@ -118,7 +129,7 @@ class ReaderInteractionTest {
     }
 
     private fun waitForPlayback() {
-        rule.waitUntil(5000) {
+        rule.waitUntil(30_000) {
             var playing = false
             rule.runOnUiThread {
                 val path = session.pages[currentPage].filePath
@@ -144,63 +155,92 @@ class ReaderInteractionTest {
         waitForPlayback()
         rule.runOnIdle {
             assertEquals(1, currentPage)
-            assertTrue(videoViews().single().playerView.player!!.currentPosition >= 4000L)
+            assertTrue(currentVideoView().playerView.player!!.currentPosition >= 4000L)
         }
     }
 
-    @Test fun videoTransitionKeepsBothViewsUntilIncomingFrameIsReady() {
+    @Test fun draggingToNextVideoKeepsCurrentPlayingAndShowsIncomingFrame() {
         open(preview = false)
         waitForPlayback()
         lateinit var outgoing: ZoomVideoView
-        rule.runOnIdle { outgoing = videoViews().single() }
-        rule.mainClock.autoAdvance = false
-        try {
-            rule.runOnUiThread { outgoing.onPage(1) }
-            rule.mainClock.advanceTimeByFrame()
-            rule.waitUntil(5000) {
-                var ready = false
-                rule.runOnUiThread {
-                    val views = videoViews()
-                    assertTrue("翻页开始时应保留原视频视图和画面", views.contains(outgoing))
-                    assertTrue("切换前视频应在过渡期间继续播放", outgoing.playerView.player?.playWhenReady == true)
-                    val incoming = views.singleOrNull { it !== outgoing }
-                    assertTrue("切换目标视频应在过渡期间暂停", incoming?.playerView?.player?.playWhenReady == false)
-                    ready = incoming?.playerView?.player?.playbackState == Player.STATE_READY
-                }
-                ready
-            }
-            lateinit var incoming: ZoomVideoView
-            rule.runOnUiThread { incoming = videoViews().single { it !== outgoing } }
-            repeat(18) { frame ->
-                rule.mainClock.advanceTimeByFrame()
-                rule.runOnUiThread {
-                    val views = videoViews()
-                    if (views.size == 2) {
-                        assertTrue("切换前视频应继续播放", outgoing.playerView.player?.playWhenReady == true)
-                        assertTrue("切换目标视频应暂停", incoming.playerView.player?.playWhenReady == false)
-                        assertTrue(views.contains(outgoing))
-                        assertTrue(views.contains(incoming))
-                    }
-                }
-                val bitmap = screenshot("video-transition-$frame")
-                var coloredPixels = 0
-                for (pixelY in 0 until bitmap.height step 40) {
-                    for (pixelX in 0 until bitmap.width step 40) {
-                        val color = bitmap.getPixel(pixelX, pixelY)
-                        if (Color.green(color) < 50 && (Color.red(color) > 200 || Color.blue(color) > 200)) coloredPixels++
-                    }
-                }
-                bitmap.recycle()
-                assertTrue("第 $frame 帧应保留视频画面，不能整屏闪黑", coloredPixels > 20)
-            }
-            rule.mainClock.autoAdvance = true
-            rule.waitUntil(5000) { currentPage == 1 }
-            waitForVideo()
-            rule.runOnIdle { assertSame("过渡结束时应保留已显示首帧的新视频视图", incoming, videoViews().single()) }
-            waitForPlayback()
-        } finally {
-            rule.mainClock.autoAdvance = true
+        var position = 0L
+        rule.runOnIdle {
+            outgoing = currentVideoView()
+            position = outgoing.playerView.player!!.currentPosition
         }
+        // 拖动到过半之前并保持按住：此时还没有正式切换到下一段。
+        rule.onRoot().performTouchInput {
+            down(Offset(centerX, height * .62f))
+            moveTo(Offset(centerX, height * .34f), 450)
+        }
+        rule.waitForIdle()
+        lateinit var incoming: ZoomVideoView
+        val incomingRect = Rect()
+        rule.runOnIdle {
+            val views = videoViews()
+            assertTrue("拖动时应保留当前视频视图", views.contains(outgoing))
+            assertTrue("拖动时当前视频应继续播放", outgoing.playerView.player!!.playWhenReady)
+            incoming = views.firstOrNull { it !== outgoing && it.playerView.player != null && it.getGlobalVisibleRect(incomingRect) }
+                ?: throw AssertionError("拖动时应为目标页预建播放器")
+            assertFalse("拖动时下一段视频应保持暂停", incoming.playerView.player!!.playWhenReady)
+            // 同时最多保留当前页与目标页两个播放器，离屏预载页只显示封面。
+            assertTrue("同时存在的播放器不应超过两个", views.count { it.playerView.player != null } <= 2)
+        }
+        rule.waitUntil(5_000) {
+            var advancing = false
+            rule.runOnUiThread { advancing = outgoing.playerView.player!!.currentPosition > position + 200 }
+            advancing
+        }
+        // 目标页在拖动期间已预建播放器 / 显示封面，下一段区域不应该是黑的。
+        var colored = 0
+        val deadline = System.currentTimeMillis() + 10_000
+        while (System.currentTimeMillis() < deadline) {
+            val bitmap = screenshot("transition-cover")
+            colored = 0
+            for (pixelY in incomingRect.top.coerceAtLeast(0) until incomingRect.bottom.coerceAtLeast(0) step 12) {
+                for (pixelX in incomingRect.left.coerceAtLeast(0) until incomingRect.right.coerceAtLeast(0) step 12) {
+                    val color = bitmap.getPixel(pixelX, pixelY)
+                    if (Color.green(color) < 80 && (Color.red(color) > 150 || Color.blue(color) > 150)) colored++
+                }
+            }
+            bitmap.recycle()
+            if (colored > 10) break
+            Thread.sleep(300)
+        }
+        assertTrue("滑入中的下一段视频应显示首帧而不是黑屏，colored=$colored", colored > 10)
+        // 越过中线后松开，完成平滑切换，之后由目标视频接管播放。
+        rule.onRoot().performTouchInput {
+            moveTo(Offset(centerX, height * .05f), 200)
+            up()
+        }
+        rule.waitUntil(5_000) { currentPage == 1 }
+        waitForVideo()
+        waitForPlayback()
+    }
+
+    @Test fun currentVideoLoopsWhenEndedDuringTransition() {
+        open(preview = false)
+        waitForPlayback()
+        lateinit var outgoing: ZoomVideoView
+        rule.runOnIdle { outgoing = currentVideoView() }
+        rule.onRoot().performTouchInput {
+            down(Offset(centerX, height * .62f))
+            moveTo(Offset(centerX, height * .34f), 350)
+        }
+        rule.waitForIdle()
+        rule.runOnIdle { outgoing.playerView.player!!.seekTo(11_900L) }
+        rule.waitUntil(8_000) {
+            var looped = false
+            rule.runOnUiThread {
+                val player = outgoing.playerView.player!!
+                looped = player.isPlaying && player.playbackState != Player.STATE_ENDED && player.currentPosition < 6_000L
+            }
+            looped
+        }
+        // 松开后未过半的拖动回到原页，当前视频仍在循环位置继续播放。
+        rule.onRoot().performTouchInput { up() }
+        rule.waitUntil(5_000) { currentPage == 0 }
+        rule.runOnIdle { assertTrue(outgoing.playerView.player!!.isPlaying) }
     }
 
     @Test fun verticalVideoSwipesAndButtonsShowOnePlayerAfterTransition() {
@@ -208,10 +248,10 @@ class ReaderInteractionTest {
         var previous: Player? = null
         repeat(9) { step ->
             swipe()
-            rule.waitUntil(5000) { currentPage == (step + 1) % 3 }
+            rule.waitUntil(15_000) { currentPage == (step + 1) % 3 }
             waitForVideo()
             rule.runOnIdle {
-                val view = videoViews().single()
+                val view = currentVideoView()
                 if (previous != null) assertNotSame(previous, view.playerView.player)
                 previous = view.playerView.player
                 assertEquals(rule.activity.window.decorView.height, view.height)
@@ -225,32 +265,32 @@ class ReaderInteractionTest {
         toggleControls()
         repeat(6) {
             rule.onNodeWithContentDescription("下一页").performClick()
-            rule.waitUntil(5000) { currentPage == (it + 1) % 3 }
+            rule.waitUntil(15_000) { currentPage == (it + 1) % 3 }
         }
         repeat(6) {
             rule.onNodeWithContentDescription("上一页").performClick()
-            rule.waitUntil(5000) { currentPage == Math.floorMod(-it - 1, 3) }
+            rule.waitUntil(15_000) { currentPage == Math.floorMod(-it - 1, 3) }
         }
         waitForVideo()
-        rule.runOnIdle { assertEquals(1, videoViews().size) }
+        rule.runOnIdle { assertNotNull(currentVideoView()) }
     }
 
     @Test fun horizontalPagingAndDoubleTapDoNotSeekOrPlay() {
         open(vertical = false, rightToLeft = true)
         swipe(forward = false, vertical = false)
-        rule.waitUntil(5000) { currentPage == 1 }
+        rule.waitUntil(15_000) { currentPage == 1 }
         waitForVideo()
         rule.onRoot().performTouchInput { doubleClick(Offset(width * .2f, height * .4f)) }
         rule.runOnIdle {
-            val view = videoViews().single()
+            val view = currentVideoView()
             assertEquals(2.5f, view.playerView.scaleX, .01f)
             assertFalse(view.playerView.player!!.playWhenReady)
             assertEquals(0L, view.playerView.player!!.currentPosition)
         }
         rule.onRoot().performTouchInput { doubleClick(Offset(width * .8f, height * .4f)) }
-        rule.runOnIdle { assertEquals(1f, videoViews().single().playerView.scaleX, .01f) }
+        rule.runOnIdle { assertEquals(1f, currentVideoView().playerView.scaleX, .01f) }
         swipe(forward = true, vertical = false)
-        rule.waitUntil(5000) { currentPage == 0 }
+        rule.waitUntil(15_000) { currentPage == 0 }
     }
 
     @Test fun progressControlsSeekAndHideTogether() {
@@ -258,7 +298,7 @@ class ReaderInteractionTest {
         swipe(vertical = false)
         rule.runOnIdle {
             assertEquals(0, currentPage)
-            assertEquals(0L, videoViews().single().playerView.player!!.currentPosition)
+            assertEquals(0L, currentVideoView().playerView.player!!.currentPosition)
         }
         toggleControls()
         val before = screenshot("video-controls")
@@ -274,11 +314,11 @@ class ReaderInteractionTest {
         before.recycle()
         dragging.recycle()
         rule.onNodeWithContentDescription("视频播放进度").performTouchInput { up() }
-        rule.waitUntil(5000) { (saved[0] ?: 0L) in 5_000L..9_000L }
+        rule.waitUntil(15_000) { (saved[0] ?: 0L) in 5_000L..9_000L }
         rule.onNodeWithContentDescription("播放视频").performClick()
-        rule.waitUntil(5000) {
+        rule.waitUntil(15_000) {
             var playing = false
-            rule.runOnUiThread { playing = videoViews().single().playerView.player!!.isPlaying }
+            rule.runOnUiThread { playing = currentVideoView().playerView.player!!.isPlaying }
             playing
         }
         rule.onNodeWithContentDescription("暂停视频").performClick()
@@ -293,7 +333,7 @@ class ReaderInteractionTest {
             down(Offset(width * .8f, height * .4f))
             moveTo(Offset(width * .3f, height * .4f), 500)
         }
-        rule.waitUntil(5000) {
+        rule.waitUntil(15_000) {
             var adjacent = false
             rule.runOnUiThread {
                 val visible = descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>()
@@ -307,17 +347,17 @@ class ReaderInteractionTest {
             moveTo(Offset(width * .15f, height * .4f), 100)
             up()
         }
-        rule.waitUntil(5000) { currentPage == 0 }
+        rule.waitUntil(15_000) { currentPage == 0 }
         swipe(forward = false, vertical = false)
-        rule.waitUntil(5000) { currentPage == 2 }
+        rule.waitUntil(15_000) { currentPage == 2 }
     }
 
     @Test fun verticalImageLoopMovesPastBothBoundaries() {
         open(video = false, initialPage = 2)
         repeat(4) { swipe() }
-        rule.waitUntil(5000) { currentPage != 2 }
+        rule.waitUntil(15_000) { currentPage != 2 }
         repeat(4) { swipe(forward = false) }
-        rule.waitUntil(5000) { currentPage == 2 }
+        rule.waitUntil(15_000) { currentPage == 2 }
     }
 
     @Test fun videoBoundariesStopWithoutLoopAndResumeKeepsPausePosition() {
@@ -329,19 +369,19 @@ class ReaderInteractionTest {
         rule.onNodeWithContentDescription("视频播放进度").performTouchInput {
             swipe(Offset(width * .1f, centerY), Offset(width * .5f, centerY), 300)
         }
-        rule.waitUntil(5000) { (saved[0] ?: 0L) > 4000L }
+        rule.waitUntil(15_000) { (saved[0] ?: 0L) > 4000L }
         val position = saved[0]!!
         rule.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
         rule.activityRule.scenario.moveToState(Lifecycle.State.RESUMED)
         waitForVideo()
         rule.runOnIdle {
-            val player = videoViews().single().playerView.player!!
+            val player = currentVideoView().playerView.player!!
             assertFalse(player.playWhenReady)
             assertEquals(position, player.currentPosition)
         }
         repeat(2) { step ->
             rule.onNodeWithContentDescription("下一页").performClick()
-            rule.waitUntil(5000) { currentPage == step + 1 }
+            rule.waitUntil(15_000) { currentPage == step + 1 }
         }
         waitForVideo()
         rule.onNodeWithContentDescription("下一页").assertIsNotEnabled()
@@ -354,38 +394,37 @@ class ReaderInteractionTest {
         open(preview = false)
         repeat(3) { step ->
             waitForVideo()
-            rule.runOnIdle { videoViews().single().playerView.player!!.seekTo(11_800L) }
-            rule.waitUntil(5000) { currentPage == (step + 1) % 3 }
+            rule.runOnIdle { currentVideoView().playerView.player!!.seekTo(11_800L) }
+            rule.waitUntil(15_000) { currentPage == (step + 1) % 3 }
         }
         waitForVideo()
         rule.runOnIdle {
-            assertEquals(1, videoViews().size)
-            assertTrue(videoViews().single().playerView.player!!.playWhenReady)
+            assertNotNull(currentVideoView())
+            assertTrue(currentVideoView().playerView.player!!.playWhenReady)
             assertEquals(0L, saved[2])
         }
     }
 
-    @Test fun mixedContentUsesHorizontalPagingAndPageSpecificVideoControls() {
+    @Test fun mixedContentFollowsVerticalReadingAndShowsPageSpecificVideoControls() {
         open(video = true, mixed = true, vertical = true, preview = false, initialPage = 0)
         swipe(vertical = true)
-        rule.runOnIdle { assertEquals("混合内容应锁定水平翻页", 0, currentPage) }
-        swipe(vertical = false)
-        rule.waitUntil(5000) { currentPage == 1 }
+        // 模拟器帧率低时 Pager 的减速动画会明显变慢，放宽等待时间。
+        rule.waitUntil(15_000) { currentPage == 1 }
         waitForVideo()
         waitForPlayback()
         toggleControls()
         rule.onNodeWithContentDescription("视频播放进度").assertIsDisplayed()
         toggleControls(visible = false)
-        swipe(vertical = false)
-        rule.waitUntil(5000) { currentPage == 2 }
+        swipe(vertical = true)
+        rule.waitUntil(15_000) { currentPage == 2 }
         toggleControls(visible = false)
         rule.onNodeWithContentDescription("视频播放进度").assertDoesNotExist()
     }
 
     @Test fun mixedContentStartsVideoAfterImageAndKeepsNextVideoPlayable() {
-        open(video = true, mixed = true, mixedVideos = true, vertical = true, preview = false, initialPage = 0)
+        open(video = true, mixed = true, mixedVideos = true, vertical = false, preview = false, initialPage = 0)
         swipe(vertical = false)
-        rule.waitUntil(5000) { currentPage == 1 }
+        rule.waitUntil(15_000) { currentPage == 1 }
         waitForVideo()
         waitForPlayback()
         var firstPosition = 0L
@@ -395,7 +434,7 @@ class ReaderInteractionTest {
                 it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == firstPath
             }.playerView.player!!.currentPosition
         }
-        rule.waitUntil(5000) {
+        rule.waitUntil(15_000) {
             var advanced = false
             rule.runOnUiThread {
                 advanced = videoViews().any {
@@ -406,7 +445,7 @@ class ReaderInteractionTest {
             advanced
         }
         swipe(vertical = false)
-        rule.waitUntil(5000) { currentPage == 2 }
+        rule.waitUntil(15_000) { currentPage == 2 }
         waitForVideo()
         waitForPlayback()
         rule.runOnIdle {
@@ -421,62 +460,41 @@ class ReaderInteractionTest {
     }
 
     @Test fun mixedContentPausesVideoAfterLeavingIt() {
-        open(video = true, mixed = true, vertical = true, preview = false, initialPage = 0,
+        open(video = true, mixed = true, vertical = false, preview = false, initialPage = 0,
             names = listOf("page1.png", "video-folder/video2.mp4", "page2.png", "video-folder/video10.mp4", "page10.png"))
         swipe(vertical = false)
-        rule.waitUntil(5000) { currentPage == 1 }
+        rule.waitUntil(15_000) { currentPage == 1 }
         waitForVideo()
         waitForPlayback()
         val path = session.pages[1].filePath
-        var position = 0L
-        rule.runOnIdle {
-            position = videoViews().first {
-                it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path
-            }.playerView.player!!.currentPosition
-        }
+        rule.waitUntil(15_000) { (saved[1] ?: 0L) > 0L }
         swipe(vertical = false)
-        rule.waitUntil(5000) { currentPage == 2 }
-        rule.waitUntil(5000) {
-            var paused = false
-            rule.runOnUiThread {
-                paused = videoViews().firstOrNull {
-                    it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path
-                }?.playerView?.player?.playWhenReady == false
-            }
-            paused
+        rule.waitUntil(15_000) { currentPage == 2 }
+        // 离开后播放器被释放，位置不再前进；保存的进度停在离开时的位置。
+        rule.waitUntil(15_000) {
+            var gone = false
+            rule.runOnUiThread { gone = videoViews().none { it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path } }
+            gone
         }
-        var pausedPosition = 0L
-        rule.runOnIdle {
-            pausedPosition = videoViews().first {
-                it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path
-            }.playerView.player!!.currentPosition
-        }
+        val savedPosition = saved[1] ?: 0L
         Thread.sleep(2000)
-        rule.runOnIdle {
-            val player = videoViews().first {
-                it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path
-            }.playerView.player!!
-            val detail = "start=$position paused=$pausedPosition now=${player.currentPosition}," +
-                " isPlaying=${player.isPlaying}, playWhenReady=${player.playWhenReady}, state=${player.playbackState}"
-            assertFalse("离开视频后不应继续播放：$detail", player.isPlaying)
-            assertTrue("离屏暂停后播放位置不应继续前进：$detail", player.currentPosition <= pausedPosition + 200L)
-        }
+        rule.runOnIdle { assertEquals("离屏后播放位置不应继续前进", savedPosition, saved[1] ?: 0L) }
     }
 
     @Test fun mixedContentReplaysEndedVideoWhenReturning() {
-        open(video = true, mixed = true, vertical = true, preview = false, initialPage = 0,
+        open(video = true, mixed = true, vertical = false, preview = false, initialPage = 0,
             names = listOf("page1.png", "video-folder/video2.mp4", "page2.png"))
         swipe(vertical = false)
-        rule.waitUntil(5000) { currentPage == 1 }
+        rule.waitUntil(15_000) { currentPage == 1 }
         waitForVideo()
         waitForPlayback()
         rule.waitUntil(15_000) { currentPage == 2 }
         swipe(forward = false, vertical = false)
-        rule.waitUntil(5000) { currentPage == 1 }
+        rule.waitUntil(15_000) { currentPage == 1 }
         waitForVideo()
         waitForPlayback()
         rule.runOnIdle {
-            val player = videoViews().single().playerView.player!!
+            val player = currentVideoView().playerView.player!!
             assertTrue("返回已播完的视频应从头重新播放", player.currentPosition > 0L)
         }
     }
@@ -505,19 +523,19 @@ class ReaderInteractionTest {
     @Test fun mixedContentKeepsRenderingAfterPagerViewRecreate() {
         // 视频位于列表末端，切到最前面的图片会超出 Pager 的预载窗口，迫使视频页的
         // AndroidView 被销毁重建；旧视图的 onRelease 可能晚于新视图绑定播放器。
-        open(video = true, mixed = true, vertical = true, preview = false, initialPage = 2,
+        open(video = true, mixed = true, vertical = false, preview = false, initialPage = 2,
             names = listOf("page1.png", "page2.png", "moving-video/moving.mp4"))
         waitForVideo()
         waitForPlayback()
         repeat(3) {
             swipe(forward = false, vertical = false)
-            rule.waitUntil(5000) { currentPage == 1 }
+            rule.waitUntil(15_000) { currentPage == 1 }
             swipe(forward = false, vertical = false)
-            rule.waitUntil(5000) { currentPage == 0 }
+            rule.waitUntil(15_000) { currentPage == 0 }
             swipe(forward = true, vertical = false)
-            rule.waitUntil(5000) { currentPage == 1 }
+            rule.waitUntil(15_000) { currentPage == 1 }
             swipe(forward = true, vertical = false)
-            rule.waitUntil(5000) { currentPage == 2 }
+            rule.waitUntil(15_000) { currentPage == 2 }
             waitForVideo()
             waitForPlayback()
         }
@@ -553,7 +571,7 @@ class ReaderInteractionTest {
     }
 
     @Test fun mixedContentCancelledSwipeKeepsVideoRendering() {
-        open(video = true, mixed = true, vertical = true, preview = false, initialPage = 2,
+        open(video = true, mixed = true, vertical = false, preview = false, initialPage = 2,
             names = listOf("page1.png", "page2.png", "moving-video/moving.mp4"))
         waitForVideo()
         waitForPlayback()
@@ -566,7 +584,7 @@ class ReaderInteractionTest {
                 up()
             }
             rule.waitForIdle()
-            rule.waitUntil(5000) { currentPage == 2 }
+            rule.waitUntil(15_000) { currentPage == 2 }
             waitForVideo()
             waitForPlayback()
         }

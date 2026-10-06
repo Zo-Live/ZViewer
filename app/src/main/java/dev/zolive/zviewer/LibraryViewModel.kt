@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import dev.zolive.zviewer.data.Book
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
+import dev.zolive.zviewer.data.DiagnosticLog
 import dev.zolive.zviewer.data.PreferenceStore
 import dev.zolive.zviewer.data.ReaderException
 import dev.zolive.zviewer.data.ReaderSettings
@@ -44,6 +45,9 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         refreshProgress()
+        val settings = store.settings()
+        DiagnosticLog.configure(application, settings.diagnosticLog, settings.logDirectory)
+        DiagnosticLog.log("App", "应用启动，书库=${store.treeUri != null}")
         if (store.treeUri != null) refresh()
         viewModelScope.launch { repository.trimCache() }
     }
@@ -70,10 +74,12 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         scanJob = viewModelScope.launch {
             mutable.update { it.copy(scanning = true) }
             try {
+                DiagnosticLog.log("Library", "开始扫描书库")
                 val books = repository.scan(Uri.parse(uri))
                 store.saveLibrary(books)
                 mutable.update { it.copy(books = books, error = null) }
                 refreshProgress()
+                DiagnosticLog.log("Library", "扫描完成，共 ${books.size} 本书")
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) { showError(error) }
             finally { mutable.update { it.copy(scanning = false) } }
@@ -85,10 +91,12 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
         openJob = viewModelScope.launch {
             mutable.update { it.copy(opening = "正在打开《${book.title}》…", error = null) }
             try {
+                DiagnosticLog.log("Library", "打开《${book.title}》(${book.kind})")
                 val session = repository.open(book) { status -> mutable.update { it.copy(opening = status) } }
                 val page = store.progress(book.id).page.coerceIn(session.pages.indices)
                 mutable.update { it.copy(session = session, initialPage = page) }
                 saveProgress(page)
+                DiagnosticLog.log("Library", "《${book.title}》已打开，共 ${session.pages.size} 项，起始页 $page")
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) { showError(error) }
             finally { mutable.update { it.copy(opening = null) } }
@@ -129,6 +137,26 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     fun settings(settings: ReaderSettings) {
         store.saveSettings(settings)
         mutable.update { it.copy(settings = settings) }
+        DiagnosticLog.configure(getApplication(), settings.diagnosticLog, settings.logDirectory)
+    }
+
+    fun setLogDirectory(uri: Uri?) {
+        val application = getApplication<Application>()
+        if (uri == null) {
+            DiagnosticLog.log("Log", "恢复默认日志目录")
+            settings(mutable.value.settings.copy(logDirectory = null))
+            return
+        }
+        try {
+            application.contentResolver.takePersistableUriPermission(uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            DiagnosticLog.log("Log", "选择日志目录 $uri")
+            settings(mutable.value.settings.copy(diagnosticLog = true, logDirectory = uri.toString()))
+        } catch (error: Exception) {
+            val message = "选择的目录不允许写入，请换一个目录再试。"
+            DiagnosticLog.error("Log", message, error)
+            mutable.update { it.copy(error = message) }
+        }
     }
 
     fun toggleFavorite(book: Book) {
@@ -158,6 +186,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
             else -> "文件读取失败，请检查文件是否完整、存储空间是否充足，然后重试。"
         }
         android.util.Log.w("ZViewer", message, error)
+        DiagnosticLog.error("Library", message, error)
         mutable.update { it.copy(error = message) }
     }
 }

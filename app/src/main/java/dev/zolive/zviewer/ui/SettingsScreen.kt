@@ -3,7 +3,10 @@
 package dev.zolive.zviewer.ui
 
 import android.graphics.Color as AndroidColor
+import android.net.Uri
 import android.text.format.Formatter
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -39,6 +42,9 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
     var licenses by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val cacheSize by produceState(0L, state.cacheRevision) { value = model.repository.cacheSize() }
+    val logPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) model.setLogDirectory(uri)
+    }
     Scaffold(topBar = { TopAppBar(title = { Text("设置") }, navigationIcon = {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回书库") }
     }) }) { padding ->
@@ -97,6 +103,34 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
                 }, leadingContent = { Icon(Icons.Outlined.History, null) },
                     modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearReadingProgress),
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+            }
+            Text("诊断", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            SettingsCard {
+                ListItem(headlineContent = { Text("输出诊断日志") }, supportingContent = {
+                    Text("记录应用运行、视频切换、播放错误与崩溃信息，用于反馈问题时排查")
+                }, leadingContent = { Icon(Icons.Outlined.BugReport, null) },
+                    trailingContent = {
+                        Switch(checked = settings.diagnosticLog,
+                            onCheckedChange = { model.settings(settings.copy(diagnosticLog = it)) })
+                    },
+                    modifier = Modifier.clickable { model.settings(settings.copy(diagnosticLog = !settings.diagnosticLog)) },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                if (settings.diagnosticLog) {
+                    HorizontalDivider(Modifier.padding(vertical = 6.dp))
+                    ListItem(headlineContent = { Text("日志目录") }, supportingContent = {
+                        Text(settings.logDirectory?.let(::logDirectoryLabel) ?: "默认：应用专属目录 logs/")
+                    }, leadingContent = { Icon(Icons.Outlined.FolderOpen, null) },
+                        modifier = Modifier.clickable { logPicker.launch(null) },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                    if (settings.logDirectory != null) {
+                        TextButton(onClick = { model.setLogDirectory(null) }, Modifier.align(Alignment.End).padding(bottom = 4.dp)) {
+                            Text("恢复默认目录")
+                        }
+                    }
+                    Text("日志写入所选目录的 zviewer-日期-时间.log（部分文件管理器会补 .txt 后缀）",
+                        Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
             TextButton(onClick = { about = true }, Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp, bottom = 32.dp)) { Text("关于 ZViewer ${BuildConfig.VERSION_NAME}") }
         }
@@ -167,4 +201,9 @@ private fun PreferenceSwitch(title: String, subtitle: String, checked: Boolean, 
         }
         Switch(checked, onChange)
     }
+}
+
+private fun logDirectoryLabel(uri: String): String {
+    val raw = Uri.decode(uri.substringAfterLast('/'))
+    return raw.substringAfterLast(':').ifBlank { raw }
 }

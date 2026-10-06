@@ -12,4 +12,5 @@ tools/fixtures/
 __pycache__/
 tools/__pycache__/
 *.hprof
-assets/example.mp4
+assets/*
+!assets/icon.svg

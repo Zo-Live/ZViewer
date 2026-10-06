@@ -21,6 +21,7 @@
 3. 点击漫画开始阅读。轻点画面显示浮动进度条，再次轻点收起；拖动进度条或点击页码可以跳页。
 4. 图片和视频均可用双指捏合、双击或进度面板缩放。视频默认自动播放；轻点画面显示工具栏及其上方的播放进度条，左侧按钮用于播放 / 暂停，上方显示「当前时间 / 视频全长」。拖动播放进度条以定位；再次轻点画面一并收起。
 5. 在阅读设置中切换垂直连续、水平翻页及从右向左翻页。使用系统边缘返回手势或左上角返回按钮回到书库。
+6. 如遇问题，可在设置中开启「输出诊断日志」并选择日志目录，复现后把日志文件反馈给开发者。
 
 Android 通常不允许授权内部存储根目录、Download 根目录及 Android/data。请创建一个具体的漫画子文件夹，例如 `Download/comics`，再选择它。应用无需「所有文件访问」权限。
 
@@ -33,23 +34,24 @@ Android 通常不允许授权内部存储根目录、Download 根目录及 Andro
 | 动态图片 | APNG、Animated WebP、GIF、Animated AVIF                                                          |
 | 视频     | MP4、M4V、MKV、WebM、AVI、MOV、3GP、MPG、MPEG、TS、MTS、M2TS、FLV、WMV、OGV 等                   |
 | 书库     | 递归扫描、自然排序、高清封面、搜索、阅读状态筛选、最近阅读、收藏、2–5 列网格                    |
-| 阅读     | 图片垂直连续 / 水平分页、视频垂直 / 水平逐个切换、混合内容水平分页（实验性）、缩放、页码跳转、逐视频进度、平滑图片循环、常亮 |
+| 阅读     | 图片垂直连续 / 水平分页、视频垂直 / 水平平滑切换、混合内容、缩放、页码跳转、逐视频进度、平滑图片循环、常亮 |
 | 外观     | 跟随系统 / 浅色 / 深色主题、预设主题色、自定义主题色、独立亮暗阅读背景                           |
 | 系统     | 沉浸式阅读、横竖屏、记住书库授权                                                                 |
+| 诊断     | 可选的诊断日志，默认写入应用专属目录，也可选择任意可写目录                                       |
 | 存储     | 缓存清理与自动回收                                                                               |
 
 阅读时缩放范围为适合屏幕至 5 倍，并可随时恢复适合屏幕。
 
-## 格式支持与限制
+## 格式支持与特性
 
 - 压缩包中的文件按文件名自然排序，例如 `2.jpg` 排在 `10.jpg` 前。
 - 图片文件夹中直接包含的图片组成一本书，子目录分别扫描。
-- 仅包含视频的文件夹或压缩包组成一本书；图片和视频混合时也可直接打开，按自然排序锁定为水平翻页，视频页显示播放进度条，图片页不显示。压缩包成员按 UTF-8 解码，中文文件名可正常读取；视频播完自动进入下一段后，返回该视频会从头重播。视频压缩包首次打开会解压到应用临时目录。
-
-> 混合书库项是实验性的。翻页、切换、循环、自动续播、后台恢复等操作及其组合可能产生非预期表现。
+- 仅包含视频的文件夹或压缩包组成一本书；图片和视频混合时也可直接打开，按自然排序，并跟随垂直 / 水平翻页设置，视频页显示播放进度条，图片页不显示。压缩包成员按 UTF-8 解码，中文文件名可正常读取；视频播完自动进入下一段后，返回该视频会从头重播。视频压缩包首次打开会解压到应用临时目录。
+- 视频编码兼容性取决于设备 Media3 / 系统解码器。
 - PDF 只支持书库根目录或未压缩的子目录；若压缩包内含 PDF，应用会提示压缩包本身可读取但需先解压后阅读。
 - 视频默认按顺序自动播放下一段，每段视频会记住播放位置；设置可改为单个视频循环或仅预览后使用播放按钮开始播放。视频文件夹和压缩包以自然排序第一个视频的抽帧作为封面。
-- 「循环模式」开启后，图片末页与首页在两个方向上连续衔接，可自然滑入相邻页；视频在首尾之间直接切换。「清除阅读记录」在设置中双击执行且不影响收藏。
+- 「循环模式」开启后，图片末页与首页在两个方向上连续衔接，可自然滑入相邻页；视频在首尾之间也使用同样的过渡。「清除阅读记录」在设置中双击执行且不影响收藏。
+- 可在设置中开启「输出诊断日志」并选择日志目录（默认应用专属目录，也可用系统选择器指定 Download 等可写目录）。日志记录应用启动、书库扫描 / 打开、视频切换、播放错误与未捕获异常，便于反馈问题时排查。
 - 7Z 固实压缩包首次打开需要先准备整本内容，较大的书会等待较久。
 - 加密压缩包、分卷文件、密码 PDF 和 DRM 内容暂不支持，请先解密或解压为文件夹。
 - HEIF / HEIC 能否显示取决于设备，且不支持动态 HEIF；APNG、GIF、动态 WebP 和动态 AVIF 均可正常播放。
@@ -93,7 +95,7 @@ SDK 路径不同时调整 `ANDROID_HOME`，或在未跟踪的 `local.properties`
 
 ## 开源组件
 
-基于 [AndroidX / Compose](https://github.com/androidx/androidx)、[Media3](https://github.com/androidx/media)、[Android 开源项目](https://android.googlesource.com/platform/frameworks/base/)、[Kotlin](https://github.com/JetBrains/kotlin)、[libarchive](https://github.com/libarchive/libarchive)、[APNG4Android](https://github.com/penfeizhou/APNG4Android) 与 [libavif](https://github.com/AOMediaCodec/libavif) 等开源组件构建。视频播放使用 Media3；手势识别和视频封面抽帧使用上述 Android 开源项目中的 GestureDetector / ScaleGestureDetector 与 MediaMetadataRetriever。
+基于 [AndroidX / Compose](https://github.com/androidx/androidx)、[Media3](https://github.com/androidx/media)、[Android 开源项目](https://android.googlesource.com/platform/frameworks/base/)、[Kotlin](https://github.com/JetBrains/kotlin)、[libarchive](https://github.com/libarchive/libarchive)、[APNG4Android](https://github.com/penfeizhou/APNG4Android) 与 [libavif](https://github.com/AOMediaCodec/libavif) 等开源组件构建。
 
 ## 许可证
 

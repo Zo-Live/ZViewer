@@ -2,15 +2,13 @@
 
 package dev.zolive.zviewer.ui
 
+import android.graphics.Bitmap
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import android.view.WindowManager
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable as AnimationValue
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -20,6 +18,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
+import dev.zolive.zviewer.data.DiagnosticLog
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.PageSource
 import dev.zolive.zviewer.reader.ImageLoader
@@ -64,14 +65,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
-private data class VideoTransition(
-    val fromPage: Int,
-    val fromState: VideoPlaybackState,
-    val toPage: Int,
-    val toState: VideoPlaybackState,
-    val direction: Int,
-)
-
 @Composable
 fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSettings, repository: BookRepository,
     onSettings: (ReaderSettings) -> Unit, onProgress: (Int) -> Unit,
@@ -83,6 +76,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     var jumpDialog by remember { mutableStateOf(false) }
     var zoomSequence by remember { mutableIntStateOf(0) }
     var zoomAction by remember { mutableIntStateOf(0) }
+    var zoomPage by remember { mutableIntStateOf(-1) }
     var backProgress by remember { mutableFloatStateOf(0f) }
     val paging = remember(session.pages.size, settings.loopMode) { ReaderPaging(session.pages.size, settings.loopMode) }
     val listState = rememberLazyListState(paging.anchor(currentPage))
@@ -97,34 +91,23 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     val context = LocalContext.current
     val videoBook = session.pages.any(PageSource::isVideo)
     val mixedBook = videoBook && session.pages.any { !it.isVideo }
-    val pureVideoBook = videoBook && !mixedBook
-    val verticalReading = settings.vertical && !mixedBook
+    val verticalReading = settings.vertical
+    val pagerReading = videoBook || !verticalReading
     val pageUnit = when {
         mixedBook -> "项"
         videoBook -> "个视频"
         else -> "页"
     }
-    val pageSettings = if (mixedBook) settings.copy(vertical = false) else settings
-    var currentVideoState by remember(session.book.cacheKey, pureVideoBook) {
-        mutableStateOf(if (pureVideoBook) createVideoPlaybackState(context) else null)
-    }
-    val mixedVideoStates = remember(session.book.cacheKey, mixedBook) { mutableMapOf<Int, VideoPlaybackState>() }
-    var videoTransition by remember(session.book.cacheKey, pureVideoBook) { mutableStateOf<VideoTransition?>(null) }
-    val transitionProgress = remember(videoTransition) { AnimationValue(0f) }
-    val latestVideoState = rememberUpdatedState(currentVideoState)
-    val latestVideoTransition = rememberUpdatedState(videoTransition)
+    val videoPool = remember(session.book.cacheKey, videoBook) { if (videoBook) VideoPlaybackPool(context) else null }
 
-    DisposableEffect(session.book.cacheKey, pureVideoBook) {
-        onDispose {
-            latestVideoState.value?.release()
-            latestVideoTransition.value?.let { transition ->
-                transition.fromState.release()
-                transition.toState.release()
-            }
-        }
+    DisposableEffect(videoPool) {
+        onDispose { videoPool?.releaseAll() }
     }
-    DisposableEffect(session.book.cacheKey, mixedBook) {
-        onDispose { mixedVideoStates.values.forEach(VideoPlaybackState::release) }
+
+    LaunchedEffect(session.book.cacheKey) {
+        DiagnosticLog.log("Reader", "会话开始《${session.book.title}》kind=${session.book.kind} pages=${session.pages.size} " +
+            "video=$videoBook mixed=$mixedBook vertical=${settings.vertical} rtl=${settings.rightToLeft} " +
+            "loop=${settings.loopMode} preview=${settings.videoPreview}")
     }
 
     PredictiveBackHandler(enabled = !preferences && !jumpDialog) { events ->
@@ -150,68 +133,55 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         onDispose { controller.show(WindowInsetsCompat.Type.systemBars()) }
     }
 
-    LaunchedEffect(verticalReading, paging, pureVideoBook) {
-        if (pureVideoBook) return@LaunchedEffect
+    LaunchedEffect(pagerReading, paging) {
         jumpJob?.cancel()
         val item = paging.anchor(currentPage)
-        if (verticalReading) listState.scrollToItem(item) else pagerState.scrollToPage(item)
+        if (pagerReading) pagerState.scrollToPage(item) else listState.scrollToItem(item)
         snapshotFlow {
-            if (verticalReading) {
-                if (!paging.looping && !listState.canScrollForward && listState.canScrollBackward) paging.pageCount - 1
-                else paging.pageAt(listState.firstVisibleItemIndex)
-            } else paging.pageAt(pagerState.settledPage)
-        }.distinctUntilChanged().collect { page -> currentPage = page; onProgress(page) }
-    }
-    LaunchedEffect(mixedBook, pagerState.settledPage, active) {
-        if (!mixedBook || !active) return@LaunchedEffect
-        val settledIndex = paging.pageAt(pagerState.settledPage)
-        mixedVideoStates.forEach { (index, state) -> if (index != settledIndex) state.pause() }
-    }
-    LaunchedEffect(videoTransition) {
-        val transition = videoTransition ?: return@LaunchedEffect
-        snapshotFlow {
-            transition.toState.firstFrameReady && transition.toState.surfaceReady || transition.toState.failed
-        }.first { it }
-        transitionProgress.animateTo(1f, tween(240, easing = FastOutSlowInEasing))
-        if (videoTransition === transition) {
-            transition.fromState.release()
-            currentVideoState = transition.toState
-            currentPage = transition.toPage
-            videoTransition = null
-            onProgress(transition.toPage)
+            if (pagerReading) paging.pageAt(pagerState.settledPage)
+            else if (!paging.looping && !listState.canScrollForward && listState.canScrollBackward) paging.pageCount - 1
+            else paging.pageAt(listState.firstVisibleItemIndex)
+        }.distinctUntilChanged().collect { page -> currentPage = page; onProgress(page)
+            if (videoBook) DiagnosticLog.log("Reader", "停靠到第 ${page + 1}/${session.pages.size} 项")
         }
+    }
+    LaunchedEffect(videoBook, pagerState.settledPage, active) {
+        if (!videoBook || !active) return@LaunchedEffect
+        videoPool?.snapshot()?.forEach { (item, state) -> if (item != pagerState.settledPage) state.pause() }
+    }
+    LaunchedEffect(videoBook, pagerState.isScrollInProgress) {
+        if (!videoBook) return@LaunchedEffect
+        DiagnosticLog.log("Reader", "滚动 ${if (pagerState.isScrollInProgress) "开始" else "结束"} " +
+            "current=${pagerState.currentPage} settled=${pagerState.settledPage} target=${pagerState.targetPage}")
     }
     val jump: (Int) -> Unit = { target ->
         val page = paging.destination(target)
-        if (pureVideoBook) {
-            val current = currentVideoState
-            if (current != null && videoTransition == null && page != currentPage) {
-                videoTransition = VideoTransition(
-                    fromPage = currentPage,
-                    fromState = current,
-                    toPage = page,
-                    toState = createVideoPlaybackState(context),
-                    direction = if (target > currentPage) 1 else -1,
-                )
-            }
+        jumpJob?.cancel()
+        if (videoBook) {
+            DiagnosticLog.log("Reader", "跳转到第 ${page + 1} 项")
+            // 视频统一交给 Pager 平滑过渡：跟手拖动、动画期间当前视频继续播放，停靠后切换播放器。
+            jumpJob = scope.launch { pagerState.animateScrollToPage(paging.nearestItem(page, pagerState.currentPage)) }
+        } else if (verticalReading) {
+            currentPage = page
+            onProgress(page)
+            jumpJob = scope.launch { listState.scrollToItem(paging.nearestItem(page, listState.firstVisibleItemIndex)) }
         } else {
-            if (!mixedBook) {
-                currentPage = page
-                onProgress(page)
-            }
-            jumpJob?.cancel()
-            jumpJob = scope.launch {
-                if (verticalReading) listState.scrollToItem(paging.nearestItem(page, listState.firstVisibleItemIndex))
-                else if (mixedBook) pagerState.animateScrollToPage(paging.nearestItem(page, pagerState.currentPage))
-                else pagerState.scrollToPage(paging.nearestItem(page, pagerState.currentPage))
-            }
+            currentPage = page
+            onProgress(page)
+            jumpJob = scope.launch { pagerState.scrollToPage(paging.nearestItem(page, pagerState.currentPage)) }
         }
     }
-    val videoState = if (pureVideoBook) currentVideoState else null
-    val toolbarVideoState = if (session.pages.getOrNull(currentPage)?.isVideo == true) {
-        if (pureVideoBook) videoState else mixedVideoStates.getOrPut(currentPage) { createVideoPlaybackState(context) }
-    } else null
-    val currentPageIsVideo = toolbarVideoState != null
+    val currentPageIsVideo = session.pages.getOrNull(currentPage)?.isVideo == true
+    val toolbarVideoState = if (currentPageIsVideo) videoPool?.get(pagerState.settledPage) else null
+    val onVideoEnded: (VideoPlaybackState) -> Unit = { state ->
+        DiagnosticLog.log("Reader", "视频播放结束 index=${state.index} scrolling=${pagerState.isScrollInProgress} page=$currentPage")
+        if (pagerState.isScrollInProgress) {
+            // 切换尚未完成时当前视频播完就循环播放，而不是停在结尾等待下一次手势。
+            state.replay()
+        } else if (!settings.videoLoopSingle && (settings.loopMode || currentPage < session.pages.lastIndex)) {
+            jump(currentPage + 1)
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
         Box(Modifier.fillMaxSize().graphicsLayer {
@@ -220,55 +190,18 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             scaleY = 1f - backProgress * .08f
             alpha = 1f - backProgress * .25f
         }.background(background)) {
-            if (videoState != null) {
-                val transition = videoTransition
-                val slots = if (transition == null) listOf(currentPage to videoState)
-                    else listOf(transition.fromPage to transition.fromState, transition.toPage to transition.toState)
-                Box(Modifier.fillMaxSize().clipToBounds()) {
-                    for ((page, state) in slots) {
-                        key(state) {
-                            val outgoing = state === transition?.fromState
-                            VideoPlaybackSlot(state, page, session,
-                                active && (transition == null || outgoing), transition == null || outgoing, pageSettings,
-                                videoPosition, onVideoProgress, foreground, zoomSequence, zoomAction,
-                                modifier = Modifier.graphicsLayer {
-                                    val distance = if (verticalReading) size.height else size.width
-                                    val incomingSign = (transition?.direction ?: 0) * if (!verticalReading && settings.rightToLeft) -1 else 1
-                                    val fraction = if (state === transition?.fromState) -transitionProgress.value
-                                        else 1f - transitionProgress.value
-                                    val offset = incomingSign * distance * fraction
-                                    translationX = if (verticalReading) 0f else offset
-                                    translationY = if (verticalReading) offset else 0f
-                                }, onTap = { controls = !controls }, onPage = { jump(currentPage + it) },
-                                onEnded = {
-                                    if (!settings.videoLoopSingle && (settings.loopMode || currentPage < session.pages.lastIndex)) {
-                                        jump(currentPage + 1)
-                                    }
-                                })
-                        }
-                    }
+            if (videoBook) {
+                val itemContent: @Composable (Int) -> Unit = { item ->
+                    VideoPagerPage(item, session, paging, pagerState, repository, videoPool!!, active, settings,
+                        foreground, videoPosition, onVideoProgress, zoomSequence, zoomAction, zoomPage,
+                        onTap = { controls = !controls }, onEnded = onVideoEnded)
                 }
-            } else if (mixedBook) {
-                HorizontalPager(state = pagerState, reverseLayout = settings.rightToLeft, modifier = Modifier.fillMaxSize(),
-                    beyondViewportPageCount = 1, key = { "${session.book.cacheKey}-$it" }) { item ->
-                    val index = paging.pageAt(item)
-                    val page = session.pages[index]
-                    val settled = pagerState.settledPage == item
-                    if (page.isVideo) {
-                        val state = mixedVideoStates.getOrPut(index) { createVideoPlaybackState(context) }
-                        VideoPlaybackSlot(state, index, session, active && settled, active && settled, pageSettings,
-                            videoPosition, onVideoProgress, foreground, zoomSequence, zoomAction,
-                            onTap = { controls = !controls }, onPage = { jump(currentPage + it) },
-                            onEnded = {
-                                if (!settings.videoLoopSingle && (settings.loopMode || currentPage < session.pages.lastIndex)) {
-                                    jump(currentPage + 1)
-                                }
-                            })
-                    } else {
-                        ReaderPage(session, index, repository, vertical = false, active = active && settled,
-                            foreground = foreground, zoomSequence = if (settled) zoomSequence else 0,
-                            zoomAction = zoomAction, onTap = { controls = !controls })
-                    }
+                if (verticalReading) {
+                    VerticalPager(state = pagerState, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1,
+                        key = { "${session.book.cacheKey}-$it" }) { item -> itemContent(item) }
+                } else {
+                    HorizontalPager(state = pagerState, reverseLayout = settings.rightToLeft, modifier = Modifier.fillMaxSize(),
+                        beyondViewportPageCount = 1, key = { "${session.book.cacheKey}-$it" }) { item -> itemContent(item) }
                 }
             } else if (verticalReading) {
                 LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -277,7 +210,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         val visible by remember(item) { derivedStateOf { listState.layoutInfo.visibleItemsInfo.any { it.index == item } } }
                         val current by remember(item) { derivedStateOf { item == listState.firstVisibleItemIndex } }
                         ReaderPage(session, index, repository, vertical = true, active = active && visible,
-                            foreground = foreground, zoomSequence = if (current) zoomSequence else 0,
+                            foreground = foreground, zoomSequence = if (current && index == zoomPage) zoomSequence else 0,
                             zoomAction = zoomAction, initialRatio = ratios[index], onRatio = { ratios[index] = it },
                             onTap = { controls = !controls })
                     }
@@ -287,7 +220,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                     beyondViewportPageCount = 1, key = { "${session.book.cacheKey}-$it" }) { item ->
                     val index = paging.pageAt(item)
                     ReaderPage(session, index, repository, vertical = false, active = active && pagerState.currentPage == item,
-                        foreground = foreground, zoomSequence = if (item == pagerState.currentPage) zoomSequence else 0,
+                        foreground = foreground, zoomSequence = if (item == pagerState.currentPage && index == zoomPage) zoomSequence else 0,
                         zoomAction = zoomAction, onTap = { controls = !controls })
                 }
             }
@@ -302,8 +235,11 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 TopAppBar(title = {
                     Column {
                         Text(session.book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                        Text(if (mixedBook) { if (settings.rightToLeft) "水平翻页 · 从右向左" else "水平翻页" } else if (verticalReading) { if (videoBook) "垂直翻页" else "垂直连续" } else if (settings.rightToLeft) "水平翻页 · 从右向左" else "水平翻页",
-                            style = MaterialTheme.typography.labelSmall)
+                        Text(when {
+                            verticalReading -> if (videoBook) "垂直翻页" else "垂直连续"
+                            settings.rightToLeft -> "水平翻页 · 从右向左"
+                            else -> "水平翻页"
+                        }, style = MaterialTheme.typography.labelSmall)
                     }
                 }, navigationIcon = {
                     IconButton(onClick = { onProgress(currentPage); onBack() }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回书库") }
@@ -333,9 +269,9 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                             modifier = Modifier.fillMaxWidth())
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { jump(currentPage - 1) }, enabled = settings.loopMode || currentPage > 0) { Icon(Icons.AutoMirrored.Outlined.NavigateBefore, "上一页") }
-                            IconButton(onClick = { zoomAction = -1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomOut, if (currentPageIsVideo) "缩小视频" else "缩小图片") }
-                            TextButton(onClick = { zoomAction = 0; zoomSequence++ }) { Text("适合屏幕") }
-                            IconButton(onClick = { zoomAction = 1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomIn, if (currentPageIsVideo) "放大视频" else "放大图片") }
+                            IconButton(onClick = { zoomPage = currentPage; zoomAction = -1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomOut, if (currentPageIsVideo) "缩小视频" else "缩小图片") }
+                            TextButton(onClick = { zoomPage = currentPage; zoomAction = 0; zoomSequence++ }) { Text("适合屏幕") }
+                            IconButton(onClick = { zoomPage = currentPage; zoomAction = 1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomIn, if (currentPageIsVideo) "放大视频" else "放大图片") }
                             IconButton(onClick = { jump(currentPage + 1) }, enabled = settings.loopMode || currentPage < session.pages.lastIndex) { Icon(Icons.AutoMirrored.Outlined.NavigateNext, "下一页") }
                         }
                         Text(if (currentPageIsVideo) "轻点画面收起 · 双击缩放，拖动播放进度条定位" else "轻点画面收起 · 双指缩放，双击缩放图片",
@@ -366,15 +302,46 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     }
 }
 
+/**
+ * 视频书的每个 Pager 页。视频页从池中取播放器、按页保存位置；图片页复用普通阅读页。
+ * 只有停靠页允许播放，滑动中的前后视频保持暂停并显示首帧封面。
+ */
 @Composable
-private fun VideoPlaybackSlot(
-    state: VideoPlaybackState, index: Int, session: BookSession, active: Boolean, allowPlayback: Boolean,
-    settings: ReaderSettings, videoPosition: (Int) -> Long, onProgress: (Int, Long) -> Unit,
-    foreground: Color, zoomSequence: Int, zoomAction: Int, modifier: Modifier = Modifier,
-    onTap: () -> Unit, onPage: (Int) -> Unit, onEnded: () -> Unit,
+private fun VideoPagerPage(
+    item: Int, session: BookSession, paging: ReaderPaging, pagerState: PagerState, repository: BookRepository,
+    pool: VideoPlaybackPool, active: Boolean, settings: ReaderSettings, foreground: Color,
+    videoPosition: (Int) -> Long, onVideoProgress: (Int, Long) -> Unit,
+    zoomSequence: Int, zoomAction: Int, zoomPage: Int, onTap: () -> Unit, onEnded: (VideoPlaybackState) -> Unit,
 ) {
-    rememberVideoPlayback(state, session, index, active, allowPlayback, settings, videoPosition, onProgress, onEnded)
-    VideoPage(state, index, settings, foreground, active, zoomSequence, zoomAction, onTap, onPage, modifier)
+    val index = paging.pageAt(item)
+    val page = session.pages[index]
+    val settled = pagerState.settledPage == item
+    // 缩放指令只应用到当前页，避免相邻预载页被一起缩放。
+    val sequence = if (settled && index == zoomPage) zoomSequence else 0
+    if (page.isVideo) {
+        val cover = rememberVideoCover(session, index, repository)
+        // 停靠页始终有播放器；拖动 / 切换动画期间为将要停靠的目标页也预建播放器（总数最多两个），
+        // 让下一段在滑动过程中就渲染出首帧，不出现黑屏。其余页复用同一视图并只显示封面。
+        val hasPlayer = settled || (pagerState.isScrollInProgress && pagerState.targetPage == item)
+        LaunchedEffect(hasPlayer, settled, pagerState.targetPage, pagerState.isScrollInProgress) {
+            DiagnosticLog.log("Page", "item=$item index=$index video=true hasPlayer=$hasPlayer settled=$settled " +
+                "target=${pagerState.targetPage} scrolling=${pagerState.isScrollInProgress} pool=${pool.size} " +
+                "current=${pagerState.currentPage} frac=${pagerState.currentPageOffsetFraction}")
+        }
+        val state = if (hasPlayer) remember(item) { pool.acquire(item) } else null
+        DisposableEffect(state) { onDispose { if (state != null) pool.release(item) } }
+        VideoPage(state, index, session, cover, settings, switching = pagerState.isScrollInProgress,
+            videoPosition, onVideoProgress, foreground, active && settled,
+            sequence, zoomAction, onTap = onTap, onEnded = onEnded)
+    } else {
+        LaunchedEffect(settled) {
+            DiagnosticLog.log("Page", "item=$item index=$index video=false settled=$settled target=${pagerState.targetPage} " +
+                "scrolling=${pagerState.isScrollInProgress}")
+        }
+        ReaderPage(session, index, repository, vertical = false, active = active && settled,
+            foreground = foreground, zoomSequence = sequence,
+            zoomAction = zoomAction, onTap = onTap)
+    }
 }
 
 @Composable
