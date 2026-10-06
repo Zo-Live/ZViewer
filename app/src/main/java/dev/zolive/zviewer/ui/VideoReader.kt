@@ -35,6 +35,18 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     var playbackState by mutableIntStateOf(Player.STATE_IDLE)
     var ready by mutableStateOf(false)
     var surfaceReady by mutableStateOf(false)
+
+    /**
+     * The view that currently owns this player's video surface. Pager pages can be disposed and
+     * recreated, and the old AndroidView's onRelease may run after the replacement has already
+     * bound the player. Keeping the owner explicit lets binding transfer in a deterministic order
+     * and stops stale views from clearing the player's surface.
+     */
+    var ownerView: ZoomVideoView? = null
+
+    /** Whether the owner view's TextureView currently has a usable Surface for rendering. */
+    var surfaceAttached by mutableStateOf(false)
+
     var firstFrameReady by mutableStateOf(false)
     var failed by mutableStateOf(false)
     var seekable by mutableStateOf(false)
@@ -72,6 +84,51 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
         player.playWhenReady = false
         player.pause()
         refresh()
+    }
+
+    /** The settled/active view among the composed pages, used to fall back after a transient view. */
+    private var activeView: ZoomVideoView? = null
+
+    /**
+     * Makes [view] the sole owner of this player's video output surface. When a replacement view
+     * appears before the previous owner is released (Compose can release the old AndroidView after
+     * the new one bound), the previous view is detached first, so binding order stays deterministic.
+     */
+    fun bindOwner(view: ZoomVideoView, active: Boolean = false) {
+        if (active) activeView = view
+        if (ownerView === view) {
+            surfaceAttached = view.isSurfaceAvailable
+            return
+        }
+        val previous = ownerView
+        if (previous != null && previous.playerView.player === player) previous.playerView.player = null
+        ownerView = view
+        view.playerView.player = player
+        surfaceAttached = view.isSurfaceAvailable
+    }
+
+    /**
+     * Only the current owner may detach. A stale view's release must not clear the live surface. When
+     * the released view was a transient duplicate, the still-composed active view takes the surface
+     * back so a cancelled swipe cannot leave the player without a picture.
+     */
+    fun releaseOwner(view: ZoomVideoView) {
+        if (activeView === view) activeView = null
+        if (ownerView !== view) return
+        ownerView = null
+        surfaceAttached = false
+        surfaceReady = false
+        firstFrameReady = false
+        view.onLayoutReady = {}
+        view.playerView.player = null
+        activeView?.let { bindOwner(it) }
+    }
+
+    /** Updates layout/surface readiness for the owner view only; stale views are ignored. */
+    fun surfaceStateChanged(view: ZoomVideoView, layoutReady: Boolean) {
+        if (ownerView !== view) return
+        surfaceReady = layoutReady
+        surfaceAttached = view.isSurfaceAvailable
     }
 
     fun release() {
@@ -142,8 +199,8 @@ internal fun rememberVideoPlayback(
     LaunchedEffect(state, settings.videoPreview) {
         state.playRequested = !settings.videoPreview
     }
-    LaunchedEffect(state, active, allowPlayback, state.playRequested, state.ready, state.failed) {
-        val shouldPlay = active && allowPlayback && state.playRequested && state.ready && !state.failed
+    LaunchedEffect(state, active, allowPlayback, state.playRequested, state.ready, state.failed, state.surfaceAttached) {
+        val shouldPlay = active && allowPlayback && state.playRequested && state.ready && !state.failed && state.surfaceAttached
         state.player.playWhenReady = shouldPlay
         if (!shouldPlay) state.player.pause()
         state.refresh()
@@ -160,6 +217,7 @@ internal fun rememberVideoPlayback(
         var ticks = 0
         while (active) {
             state.refresh()
+            state.surfaceAttached = state.ownerView?.isSurfaceAvailable == true
             if (ticks++ % 5 == 0) state.save()
             delay(200)
         }
@@ -168,24 +226,30 @@ internal fun rememberVideoPlayback(
 
 @Composable
 internal fun VideoPage(
-    state: VideoPlaybackState, index: Int, settings: ReaderSettings, foreground: Color,
+    state: VideoPlaybackState, index: Int, settings: ReaderSettings, foreground: Color, active: Boolean,
     zoomSequence: Int, zoomAction: Int, onTap: () -> Unit, onPage: (Int) -> Unit, modifier: Modifier = Modifier,
 ) {
+    val viewRef = remember { mutableStateOf<ZoomVideoView?>(null) }
+    // Pager item compositions can be skipped or reused (especially while looping, when two virtual
+    // items map to the same real page). The AndroidView update block is not guaranteed to re-run when
+    // this page becomes active again, so re-assert surface ownership whenever activation changes.
+    LaunchedEffect(state, active) {
+        if (active) viewRef.value?.let { state.bindOwner(it, active = true) }
+    }
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        AndroidView(factory = { ZoomVideoView(it) }, modifier = Modifier.fillMaxSize(),
+        AndroidView(factory = { ZoomVideoView(it).also { view -> viewRef.value = view } }, modifier = Modifier.fillMaxSize(),
             onRelease = { view ->
-                state.surfaceReady = false
-                state.firstFrameReady = false
-                view.onLayoutReady = {}
-                view.playerView.player = null
+                if (viewRef.value === view) viewRef.value = null
+                state.releaseOwner(view)
             }, update = { view ->
-                view.playerView.player = state.player
+                viewRef.value = view
+                state.bindOwner(view, active = active)
                 view.bindPage(index)
                 view.vertical = settings.vertical
                 view.rightToLeft = settings.rightToLeft
                 view.onTap = onTap
                 view.onPage = onPage
-                view.onLayoutReady = { ready -> state.surfaceReady = ready }
+                view.onLayoutReady = { ready -> state.surfaceStateChanged(view, ready) }
                 state.surfaceReady = view.isVideoLayoutReady
                 if (zoomSequence > 0) view.command(zoomSequence, zoomAction)
             })

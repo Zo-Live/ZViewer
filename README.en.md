@@ -33,7 +33,7 @@ Android usually does not allow granting access to the internal storage root, the
 | Animated images | APNG, Animated WebP, GIF, Animated AVIF                                                                                                                                    |
 | Video           | MP4, M4V, MKV, WebM, AVI, MOV, 3GP, MPG, MPEG, TS, MTS, M2TS, FLV, WMV, OGV, and more                                                                                      |
 | Library         | Recursive scan, natural sorting, HD covers, search, reading-status filter, recently read, favorites, 2–5 column grid                                                      |
-| Reading         | Continuous vertical or paged horizontal images, vertical/horizontal video switching, horizontal paging for mixed content (WIP), zoom, page jumping, per-video positions, seamless image loops, keep screen on |
+| Reading         | Continuous vertical or paged horizontal images, vertical/horizontal video switching, horizontal paging for mixed content (experimental), zoom, page jumping, per-video positions, seamless image loops, keep screen on |
 | Appearance      | Follow system / light / dark theme, preset accent colors, custom accent color, separate light/dark reading backgrounds                                                     |
 | System          | Immersive reading, portrait and landscape, remembered library permission                                                                                                   |
 | Storage         | Cache clearing and automatic reclamation                                                                                                                                   |
@@ -45,9 +45,9 @@ While reading, the zoom range goes from fit-to-screen up to 5x, and you can retu
 - Files inside archives are sorted naturally by file name, so `2.jpg` comes before `10.jpg`.
 - Images directly contained in an image folder form one book; each subdirectory is scanned separately.
 - A folder or archive containing only videos forms one book; mixed image/video content opens in a horizontal pager, with the video seek bar shown only on video pages. Archive member names are decoded as UTF-8, so Chinese filenames work; a finished video replays from the start when you return to it after auto-advancing. Video archives are extracted to the app's temporary cache before playback.
-- PDFs are supported only at the library root or in uncompressed subdirectories; any readable archive containing a PDF asks you to extract it before reading.
 
-> **Mixed image/video reading is a work in progress**: books that mix images and videos are experimental. Paging, switching, looping, autoplay, background-resume, and combinations of these interactions may produce unexpected results (for example, mismatched frames or playback state). Pure image or pure video content is unaffected.
+> Books that mix images and videos are experimental. Paging, switching, looping, autoplay, background-resume, and combinations of these interactions may produce unexpected results.
+- PDFs are supported only at the library root or in uncompressed subdirectories; any readable archive containing a PDF asks you to extract it before reading.
 - Videos autoplay in order and remember an individual position. Settings can loop one video or open videos in preview mode until the play button starts playback. Video folders and archives use a frame from the naturally sorted first video as their cover.
 - With Loop mode enabled, the first and last image pages are adjacent in both directions and scroll naturally across the boundary; videos switch directly across the boundary. Double-tap Clear reading history in Settings to remove all progress without affecting favorites.
 - 7Z solid archives need their whole content prepared on first open, so larger books take longer to open.
@@ -82,7 +82,7 @@ The key is located at `.signing/zviewer-release.jks` with alias `zviewer`; passw
 
 The artifact is `app/build/outputs/apk/release/app-release.apk`.
 
-The current release is `1.3.0` (`versionCode=8`). The distribution APK is `dist/ZViewer-1.3.0-release.apk`, with its SHA-256 checksum in `dist/ZViewer-1.3.0-release.apk.sha256`.
+The current release is `1.3.1` (`versionCode=9`). The distribution APK is `dist/ZViewer-1.3.1-release.apk`, with its SHA-256 checksum in `dist/ZViewer-1.3.1-release.apk.sha256`.
 
 The private key and passwords must not be committed to Git, and `.signing/` must be backed up separately and securely. Subsequent releases must use the same key and an incremented `versionCode` so that installed apps can be upgraded in place with their data preserved; a new key generated on a new machine means fresh installs only.
 

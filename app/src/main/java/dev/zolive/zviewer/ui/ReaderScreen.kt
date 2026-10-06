@@ -374,7 +374,7 @@ private fun VideoPlaybackSlot(
     onTap: () -> Unit, onPage: (Int) -> Unit, onEnded: () -> Unit,
 ) {
     rememberVideoPlayback(state, session, index, active, allowPlayback, settings, videoPosition, onProgress, onEnded)
-    VideoPage(state, index, settings, foreground, zoomSequence, zoomAction, onTap, onPage, modifier)
+    VideoPage(state, index, settings, foreground, active, zoomSequence, zoomAction, onTap, onPage, modifier)
 }
 
 @Composable

@@ -18,6 +18,12 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     var onPage: (Int) -> Unit = {}
     var onLayoutReady: (Boolean) -> Unit = {}
     @get:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    val isSurfaceAvailable: Boolean
+        get() {
+            val surface = playerView.videoSurfaceView as? android.view.TextureView ?: return false
+            return surface.isAvailable && surface.width > 0 && surface.height > 0
+        }
+    @get:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     val isVideoLayoutReady: Boolean
         get() {
             val surface = playerView.videoSurfaceView ?: return false
@@ -115,6 +121,10 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
         onLayoutReady(isVideoLayoutReady)
+    }
+    override fun onDetachedFromWindow() {
+        super.onDetachedFromWindow()
+        onLayoutReady(false)
     }
     override fun onInterceptTouchEvent(event: MotionEvent): Boolean = true
 

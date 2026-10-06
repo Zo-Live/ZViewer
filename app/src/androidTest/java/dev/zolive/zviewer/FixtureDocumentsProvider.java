@@ -30,6 +30,7 @@ public class FixtureDocumentsProvider extends ContentProvider {
     private synchronized File base() throws FileNotFoundException {
         if (base == null) {
             base = new File(getContext().getFilesDir(), "fixtures");
+            deleteRecursively(base);
             base.mkdirs();
             try {
                 copyAssets("formats");
@@ -39,6 +40,13 @@ public class FixtureDocumentsProvider extends ContentProvider {
             }
         }
         return base;
+    }
+
+    private static void deleteRecursively(File file) {
+        if (!file.exists()) return;
+        File[] children = file.listFiles();
+        if (children != null) for (File child : children) deleteRecursively(child);
+        file.delete();
     }
 
     private void copyAssets(String path) throws IOException {

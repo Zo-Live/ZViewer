@@ -18,6 +18,7 @@ import dev.zolive.zviewer.data.*
 import dev.zolive.zviewer.reader.ZoomVideoView
 import dev.zolive.zviewer.reader.ZoomImageView
 import dev.zolive.zviewer.ui.ReaderScreen
+import dev.zolive.zviewer.ui.createVideoPlaybackState
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Rule
@@ -478,5 +479,97 @@ class ReaderInteractionTest {
             val player = videoViews().single().playerView.player!!
             assertTrue("返回已播完的视频应从头重新播放", player.currentPosition > 0L)
         }
+    }
+
+    // 画面在持续变化说明视频有可用的输出 Surface。播放器失去 Surface 时仍会推进进度，
+    // 但画面会停在最后一帧，因此用两帧截图的像素差检测“进度走、画面不动”。
+    private fun assertVideoKeepsRendering(tag: String) {
+        val first = screenshot("$tag-a")
+        Thread.sleep(500)
+        val second = screenshot("$tag-b")
+        var changed = 0
+        for (pixelY in 0 until first.height step 8) {
+            for (pixelX in 0 until first.width step 8) {
+                val a = first.getPixel(pixelX, pixelY)
+                val b = second.getPixel(pixelX, pixelY)
+                if (kotlin.math.abs(Color.red(a) - Color.red(b)) > 24 ||
+                    kotlin.math.abs(Color.green(a) - Color.green(b)) > 24 ||
+                    kotlin.math.abs(Color.blue(a) - Color.blue(b)) > 24) changed++
+            }
+        }
+        first.recycle()
+        second.recycle()
+        assertTrue("$tag：视频画面应在持续变化，changed=$changed", changed > 20)
+    }
+
+    @Test fun mixedContentKeepsRenderingAfterPagerViewRecreate() {
+        // 视频位于列表末端，切到最前面的图片会超出 Pager 的预载窗口，迫使视频页的
+        // AndroidView 被销毁重建；旧视图的 onRelease 可能晚于新视图绑定播放器。
+        open(video = true, mixed = true, vertical = true, preview = false, initialPage = 2,
+            names = listOf("page1.png", "page2.png", "moving-video/moving.mp4"))
+        waitForVideo()
+        waitForPlayback()
+        repeat(3) {
+            swipe(forward = false, vertical = false)
+            rule.waitUntil(5000) { currentPage == 1 }
+            swipe(forward = false, vertical = false)
+            rule.waitUntil(5000) { currentPage == 0 }
+            swipe(forward = true, vertical = false)
+            rule.waitUntil(5000) { currentPage == 1 }
+            swipe(forward = true, vertical = false)
+            rule.waitUntil(5000) { currentPage == 2 }
+            waitForVideo()
+            waitForPlayback()
+        }
+        assertVideoKeepsRendering("mixed-pager-recreate")
+    }
+
+    @Test fun staleVideoViewReleaseKeepsNewOwnerSurface() {
+        rule.runOnUiThread {
+            val context = rule.activity
+            val state = createVideoPlaybackState(context)
+            try {
+                val active = ZoomVideoView(context)
+                val transient = ZoomVideoView(context)
+                state.bindOwner(active, active = true)
+                assertSame("停靠页视图应成为所有者", active, state.ownerView)
+                assertSame(state.player, active.playerView.player)
+                // Pager 预载/循环产生的重复项可以先绑定播放器，旧视图的 onRelease 随后才执行。
+                state.bindOwner(transient)
+                assertSame(transient, state.ownerView)
+                assertNull("交接后旧视图不应再持有播放器", active.playerView.player)
+                assertSame(state.player, transient.playerView.player)
+                // 重复项被回收后，仍停靠的活动视图应拿回 Surface，而不是让播放器无画面空跑。
+                state.releaseOwner(transient)
+                assertSame("重复项释放后应回退到停靠视图", active, state.ownerView)
+                assertSame(state.player, active.playerView.player)
+                state.releaseOwner(active)
+                assertNull(active.playerView.player)
+                assertNull(state.ownerView)
+            } finally {
+                state.release()
+            }
+        }
+    }
+
+    @Test fun mixedContentCancelledSwipeKeepsVideoRendering() {
+        open(video = true, mixed = true, vertical = true, preview = false, initialPage = 2,
+            names = listOf("page1.png", "page2.png", "moving-video/moving.mp4"))
+        waitForVideo()
+        waitForPlayback()
+        repeat(3) {
+            // 拖过中线后拉回并松手，回到原视频；真机手势更容易触发旧视图的延迟释放。
+            rule.onRoot().performTouchInput {
+                down(Offset(centerX - width * .25f, centerY))
+                moveTo(Offset(centerX + width * .25f, centerY), 400)
+                moveTo(Offset(centerX - width * .2f, centerY), 400)
+                up()
+            }
+            rule.waitForIdle()
+            rule.waitUntil(5000) { currentPage == 2 }
+            waitForVideo()
+            waitForPlayback()
+        }
+        assertVideoKeepsRendering("mixed-cancel-swipe")
     }
 }
