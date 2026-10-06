@@ -12,3 +12,4 @@ tools/fixtures/
 __pycache__/
 tools/__pycache__/
 *.hprof
+assets/example.mp4
