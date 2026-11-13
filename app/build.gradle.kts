@@ -11,8 +11,8 @@ android {
         applicationId = "dev.zolive.zviewer"
         minSdk = 29
         targetSdk = 36
-        versionCode = 12
-        versionName = "1.4.2"
+        versionCode = 13
+        versionName = "1.4.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
