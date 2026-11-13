@@ -60,7 +60,11 @@ Android 通常不允许授权内部存储根目录、Download 根目录及 Andro
 
 ## 隐私与数据
 
-ZViewer 不申请联网权限，不包含账号或广告。阅读记录、封面与缓存都保存在设备本地，可在应用内清理；缓存达到约 1.5 GiB 时会自动回收。
+ZViewer 不申请联网权限，不包含账号或广告。阅读记录、封面与缓存都保存在设备本地，可在应用内清理。
+
+- 阅读缓存（解压文件、图片副本、PDF 副本与渲染页、封面及视频首帧）合计达到约 **1.5 GiB** 时，会在后台按最近使用顺序回收，尽量降至 **1 GiB**。正在打开、阅读或生成封面的书籍不会被自动清理。
+- ZIP / CBZ、RAR / CBR、7Z 首次阅读仍会完整解压其中支持的图片和视频，以保证翻页、跳页、回翻及视频预载不需反复解压。图片文件夹按需复制读到的页面，PDF 按需缓存渲染页。
+- 自动或手动清理只删除可重新生成的阅读缓存；被回收的书籍再次打开时需要重新准备。
 
 ## 本地构建
 
@@ -84,7 +88,7 @@ SDK 路径不同时调整 `ANDROID_HOME`，或在未跟踪的 `local.properties`
 
 产物为 `app/build/outputs/apk/release/app-release.apk`。
 
-当前正式版本为 `1.4.0`（`versionCode=10`），发布安装包为 `dist/ZViewer-1.4.0-release.apk`，SHA-256 校验文件为 `dist/ZViewer-1.4.0-release.apk.sha256`。
+当前正式版本为 `1.4.1`（`versionCode=11`），发布安装包为 `dist/ZViewer-1.4.1-release.apk`，SHA-256 校验文件为 `dist/ZViewer-1.4.1-release.apk.sha256`。
 
 私钥与口令不得提交到 Git，`.signing/` 必须单独安全备份。后续发布必须使用同一密钥并递增 `versionCode`，已安装应用才能覆盖升级并保留数据；若在新机器上生成新密钥，则只能全新安装。
 

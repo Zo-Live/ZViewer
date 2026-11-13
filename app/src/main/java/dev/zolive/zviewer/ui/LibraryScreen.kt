@@ -48,8 +48,6 @@ import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.NaturalOrder
 import dev.zolive.zviewer.data.ReadingProgress
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import androidx.core.view.WindowCompat
 
 @Composable
@@ -296,8 +294,9 @@ private fun BookCover(book: Book, repository: BookRepository, revision: Int) {
     var failed by remember(book.cacheKey, revision) { mutableStateOf(false) }
     val bitmap by produceState<android.graphics.Bitmap?>(null, book.cacheKey, revision) {
         try {
-            val file = repository.cover(book)
-            value = withContext(Dispatchers.IO) { android.graphics.BitmapFactory.decodeFile(file.absolutePath) }
+            value = repository.withBookCache(book) {
+                android.graphics.BitmapFactory.decodeFile(repository.cover(book).absolutePath)
+            }
         } catch (error: CancellationException) { throw error }
         catch (_: Exception) { failed = true }
     }

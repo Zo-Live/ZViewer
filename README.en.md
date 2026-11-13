@@ -60,7 +60,11 @@ While reading, the zoom range goes from fit-to-screen up to 5x, and you can retu
 
 ## Privacy and Data
 
-ZViewer does not request network permission and contains no accounts or ads. Reading history, covers, and caches are stored locally on the device and can be cleared in the app; when the cache reaches about 1.5 GiB it is reclaimed automatically.
+ZViewer does not request network permission and contains no accounts or ads. Reading history, covers, and caches are stored locally on the device and can be cleared in the app.
+
+- When the combined reading cache (extracted media, copied images, PDF copies and rendered pages, covers, and video frames) reaches about **1.5 GiB**, background cleanup removes the least recently used entries, aiming for **1 GiB**. A single large active book can exceed it until you close the book.
+- ZIP / CBZ, RAR / CBR, and 7Z books still extract all supported images and videos on first reading so page turns, jumps, backward navigation, and video preloading do not repeatedly decompress the archive. Image folders copy pages on demand; PDFs cache rendered pages on demand.
+- Automatic and manual cleanup remove only regenerable reading caches. Reopening an evicted book requires preparing its content again.
 
 ## Local Build
 
@@ -84,7 +88,7 @@ The key is located at `.signing/zviewer-release.jks` with alias `zviewer`; passw
 
 The artifact is `app/build/outputs/apk/release/app-release.apk`.
 
-The current release is `1.4.0` (`versionCode=10`). The distribution APK is `dist/ZViewer-1.4.0-release.apk`, with its SHA-256 checksum in `dist/ZViewer-1.4.0-release.apk.sha256`.
+The current release is `1.4.1` (`versionCode=11`). The distribution APK is `dist/ZViewer-1.4.1-release.apk`, with its SHA-256 checksum in `dist/ZViewer-1.4.1-release.apk.sha256`.
 
 The private key and passwords must not be committed to Git, and `.signing/` must be backed up separately and securely. Subsequent releases must use the same key and an incremented `versionCode` so that installed apps can be upgraded in place with their data preserved; a new key generated on a new machine means fresh installs only.
 

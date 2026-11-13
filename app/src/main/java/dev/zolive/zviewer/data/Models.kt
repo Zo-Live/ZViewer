@@ -1,6 +1,7 @@
 package dev.zolive.zviewer.data
 
 import java.security.MessageDigest
+import java.io.Closeable
 import java.util.Locale
 
 val imageExtensions = setOf("jpg", "jpeg", "png", "apng", "webp", "bmp", "heif", "heic", "gif", "avif")
@@ -82,6 +83,7 @@ data class PageSource(
 ) {
     val isVideo: Boolean get() = mediaType == "video"
 }
-data class BookSession(val book: Book, val pages: List<PageSource>, val pdfPath: String? = null)
+data class BookSession(val book: Book, val pages: List<PageSource>, val pdfPath: String? = null,
+    internal val cacheLease: Closeable? = null)
 
 class ReaderException(message: String, cause: Throwable? = null) : Exception(message, cause)

@@ -106,10 +106,13 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     fun cancelOpen() { openJob?.cancel(); mutable.update { it.copy(opening = null) } }
 
     fun closeBook() {
+        val session = mutable.value.session
         mutable.update { it.copy(session = null) }
         refreshProgress()
-        viewModelScope.launch { repository.trimCache() }
+        viewModelScope.launch { if (session != null) repository.close(session) else repository.trimCache() }
     }
+
+    override fun onCleared() { repository.close(); super.onCleared() }
 
     fun saveProgress(page: Int) {
         val session = mutable.value.session ?: return

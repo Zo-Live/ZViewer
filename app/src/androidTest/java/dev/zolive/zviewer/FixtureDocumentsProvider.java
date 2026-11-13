@@ -126,6 +126,21 @@ public class FixtureDocumentsProvider extends ContentProvider {
     }
 
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
+        if ("true".equals(uri.getQueryParameter("pipe"))) {
+            File source = file(DocumentsContract.getDocumentId(uri));
+            try {
+                ParcelFileDescriptor[] pipe = ParcelFileDescriptor.createPipe();
+                new Thread(() -> {
+                    try (InputStream input = new java.io.FileInputStream(source);
+                         java.io.OutputStream output = new ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])) {
+                        byte[] buffer = new byte[65536];
+                        int count;
+                        while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+                    } catch (IOException ignored) { }
+                }).start();
+                return pipe[0];
+            } catch (IOException error) { throw new FileNotFoundException(error.toString()); }
+        }
         return ParcelFileDescriptor.open(file(DocumentsContract.getDocumentId(uri)), ParcelFileDescriptor.MODE_READ_ONLY);
     }
 

@@ -10,8 +10,15 @@ import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -21,19 +28,47 @@ import me.zhanghai.android.libarchive.Archive
 import me.zhanghai.android.libarchive.ArchiveEntry
 import org.json.JSONArray
 import java.io.File
+import java.io.Closeable
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
 
-class BookRepository(private val context: Context) {
+class BookRepository(private val context: Context) : Closeable {
     private val resolver = context.contentResolver
-    private val cache = File(context.cacheDir, "books").apply { mkdirs() }
-    private val covers = File(context.cacheDir, "covers").apply { mkdirs() }
+    private val readingCache = ReadingCache(context.cacheDir)
+    private val cache = readingCache.books
+    private val covers = readingCache.covers
     private val frames = File(covers, "frames").apply { mkdirs() }
     private val locks = ConcurrentHashMap<String, Mutex>()
     private val coverSlots = Semaphore(2)
     private val coverLocks = ConcurrentHashMap<String, Mutex>()
+    private val maintenance = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val trimRequests = Channel<Unit>(Channel.CONFLATED)
+
+    init {
+        maintenance.launch {
+            for (request in trimRequests) {
+                delay(500)
+                trimRequests.tryReceive()
+                trimCache()
+            }
+        }
+    }
+
+    private fun requestTrim() { trimRequests.trySend(Unit) }
+
+    override fun close() { maintenance.cancel(); trimRequests.close() }
+
+    suspend fun close(session: BookSession) = withContext(Dispatchers.IO) {
+        session.cacheLease?.close()
+        trimCache()
+    }
+
+    suspend fun <Result> withBookCache(book: Book, block: suspend () -> Result): Result = withContext(Dispatchers.IO) {
+        val lease = readingCache.acquire(book.cacheKey)
+        try { block() } finally { lease.close(); requestTrim() }
+    }
 
     private data class Document(val uri: Uri, val name: String, val directory: Boolean, val modified: Long, val size: Long)
 
@@ -92,7 +127,20 @@ class BookRepository(private val context: Context) {
         books.sortedWith { first, second -> NaturalOrder.compare(first.title, second.title) }
     }
 
-    suspend fun open(book: Book, status: (String) -> Unit = {}): BookSession = withContext(Dispatchers.IO) {
+    suspend fun open(book: Book, status: (String) -> Unit = {}): BookSession {
+        var lease: Closeable? = null
+        try {
+            return withContext(Dispatchers.IO) {
+                lease = readingCache.acquire(book.cacheKey)
+                prepare(book, status).copy(cacheLease = lease).also { requestTrim() }
+            }
+        } catch (error: Exception) {
+            withContext(NonCancellable + Dispatchers.IO) { lease?.close(); requestTrim() }
+            throw error
+        }
+    }
+
+    private suspend fun prepare(book: Book, status: (String) -> Unit): BookSession = withContext(Dispatchers.IO) {
         locks.getOrPut(book.cacheKey) { Mutex() }.withLock {
             val folder = File(cache, book.cacheKey).apply { mkdirs(); setLastModified(System.currentTimeMillis()) }
             when (book.kind) {
@@ -181,9 +229,12 @@ class BookRepository(private val context: Context) {
         }
     }
 
-    suspend fun cover(book: Book): File = withContext(Dispatchers.IO) {
+    suspend fun cover(book: Book): File = withBookCache(book) {
         val cover = File(covers, "${book.cacheKey}.jpg")
-        if (cover.isFile) return@withContext cover
+        if (cover.isFile) {
+            cover.setLastModified(System.currentTimeMillis())
+            return@withBookCache cover
+        }
         coverLocks.getOrPut(book.cacheKey) { Mutex() }.withLock {
             coverSlots.withPermit {
                 if (cover.isFile) return@withPermit cover
@@ -197,8 +248,20 @@ class BookRepository(private val context: Context) {
                             decodeBitmap(ImageDecoder.createSource(resolver, first.uri), 1000)
                         }
                         "pdf" -> locks.getOrPut(book.cacheKey) { Mutex() }.withLock {
-                            val folder = File(cache, book.cacheKey).apply { mkdirs() }
-                            renderPdf(localPdf(book, folder), 0, 1000)
+                            val local = File(cache, "${book.cacheKey}/document.pdf")
+                            if (local.isFile) renderPdf(local, 0, 1000)
+                            else {
+                                val renderer = runCatching {
+                                    val descriptor = resolver.openFileDescriptor(Uri.parse(book.uri), "r")
+                                        ?: throw ReaderException("原文件不可用，请刷新书库或重新授权目录。")
+                                    pdfRenderer(descriptor)
+                                }.getOrNull()
+                                if (renderer != null) renderer.use { renderPdf(it, 0, 1000) }
+                                else {
+                                    copyUri(Uri.parse(book.uri), scratch, 4L * 1024 * 1024 * 1024)
+                                    renderPdf(scratch, 0, 1000)
+                                }
+                            }
                         }
                         "video-folder" -> {
                             val first = children(Uri.parse(book.uri)).filter { !it.directory && isVideo(it.name) }
@@ -277,12 +340,12 @@ class BookRepository(private val context: Context) {
      * 抽帧并缓存某个视频的首帧，用作切换过渡和离屏暂停时的封面。
      * 视频页在播放器尚未渲染画面时显示这一帧，避免出现黑屏。
      */
-    suspend fun videoFrame(session: BookSession, index: Int): File? = withContext(Dispatchers.IO) {
-        val page = session.pages.getOrNull(index) ?: return@withContext null
-        if (!page.isVideo) return@withContext null
+    suspend fun videoFrame(session: BookSession, index: Int): File? = withBookCache(session.book) {
+        val page = session.pages.getOrNull(index) ?: return@withBookCache null
+        if (!page.isVideo) return@withBookCache null
         frames.mkdirs()
         val output = File(frames, "${session.book.cacheKey}-$index.jpg")
-        if (output.isFile) return@withContext output
+        if (output.isFile) return@withBookCache output
         locks.getOrPut("frame-${session.book.cacheKey}-$index") { Mutex() }.withLock {
             if (output.isFile) return@withLock output
             DiagnosticLog.log("Cover", "开始抽帧 index=$index name=${page.name}")
@@ -308,16 +371,17 @@ class BookRepository(private val context: Context) {
         }
     }
 
-    suspend fun pageFile(session: BookSession, index: Int, width: Int): File = withContext(Dispatchers.IO) {
+    suspend fun pageFile(session: BookSession, index: Int, width: Int): File = withBookCache(session.book) {
         val page = session.pages[index]
-        page.filePath?.let { return@withContext File(it) }
-        val lockKey = "${session.book.cacheKey}-page-$index-${if (page.pdfPage != null) width else 0}"
+        page.filePath?.let { return@withBookCache File(it) }
+        val renderWidth = width.coerceIn(480, 2560)
+        val lockKey = "${session.book.cacheKey}-page-$index-${if (page.pdfPage != null) renderWidth else 0}"
         locks.getOrPut(lockKey) { Mutex() }.withLock {
             val folder = File(cache, session.book.cacheKey).apply { mkdirs() }
             if (page.pdfPage != null) {
-                val output = File(folder, "pdf-${page.pdfPage}-$width.png")
+                val output = File(folder, "pdf-${page.pdfPage}-$renderWidth.png")
                 if (!output.isFile) {
-                    val bitmap = renderPdf(File(session.pdfPath!!), page.pdfPage, width)
+                    val bitmap = renderPdf(File(session.pdfPath!!), page.pdfPage, renderWidth)
                     val temporary = File(folder, "${output.name}.part")
                     try {
                         temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
@@ -353,6 +417,7 @@ class BookRepository(private val context: Context) {
                         total += count
                         if (total > limit) throw ReaderException("文件超出安全大小限制。")
                         output.write(buffer, 0, count)
+                        if (total / (16 * 1024 * 1024) != (total - count) / (16 * 1024 * 1024)) requestTrim()
                     }
                 }
             } ?: throw ReaderException("原文件不可用，请刷新书库或重新授权目录。")
@@ -392,20 +457,29 @@ class BookRepository(private val context: Context) {
                 Archive.readData(archive, buffer)
                 buffer.flip()
                 if (!buffer.hasRemaining()) break
-                total += buffer.remaining()
+                val count = buffer.remaining()
+                total += count
                 if (total > minOf(remaining, entryLimit)) throw ReaderException("解压大小超过安全限制（单个媒体 4 GB / 每本 4 GB）。")
                 while (buffer.hasRemaining()) channel.write(buffer)
+                if (total / (16 * 1024 * 1024) != (total - count) / (16 * 1024 * 1024)) requestTrim()
             }
         }
+        requestTrim()
         return total
     }
 
-    private fun pdfRenderer(file: File): PdfRenderer {
-        val descriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+    private fun pdfRenderer(file: File): PdfRenderer =
+        pdfRenderer(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY))
+
+    private fun pdfRenderer(descriptor: ParcelFileDescriptor): PdfRenderer {
         return try { PdfRenderer(descriptor) } catch (error: Exception) { descriptor.close(); throw error }
     }
 
     fun renderPdf(file: File, index: Int, width: Int): Bitmap = pdfRenderer(file).use { renderer ->
+        renderPdf(renderer, index, width)
+    }
+
+    private fun renderPdf(renderer: PdfRenderer, index: Int, width: Int): Bitmap =
         renderer.openPage(index).use { page ->
             val renderWidth = width.coerceIn(480, 2560)
             val renderHeight = (renderWidth.toFloat() * page.height / page.width).roundToInt().coerceAtLeast(1)
@@ -416,7 +490,6 @@ class BookRepository(private val context: Context) {
             page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
             bitmap
         }
-    }
 
     fun decodeBitmap(source: ImageDecoder.Source, maxWidth: Int): Bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
         decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
@@ -427,22 +500,15 @@ class BookRepository(private val context: Context) {
     }
 
     suspend fun cacheSize(): Long = withContext(Dispatchers.IO) {
-        cache.walkTopDown().filter { it.isFile }.sumOf { it.length() } +
-            covers.walkTopDown().filter { it.isFile }.sumOf { it.length() }
+        readingCache.size()
     }
 
     suspend fun clearCache() = withContext(Dispatchers.IO) {
-        cache.deleteRecursively(); covers.deleteRecursively(); cache.mkdirs(); covers.mkdirs()
+        readingCache.clear()
     }
 
     suspend fun trimCache(protectedKey: String? = null) = withContext(Dispatchers.IO) {
-        val folders = cache.listFiles()?.sortedBy { it.lastModified() } ?: return@withContext
-        var size = folders.sumOf { folder -> folder.walkTopDown().filter { it.isFile }.sumOf { it.length() } }
-        for (folder in folders) {
-            if (size < 1536L * 1024 * 1024) break
-            if (folder.name == protectedKey) continue
-            val bytes = folder.walkTopDown().filter { it.isFile }.sumOf { it.length() }
-            if (folder.deleteRecursively()) size -= bytes
-        }
+        val reclaimed = readingCache.trim(protectedKey)
+        if (reclaimed > 0) DiagnosticLog.log("Cache", "自动回收 $reclaimed 字节阅读缓存")
     }
 }
