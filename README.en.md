@@ -42,7 +42,9 @@ Android usually does not allow granting access to the internal storage root, the
 
 While reading, the zoom range goes from fit-to-screen up to 5x, and you can return to fit-to-screen at any time.
 
-Settings → Appearance includes "Show file type" to display the comic format in the top-left corner of covers. It is off by default and applies to covers in Library, Favorites, and Recently Read. App theme, covers per row, and reading mode indicate the selected option with its background color.
+"Show file type" controls whether to display the comic format in the top-left corner of covers. It is off by default.
+
+"Show favorite icon" is on by default and controls the favorite button in the bottom-right corner of covers. Regardless of this setting, long-press any comic cover to manage favorites. All covers then show favorite buttons, and tapping either a cover or its button adds or removes that comic from favorites. Tap the circular close button to exit.
 
 ## Format Support and Features
 
@@ -90,7 +92,7 @@ The key is located at `.signing/zviewer-release.jks` with alias `zviewer`; passw
 
 The artifact is `app/build/outputs/apk/release/app-release.apk`.
 
-The current release is `1.4.1` (`versionCode=11`). The distribution APK is `dist/ZViewer-1.4.1-release.apk`, with its SHA-256 checksum in `dist/ZViewer-1.4.1-release.apk.sha256`.
+The current release is `1.4.2` (`versionCode=12`). The distribution APK is `dist/ZViewer-1.4.2-release.apk`, with its SHA-256 checksum in `dist/ZViewer-1.4.2-release.apk.sha256`.
 
 The private key and passwords must not be committed to Git, and `.signing/` must be backed up separately and securely. Subsequent releases must use the same key and an incremented `versionCode` so that installed apps can be upgraded in place with their data preserved; a new key generated on a new machine means fresh installs only.
 

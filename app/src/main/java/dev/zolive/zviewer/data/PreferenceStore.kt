@@ -19,6 +19,7 @@ class PreferenceStore(context: Context) {
         keepScreenOn = preferences.getBoolean("keep_screen", true),
         gridColumns = preferences.getInt("columns", 3).coerceIn(2, 5),
         showFileType = preferences.getBoolean("show_file_type", false),
+        showFavoriteIcon = preferences.getBoolean("show_favorite_icon", true),
         videoLoopSingle = preferences.getBoolean("video_loop_single", false),
         videoPreview = preferences.getBoolean("video_preview", false),
         loopMode = preferences.getBoolean("loop_mode", false),
@@ -32,6 +33,7 @@ class PreferenceStore(context: Context) {
             .putBoolean("rtl", settings.rightToLeft).putBoolean("keep_screen", settings.keepScreenOn)
             .putInt("columns", settings.gridColumns)
             .putBoolean("show_file_type", settings.showFileType)
+            .putBoolean("show_favorite_icon", settings.showFavoriteIcon)
             .putBoolean("video_loop_single", settings.videoLoopSingle)
             .putBoolean("video_preview", settings.videoPreview)
             .putBoolean("loop_mode", settings.loopMode)

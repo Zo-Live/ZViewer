@@ -1,4 +1,4 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 
 package dev.zolive.zviewer.ui
 
@@ -10,7 +10,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.MenuBook
 import androidx.compose.material.icons.automirrored.outlined.Sort
@@ -100,6 +101,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, onSettin
     var filter by rememberSaveable { mutableIntStateOf(0) }
     var sort by rememberSaveable { mutableIntStateOf(0) }
     var sortMenu by remember { mutableStateOf(false) }
+    var managingFavorites by rememberSaveable { mutableStateOf(false) }
     val titles = listOf("书库", "收藏", "最近阅读")
     val books = remember(state.books, state.favorites, state.progress, tab, query, filter, sort) {
         state.books.filter { book ->
@@ -120,7 +122,10 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, onSettin
             }
         }
     }
-    if (searching) BackHandler { searching = false; query = "" }
+    BackHandler(enabled = managingFavorites || searching) {
+        if (managingFavorites) managingFavorites = false
+        else { searching = false; query = "" }
+    }
     Scaffold(
         topBar = {
             TopAppBar(title = {
@@ -130,7 +135,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, onSettin
                 }
             }, actions = {
                 IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(Icons.Outlined.Search, "搜索漫画") }
-                IconButton(onClick = onSettings) { Icon(Icons.Outlined.Tune, "设置") }
+                IconButton(onClick = { managingFavorites = false; onSettings() }) { Icon(Icons.Outlined.Tune, "设置") }
             })
         },
         bottomBar = {
@@ -143,8 +148,14 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, onSettin
             }
         },
         floatingActionButton = {
-            if (state.treeUri != null) SmallFloatingActionButton(onClick = onChooseLibrary,
-                containerColor = MaterialTheme.colorScheme.secondaryContainer) { Icon(Icons.Outlined.FolderOpen, "切换书库目录") }
+            if (state.treeUri != null) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (managingFavorites) SmallFloatingActionButton(onClick = { managingFavorites = false },
+                    shape = CircleShape, containerColor = MaterialTheme.colorScheme.secondaryContainer) {
+                    Icon(Icons.Outlined.Close, "退出收藏管理")
+                }
+                SmallFloatingActionButton(onClick = { managingFavorites = false; onChooseLibrary() },
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer) { Icon(Icons.Outlined.FolderOpen, "切换书库目录") }
+            }
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -164,7 +175,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, onSettin
                         Text("${books.size} 本漫画", Modifier.padding(top = 5.dp),
                             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    IconButton(onClick = model::refresh, enabled = !state.scanning) { Icon(Icons.Outlined.Refresh, "刷新书库") }
+                    IconButton(onClick = { managingFavorites = false; model.refresh() }, enabled = !state.scanning) { Icon(Icons.Outlined.Refresh, "刷新书库") }
                     Box {
                         IconButton(onClick = { sortMenu = true }) { Icon(Icons.AutoMirrored.Outlined.Sort, "排序") }
                         DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
@@ -194,7 +205,10 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, onSettin
                         }
                         items(books, key = { it.id }) { book ->
                             BookCard(book, state.progress[book.id] ?: ReadingProgress(), book.id in state.favorites,
-                                model.repository, state.cacheRevision, state.settings.showFileType, onClick = { model.open(book) },
+                                model.repository, state.cacheRevision, state.settings.showFileType,
+                                showFavoriteIcon = state.settings.showFavoriteIcon || managingFavorites,
+                                onClick = { if (managingFavorites) model.toggleFavorite(book) else model.open(book) },
+                                onLongClick = { managingFavorites = true },
                                 onFavorite = { model.toggleFavorite(book) })
                         }
                     }
@@ -263,8 +277,10 @@ private fun ContinueCard(book: Book, progress: ReadingProgress, onClick: () -> U
 
 @Composable
 private fun BookCard(book: Book, progress: ReadingProgress, favorite: Boolean, repository: BookRepository,
-    revision: Int, showFileType: Boolean, onClick: () -> Unit, onFavorite: () -> Unit) {
-    Column(Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)) {
+    revision: Int, showFileType: Boolean, showFavoriteIcon: Boolean, onClick: () -> Unit,
+    onLongClick: () -> Unit, onFavorite: () -> Unit) {
+    Column(Modifier.clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onClick,
+        onLongClickLabel = "管理收藏", onLongClick = onLongClick)) {
         Box(Modifier.fillMaxWidth().aspectRatio(.69f).clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
             BookCover(book, repository, revision)
@@ -274,7 +290,7 @@ private fun BookCard(book: Book, progress: ReadingProgress, favorite: Boolean, r
                     Text(book.formatLabel, Modifier.padding(horizontal = 6.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall)
                 }
             }
-            IconButton(onClick = onFavorite, modifier = Modifier.align(Alignment.BottomEnd).size(48.dp)) {
+            if (showFavoriteIcon) IconButton(onClick = onFavorite, modifier = Modifier.align(Alignment.BottomEnd).size(48.dp)) {
                 Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = .92f)) {
                     Icon(if (favorite) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
                         if (favorite) "取消收藏 ${book.title}" else "收藏 ${book.title}", Modifier.padding(6.dp).size(18.dp),

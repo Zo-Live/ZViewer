@@ -68,6 +68,7 @@ data class ReaderSettings(
     val keepScreenOn: Boolean = true,
     val gridColumns: Int = 3,
     val showFileType: Boolean = false,
+    val showFavoriteIcon: Boolean = true,
     val videoLoopSingle: Boolean = false,
     val videoPreview: Boolean = false,
     val loopMode: Boolean = false,

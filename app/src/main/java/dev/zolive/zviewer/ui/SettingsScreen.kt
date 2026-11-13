@@ -83,6 +83,9 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
                 PreferenceSwitch("显示文件类型", "在封面左上角显示漫画格式", settings.showFileType) {
                     model.settings(settings.copy(showFileType = it))
                 }
+                PreferenceSwitch("显示收藏图标", "在封面右下角显示收藏按钮", settings.showFavoriteIcon) {
+                    model.settings(settings.copy(showFavoriteIcon = it))
+                }
             }
             Text("阅读", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             SettingsCard { ReaderPreferences(settings, model::settings) }
