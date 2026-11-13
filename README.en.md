@@ -40,11 +40,9 @@ Android usually does not allow granting access to the internal storage root, the
 | Diagnostics     | Optional diagnostic log written to the app-specific directory by default, or any writable folder you pick                                                                  |
 | Storage         | Cache clearing and automatic reclamation                                                                                                                                   |
 
-While reading, the zoom range goes from fit-to-screen up to 5x, and you can return to fit-to-screen at any time.
-
-"Show file type" controls whether to display the comic format in the top-left corner of covers. It is off by default.
-
-"Show favorite icon" is on by default and controls the favorite button in the bottom-right corner of covers. Regardless of this setting, long-press any comic cover to manage favorites. All covers then show favorite buttons, and tapping either a cover or its button adds or removes that comic from favorites. Tap the circular close button to exit.
+- While reading, the zoom range goes from fit-to-screen up to 5x.
+- "Show file type" controls whether to display the comic format in the top-left corner of covers. It is off by default.
+- "Show favorite icon" is on by default and controls the favorite button in the bottom-right corner of covers. Regardless of this setting, long-press any comic cover to manage favorites. All covers then show favorite buttons, and tapping either a cover or its button adds or removes that comic from favorites. Tap the circular close button to exit.
 
 ## Format Support and Features
 
