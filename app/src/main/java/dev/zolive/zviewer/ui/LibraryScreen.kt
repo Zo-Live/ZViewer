@@ -7,6 +7,15 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.updateTransition
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -18,6 +27,8 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -27,9 +38,11 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -37,6 +50,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +66,7 @@ import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.NaturalOrder
 import dev.zolive.zviewer.data.ReadingProgress
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import androidx.core.view.WindowCompat
 
 @Composable
@@ -64,6 +82,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
         }
     }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    val libraryStateHolder = rememberSaveableStateHolder()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) model.selectLibrary(uri)
     }
@@ -73,11 +92,40 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
             state.session != null -> ReaderScreen(state.session, state.initialPage, state.settings,
                 model.repository, model::settings, model::saveProgress, model::videoPosition,
                 { page, position -> model.saveVideoProgress(state.session.book.id, page, position) }, model::closeBook)
-            settingsOpen -> {
-                BackHandler { settingsOpen = false }
-                SettingsScreen(state, model, onBack = { settingsOpen = false }, onChooseLibrary = chooseLibrary)
+            else -> {
+                val transition = updateTransition(settingsOpen, label = "设置页导航")
+                Box(Modifier.fillMaxSize().clipToBounds().background(MaterialTheme.colorScheme.background)) {
+                    transition.AnimatedContent(modifier = Modifier.fillMaxSize(), transitionSpec = {
+                        val slideSpec = tween<androidx.compose.ui.unit.IntOffset>(360, easing = FastOutSlowInEasing)
+                        val scaleSpec = tween<Float>(360, easing = FastOutSlowInEasing)
+                        if (targetState) {
+                            slideInHorizontally(slideSpec) { it } togetherWith
+                                (slideOutHorizontally(slideSpec) { -it } + scaleOut(scaleSpec, targetScale = .8f))
+                        } else {
+                            (slideInHorizontally(slideSpec) { -it } + scaleIn(scaleSpec, initialScale = .8f)) togetherWith
+                                slideOutHorizontally(slideSpec) { it }
+                        }.using(null)
+                    }) { showSettings ->
+                        Box(Modifier.fillMaxSize().testTag(if (showSettings) "settings-screen" else "library-screen")
+                            .then(if (showSettings != settingsOpen) Modifier.clearAndSetSemantics {} else Modifier)) {
+                            if (showSettings) {
+                                SettingsScreen(state, model, onBack = { settingsOpen = false }, onChooseLibrary = chooseLibrary)
+                            } else libraryStateHolder.SaveableStateProvider("library") {
+                                LibraryScreen(state, model, active = !settingsOpen,
+                                    onSettings = { settingsOpen = true }, onChooseLibrary = chooseLibrary)
+                            }
+                        }
+                    }
+                    if (transition.isRunning || transition.currentState != transition.targetState) {
+                        Box(Modifier.matchParentSize().pointerInput(Unit) {
+                            awaitPointerEventScope {
+                                while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
+                            }
+                        })
+                    }
+                }
+                BackHandler(enabled = settingsOpen) { settingsOpen = false }
             }
-            else -> LibraryScreen(state, model, onSettings = { settingsOpen = true }, onChooseLibrary = chooseLibrary)
         }
     }
     if (state.opening != null) {
@@ -94,35 +142,17 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
 }
 
 @Composable
-private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, onSettings: () -> Unit, onChooseLibrary: () -> Unit) {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: Boolean,
+    onSettings: () -> Unit, onChooseLibrary: () -> Unit) {
+    val titles = listOf("书库", "收藏", "最近阅读")
+    val pagerState = rememberPagerState { titles.size }
+    val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
     var filter by rememberSaveable { mutableIntStateOf(0) }
     var sort by rememberSaveable { mutableIntStateOf(0) }
-    var sortMenu by remember { mutableStateOf(false) }
     var managingFavorites by rememberSaveable { mutableStateOf(false) }
-    val titles = listOf("书库", "收藏", "最近阅读")
-    val books = remember(state.books, state.favorites, state.progress, tab, query, filter, sort) {
-        state.books.filter { book ->
-            val progress = state.progress[book.id] ?: ReadingProgress()
-            val matchesTab = when (tab) { 1 -> book.id in state.favorites; 2 -> progress.updated > 0; else -> true }
-            val matchesFilter = when (filter) {
-                1 -> progress.updated > 0 && progress.fraction < 1f
-                2 -> progress.updated == 0L
-                3 -> progress.total > 0 && progress.fraction >= 1f
-                else -> true
-            }
-            matchesTab && matchesFilter && book.title.contains(query, ignoreCase = true)
-        }.let { filtered ->
-            when {
-                tab == 2 || sort == 2 -> filtered.sortedByDescending { state.progress[it.id]?.updated ?: 0 }
-                sort == 1 -> filtered.sortedByDescending { it.modified }
-                else -> filtered.sortedWith { first, second -> NaturalOrder.compare(first.title, second.title) }
-            }
-        }
-    }
-    BackHandler(enabled = managingFavorites || searching) {
+    BackHandler(enabled = active && (managingFavorites || searching)) {
         if (managingFavorites) managingFavorites = false
         else { searching = false; query = "" }
     }
@@ -142,7 +172,8 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, onSettin
             NavigationBar {
                 val icons = listOf(Icons.Outlined.CollectionsBookmark, Icons.Outlined.BookmarkBorder, Icons.Outlined.History)
                 titles.forEachIndexed { index, title ->
-                    NavigationBarItem(selected = tab == index, onClick = { tab = index },
+                    NavigationBarItem(selected = pagerState.currentPage == index,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
                         icon = { Icon(icons[index], null) }, label = { Text(title) })
                 }
             }
@@ -166,50 +197,76 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, onSettin
                     trailingIcon = { IconButton(onClick = { query = ""; searching = false }) { Icon(Icons.Outlined.Close, "关闭搜索") } },
                     shape = RoundedCornerShape(28.dp), singleLine = true)
             }
-            if (state.treeUri == null) WelcomeScreen(onChooseLibrary)
-            else {
-                Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 16.dp, top = 14.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(titles[tab], style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                        Text("${books.size} 本漫画", Modifier.padding(top = 5.dp),
-                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize().testTag("library-pager"),
+                key = { it }) { tab ->
+                var sortMenu by remember { mutableStateOf(false) }
+                val books = remember(state.books, state.favorites, state.progress, tab, query, filter, sort) {
+                    state.books.filter { book ->
+                        val progress = state.progress[book.id] ?: ReadingProgress()
+                        val matchesTab = when (tab) { 1 -> book.id in state.favorites; 2 -> progress.updated > 0; else -> true }
+                        val matchesFilter = when (filter) {
+                            1 -> progress.updated > 0 && progress.fraction < 1f
+                            2 -> progress.updated == 0L
+                            3 -> progress.total > 0 && progress.fraction >= 1f
+                            else -> true
+                        }
+                        matchesTab && matchesFilter && book.title.contains(query, ignoreCase = true)
+                    }.let { filtered ->
+                        when {
+                            tab == 2 || sort == 2 -> filtered.sortedByDescending { state.progress[it.id]?.updated ?: 0 }
+                            sort == 1 -> filtered.sortedByDescending { it.modified }
+                            else -> filtered.sortedWith { first, second -> NaturalOrder.compare(first.title, second.title) }
+                        }
                     }
-                    IconButton(onClick = { managingFavorites = false; model.refresh() }, enabled = !state.scanning) { Icon(Icons.Outlined.Refresh, "刷新书库") }
-                    Box {
-                        IconButton(onClick = { sortMenu = true }) { Icon(Icons.AutoMirrored.Outlined.Sort, "排序") }
-                        DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
-                            listOf("按名称", "最近修改", "最近阅读").forEachIndexed { index, label ->
-                                DropdownMenuItem(text = { Text(label) }, onClick = { sort = index; sortMenu = false },
-                                    trailingIcon = { if (sort == index) Icon(Icons.Outlined.Check, null) })
+                }
+                Column(Modifier.fillMaxSize()
+                    .then(if (pagerState.currentPage != tab) Modifier.clearAndSetSemantics {} else Modifier)) {
+                    if (state.treeUri == null) WelcomeScreen(onChooseLibrary)
+                    else {
+                        Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 16.dp, top = 14.dp, bottom = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(titles[tab], style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                                Text("${books.size} 本漫画", Modifier.padding(top = 5.dp),
+                                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            IconButton(onClick = { managingFavorites = false; model.refresh() }, enabled = !state.scanning) { Icon(Icons.Outlined.Refresh, "刷新书库") }
+                            Box {
+                                IconButton(onClick = { sortMenu = true }) { Icon(Icons.AutoMirrored.Outlined.Sort, "排序") }
+                                DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
+                                    listOf("按名称", "最近修改", "最近阅读").forEachIndexed { index, label ->
+                                        DropdownMenuItem(text = { Text(label) }, onClick = { sort = index; sortMenu = false },
+                                            trailingIcon = { if (sort == index) Icon(Icons.Outlined.Check, null) })
+                                    }
+                                }
                             }
                         }
-                    }
-                }
-                Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("全部", "在读", "未读", "已读").forEachIndexed { index, label ->
-                        FilterChip(selected = filter == index, onClick = { filter = index }, label = { Text(label) })
-                    }
-                }
-                if (books.isEmpty()) {
-                    EmptyLibrary(state.scanning, state.books.isEmpty(), tab == 0, onChooseLibrary)
-                } else {
-                    LazyVerticalGrid(columns = GridCells.Fixed(state.settings.gridColumns),
-                        modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 88.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-                        val recent = if (tab == 0 && query.isEmpty() && filter == 0) books
-                            .filter { (state.progress[it.id]?.updated ?: 0) > 0 && (state.progress[it.id]?.fraction ?: 0f) < 1f }
-                            .maxByOrNull { state.progress[it.id]?.updated ?: 0 } else null
-                        if (recent != null) item(span = { GridItemSpan(maxLineSpan) }) {
-                            ContinueCard(recent, state.progress.getValue(recent.id), onClick = { model.open(recent) })
+                        Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf("全部", "在读", "未读", "已读").forEachIndexed { index, label ->
+                                FilterChip(selected = filter == index, onClick = { filter = index }, label = { Text(label) })
+                            }
                         }
-                        items(books, key = { it.id }) { book ->
-                            BookCard(book, state.progress[book.id] ?: ReadingProgress(), book.id in state.favorites,
-                                model.repository, state.cacheRevision, state.settings.showFileType,
-                                showFavoriteIcon = state.settings.showFavoriteIcon || managingFavorites,
-                                onClick = { if (managingFavorites) model.toggleFavorite(book) else model.open(book) },
-                                onLongClick = { managingFavorites = true },
-                                onFavorite = { model.toggleFavorite(book) })
+                        if (books.isEmpty()) {
+                            EmptyLibrary(state.scanning, state.books.isEmpty(), tab == 0, onChooseLibrary)
+                        } else {
+                            LazyVerticalGrid(columns = GridCells.Fixed(state.settings.gridColumns),
+                                modifier = Modifier.fillMaxSize().testTag("library-grid-$tab"), contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 88.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+                                val recent = if (tab == 0 && query.isEmpty() && filter == 0) books
+                                    .filter { (state.progress[it.id]?.updated ?: 0) > 0 && (state.progress[it.id]?.fraction ?: 0f) < 1f }
+                                    .maxByOrNull { state.progress[it.id]?.updated ?: 0 } else null
+                                if (recent != null) item(span = { GridItemSpan(maxLineSpan) }) {
+                                    ContinueCard(recent, state.progress.getValue(recent.id), onClick = { model.open(recent) })
+                                }
+                                items(books, key = { it.id }) { book ->
+                                    BookCard(book, state.progress[book.id] ?: ReadingProgress(), book.id in state.favorites,
+                                        model.repository, state.cacheRevision, state.settings.showFileType,
+                                        showFavoriteIcon = state.settings.showFavoriteIcon || managingFavorites,
+                                        onClick = { if (managingFavorites) model.toggleFavorite(book) else model.open(book) },
+                                        onLongClick = { managingFavorites = true },
+                                        onFavorite = { model.toggleFavorite(book) })
+                                }
+                            }
                         }
                     }
                 }
