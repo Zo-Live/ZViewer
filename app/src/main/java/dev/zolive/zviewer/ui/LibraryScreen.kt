@@ -194,7 +194,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, onSettin
                         }
                         items(books, key = { it.id }) { book ->
                             BookCard(book, state.progress[book.id] ?: ReadingProgress(), book.id in state.favorites,
-                                model.repository, state.cacheRevision, onClick = { model.open(book) },
+                                model.repository, state.cacheRevision, state.settings.showFileType, onClick = { model.open(book) },
                                 onFavorite = { model.toggleFavorite(book) })
                         }
                     }
@@ -263,14 +263,16 @@ private fun ContinueCard(book: Book, progress: ReadingProgress, onClick: () -> U
 
 @Composable
 private fun BookCard(book: Book, progress: ReadingProgress, favorite: Boolean, repository: BookRepository,
-    revision: Int, onClick: () -> Unit, onFavorite: () -> Unit) {
+    revision: Int, showFileType: Boolean, onClick: () -> Unit, onFavorite: () -> Unit) {
     Column(Modifier.clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)) {
         Box(Modifier.fillMaxWidth().aspectRatio(.69f).clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
             BookCover(book, repository, revision)
-            Surface(Modifier.align(Alignment.TopStart).padding(7.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = .92f),
-                shape = RoundedCornerShape(6.dp)) {
-                Text(book.formatLabel, Modifier.padding(horizontal = 6.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall)
+            if (showFileType) {
+                Surface(Modifier.align(Alignment.TopStart).padding(7.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = .92f),
+                    shape = RoundedCornerShape(6.dp)) {
+                    Text(book.formatLabel, Modifier.padding(horizontal = 6.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall)
+                }
             }
             IconButton(onClick = onFavorite, modifier = Modifier.align(Alignment.BottomEnd).size(48.dp)) {
                 Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = .92f)) {

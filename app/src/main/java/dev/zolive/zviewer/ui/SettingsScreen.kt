@@ -55,7 +55,7 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 12.dp)) {
                     listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEachIndexed { index, (value, label) ->
                         SegmentedButton(selected = settings.theme == value, onClick = { model.settings(settings.copy(theme = value)) },
-                            shape = SegmentedButtonDefaults.itemShape(index, 3)) { Text(label) }
+                            shape = SegmentedButtonDefaults.itemShape(index, 3), icon = {}) { Text(label) }
                     }
                 }
                 Text("主题颜色", Modifier.padding(top = 24.dp), style = MaterialTheme.typography.titleMedium)
@@ -77,8 +77,11 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
                     (2..5).forEachIndexed { index, count ->
                         SegmentedButton(selected = settings.gridColumns == count,
                             onClick = { model.settings(settings.copy(gridColumns = count)) },
-                            shape = SegmentedButtonDefaults.itemShape(index, 4)) { Text("$count") }
+                            shape = SegmentedButtonDefaults.itemShape(index, 4), icon = {}) { Text("$count") }
                     }
+                }
+                PreferenceSwitch("显示文件类型", "在封面左上角显示漫画格式", settings.showFileType) {
+                    model.settings(settings.copy(showFileType = it))
                 }
             }
             Text("阅读", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
@@ -174,9 +177,9 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
     Text("阅读模式", style = MaterialTheme.typography.titleMedium)
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 12.dp)) {
         SegmentedButton(selected = settings.vertical, onClick = { onSettings(settings.copy(vertical = true)) },
-            shape = SegmentedButtonDefaults.itemShape(0, 2)) { Text("垂直连续") }
+            shape = SegmentedButtonDefaults.itemShape(0, 2), icon = {}) { Text("垂直连续") }
         SegmentedButton(selected = !settings.vertical, onClick = { onSettings(settings.copy(vertical = false)) },
-            shape = SegmentedButtonDefaults.itemShape(1, 2)) { Text("水平翻页") }
+            shape = SegmentedButtonDefaults.itemShape(1, 2), icon = {}) { Text("水平翻页") }
     }
     PreferenceSwitch("深色阅读背景", "关闭后使用浅色画布，与应用主题独立", settings.readerDark) { onSettings(settings.copy(readerDark = it)) }
     PreferenceSwitch("从右向左翻页", "适用于日漫的水平阅读模式", settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }

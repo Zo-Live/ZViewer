@@ -42,6 +42,8 @@ Android usually does not allow granting access to the internal storage root, the
 
 While reading, the zoom range goes from fit-to-screen up to 5x, and you can return to fit-to-screen at any time.
 
+Settings → Appearance includes "Show file type" to display the comic format in the top-left corner of covers. It is off by default and applies to covers in Library, Favorites, and Recently Read. App theme, covers per row, and reading mode indicate the selected option with its background color.
+
 ## Format Support and Features
 
 - Files inside archives are sorted naturally by file name, so `2.jpg` comes before `10.jpg`.
