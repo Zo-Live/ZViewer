@@ -37,7 +37,6 @@ import dev.zolive.zviewer.data.ReaderSettings
 fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> Unit, onChooseLibrary: () -> Unit) {
     val settings = state.settings
     var customColor by remember { mutableStateOf(false) }
-    var confirmClear by remember { mutableStateOf(false) }
     var about by remember { mutableStateOf(false) }
     var licenses by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -60,8 +59,6 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
                     }
                 }
                 Text("主题颜色", Modifier.padding(top = 24.dp), style = MaterialTheme.typography.titleMedium)
-                Text("为按钮、导航和界面选择一种颜色", Modifier.padding(top = 5.dp),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     val colors = listOf(0xFF49684D to "苔绿", 0xFF476A8A to "雾蓝", 0xFF79618C to "藤紫", 0xFF9A5357 to "蔷薇", 0xFF8B683E to "琥珀")
                     colors.forEach { (color, name) ->
@@ -94,9 +91,10 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
                     modifier = Modifier.clickable(onClick = onChooseLibrary), colors = ListItemDefaults.colors(containerColor = Color.Transparent))
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 ListItem(headlineContent = { Text("清理阅读缓存") }, supportingContent = {
-                    Text("${Formatter.formatShortFileSize(context, cacheSize)} · 保留漫画原件和阅读记录")
+                    Text("${Formatter.formatShortFileSize(context, cacheSize)} · 双击清除临时解压文件和封面")
                 }, leadingContent = { Icon(Icons.Outlined.CleaningServices, null) },
-                    modifier = Modifier.clickable { confirmClear = true }, colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                    modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearCache),
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent))
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 ListItem(headlineContent = { Text("清除阅读记录") }, supportingContent = {
                     Text("双击清除所有漫画的页码和视频播放进度")
@@ -107,7 +105,7 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
             Text("诊断", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
             SettingsCard {
                 ListItem(headlineContent = { Text("输出诊断日志") }, supportingContent = {
-                    Text("记录应用运行、视频切换、播放错误与崩溃信息，用于反馈问题时排查")
+                    Text("记录应用运行、视频切换、播放错误与崩溃信息")
                 }, leadingContent = { Icon(Icons.Outlined.BugReport, null) },
                     trailingContent = {
                         Switch(checked = settings.diagnosticLog,
@@ -140,7 +138,7 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
         val valid = value.matches(Regex("[0-9a-fA-F]{6}"))
         AlertDialog(onDismissRequest = { customColor = false }, title = { Text("自定义主题颜色") }, text = {
             Column {
-                Text("输入六位十六进制色值，界面将自动生成对应的明暗配色。")
+                Text("输入六位十六进制色值，界面将自动生成对应的明暗配色")
                 OutlinedTextField(value, { value = it.removePrefix("#").take(6) }, Modifier.padding(top = 16.dp),
                     label = { Text("颜色值") }, prefix = { Text("#") }, singleLine = true, isError = !valid)
             }
@@ -148,10 +146,6 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
             model.settings(settings.copy(accent = AndroidColor.parseColor("#$value").toLong() and 0xFFFFFFFF)); customColor = false
         }) { Text("应用") } }, dismissButton = { TextButton(onClick = { customColor = false }) { Text("取消") } })
     }
-    if (confirmClear) AlertDialog(onDismissRequest = { confirmClear = false }, title = { Text("清理缓存？") },
-        text = { Text("将删除临时解压文件和封面，下次阅读时重新生成。漫画原件、收藏和阅读进度会保留。") },
-        confirmButton = { TextButton(onClick = { model.clearCache(); confirmClear = false }) { Text("清理") } },
-        dismissButton = { TextButton(onClick = { confirmClear = false }) { Text("取消") } })
     if (about) AlertDialog(onDismissRequest = { about = false }, title = { Text("ZViewer · 本地漫画阅读器") },
         text = { Text("版本 ${BuildConfig.VERSION_NAME}\n\n支持 ZIP / CBZ、RAR / CBR、7Z、PDF、图片文件夹与常见视频格式。支持 APNG、动态 WebP、GIF、AVIF 及常用静态图片。\n\n全部阅读数据仅保存在本机，不联网、不上传文件。密码保护、分卷压缩包及 DRM 文件请先自行转换。\n\n开源组件：AndroidX / Compose（Apache 2.0）、Media3（Apache 2.0）、APNG4Android（Apache 2.0）、libarchive（BSD）、libavif（BSD）。\n\nHEIF / HEIC 的可解码范围取决于设备系统解码器。") },
         confirmButton = { TextButton(onClick = { about = false }) { Text("知道了") } },
@@ -188,7 +182,7 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
     PreferenceSwitch("从右向左翻页", "适用于日漫的水平阅读模式", settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }
     PreferenceSwitch("阅读时屏幕常亮", "离开阅读器后恢复系统设置", settings.keepScreenOn) { onSettings(settings.copy(keepScreenOn = it)) }
     PreferenceSwitch("单个视频循环播放", "视频播放完后留在当前视频并重新开始", settings.videoLoopSingle) { onSettings(settings.copy(videoLoopSingle = it)) }
-    PreferenceSwitch("视频默认仅预览", "切换视频时暂停，轻点画面后使用播放按钮开始播放", settings.videoPreview) { onSettings(settings.copy(videoPreview = it)) }
+    PreferenceSwitch("视频默认仅预览", "切换视频时暂停，轻触画面开始播放", settings.videoPreview) { onSettings(settings.copy(videoPreview = it)) }
     PreferenceSwitch("循环模式", "读到漫画结尾后继续翻页回到第一页", settings.loopMode) { onSettings(settings.copy(loopMode = it)) }
 }
 

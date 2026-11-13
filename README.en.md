@@ -50,7 +50,7 @@ While reading, the zoom range goes from fit-to-screen up to 5x, and you can retu
 - Video codec support depends on the device's Media3 / system decoders.
 - PDFs are supported only at the library root or in uncompressed subdirectories; any readable archive containing a PDF asks you to extract it before reading.
 - Videos autoplay in order and remember an individual position. Settings can loop one video or open videos in preview mode until the play button starts playback. Video folders and archives use a frame from the naturally sorted first video as their cover.
-- With Loop mode enabled, the first and last image pages are adjacent in both directions and scroll naturally across the boundary; videos cross the boundary with the same transition. Double-tap Clear reading history in Settings to remove all progress without affecting favorites.
+- With Loop mode enabled, the first and last image pages are adjacent in both directions and scroll naturally across the boundary; videos cross the boundary with the same transition. Double-tap Clear reading history in Settings to remove all progress without affecting favorites. "Clear reading history" and "clear reading cache" do not affect originals or favorites.
 - Settings can enable a diagnostic log and pick its folder (the app-specific directory by default, or any writable folder via the system picker). The log records app startup, library scans/opens, video switching, playback errors, and uncaught exceptions to help diagnose issues.
 - 7Z solid archives need their whole content prepared on first open, so larger books take longer to open.
 - Encrypted archives, multi-volume files, password-protected PDFs, and DRM content are not supported yet; decrypt or extract them to a folder first.
