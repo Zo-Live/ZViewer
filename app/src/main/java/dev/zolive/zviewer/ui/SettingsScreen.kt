@@ -72,7 +72,10 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
                     }
                     IconButton(onClick = { customColor = true }, Modifier.size(44.dp)) { Icon(Icons.Outlined.Palette, "自定义主题颜色") }
                 }
-                Text("每行封面数", Modifier.padding(top = 20.dp), style = MaterialTheme.typography.titleMedium)
+            }
+            Text("偏好", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            SettingsCard {
+                Text("每行封面数", style = MaterialTheme.typography.titleMedium)
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 12.dp)) {
                     (2..5).forEachIndexed { index, count ->
                         SegmentedButton(selected = settings.gridColumns == count,
