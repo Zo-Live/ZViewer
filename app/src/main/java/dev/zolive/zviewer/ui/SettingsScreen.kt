@@ -25,7 +25,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
@@ -37,31 +36,38 @@ import dev.zolive.zviewer.LibraryViewModel
 import dev.zolive.zviewer.data.ReaderSettings
 
 @Composable
-fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> Unit, onChooseLibrary: () -> Unit) {
+fun SettingsScreen(
+    state: LibraryState,
+    model: LibraryViewModel,
+    onBack: () -> Unit,
+    onChooseLibrary: () -> Unit,
+    onSwipeStart: () -> Unit = {},
+    onSwipe: (Float) -> Unit = {},
+    onSwipeEnd: () -> Unit = {},
+    onSwipeCancel: () -> Unit = {}
+) {
     val settings = state.settings
     var customColor by remember { mutableStateOf(false) }
     var about by remember { mutableStateOf(false) }
     var licenses by remember { mutableStateOf(false) }
     val context = LocalContext.current
-    val density = LocalDensity.current
-    val latestOnBack by rememberUpdatedState(onBack)
+    val latestSwipeStart by rememberUpdatedState(onSwipeStart)
+    val latestSwipe by rememberUpdatedState(onSwipe)
+    val latestSwipeEnd by rememberUpdatedState(onSwipeEnd)
+    val latestSwipeCancel by rememberUpdatedState(onSwipeCancel)
     val cacheSize by produceState(0L, state.cacheRevision) { value = model.repository.cacheSize() }
     val logPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) model.setLogDirectory(uri)
     }
-    Scaffold(modifier = Modifier.pointerInput(density) {
-        val swipeThreshold = with(density) { 96.dp.toPx() }
-        var totalDrag = 0f
+    Scaffold(modifier = Modifier.pointerInput(Unit) {
         detectHorizontalDragGestures(
+            onDragStart = { latestSwipeStart() },
             onHorizontalDrag = { change, dragAmount ->
-                totalDrag += dragAmount
+                latestSwipe(dragAmount)
                 change.consume()
             },
-            onDragEnd = {
-                if (totalDrag >= swipeThreshold) latestOnBack()
-                totalDrag = 0f
-            },
-            onDragCancel = { totalDrag = 0f }
+            onDragEnd = { latestSwipeEnd() },
+            onDragCancel = { latestSwipeCancel() }
         )
     }, topBar = { TopAppBar(title = { Text("设置") }, navigationIcon = {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回书库") }

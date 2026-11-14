@@ -7,15 +7,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.core.updateTransition
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -43,6 +37,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -50,6 +46,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.testTag
@@ -82,6 +79,24 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
         }
     }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    var settingsDragging by remember { mutableStateOf(false) }
+    var settingsDragProgress by remember { mutableFloatStateOf(if (settingsOpen) 1f else 0f) }
+    var viewportWidth by remember { mutableFloatStateOf(1f) }
+    val settingsProgress = remember { Animatable(if (settingsOpen) 1f else 0f) }
+    val navigationScope = rememberCoroutineScope()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val swipeThreshold = with(density) { 96.dp.toPx() }
+    fun navigateSettings(open: Boolean, startProgress: Float? = null) {
+        settingsOpen = open
+        navigationScope.launch {
+            settingsProgress.stop()
+            if (startProgress != null) settingsProgress.snapTo(startProgress.coerceIn(0f, 1f))
+            settingsProgress.animateTo(
+                if (open) 1f else 0f,
+                animationSpec = tween(360, easing = FastOutSlowInEasing)
+            )
+        }
+    }
     val libraryStateHolder = rememberSaveableStateHolder()
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) model.selectLibrary(uri)
@@ -93,30 +108,64 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                 model.repository, model::settings, model::saveProgress, model::videoPosition,
                 { page, position -> model.saveVideoProgress(state.session.book.id, page, position) }, model::closeBook)
             else -> {
-                val transition = updateTransition(settingsOpen, label = "设置页导航")
-                Box(Modifier.fillMaxSize().clipToBounds().background(MaterialTheme.colorScheme.background)) {
-                    transition.AnimatedContent(modifier = Modifier.fillMaxSize(), transitionSpec = {
-                        val slideSpec = tween<androidx.compose.ui.unit.IntOffset>(360, easing = FastOutSlowInEasing)
-                        val scaleSpec = tween<Float>(360, easing = FastOutSlowInEasing)
-                        if (targetState) {
-                            slideInHorizontally(slideSpec) { it } togetherWith
-                                (slideOutHorizontally(slideSpec) { -it } + scaleOut(scaleSpec, targetScale = .8f))
-                        } else {
-                            (slideInHorizontally(slideSpec) { -it } + scaleIn(scaleSpec, initialScale = .8f)) togetherWith
-                                slideOutHorizontally(slideSpec) { it }
-                        }.using(null)
-                    }) { showSettings ->
-                        Box(Modifier.fillMaxSize().testTag(if (showSettings) "settings-screen" else "library-screen")
-                            .then(if (showSettings != settingsOpen) Modifier.clearAndSetSemantics {} else Modifier)) {
-                            if (showSettings) {
-                                SettingsScreen(state, model, onBack = { settingsOpen = false }, onChooseLibrary = chooseLibrary)
-                            } else libraryStateHolder.SaveableStateProvider("library") {
+                val progress = (if (settingsDragging) settingsDragProgress else settingsProgress.value).coerceIn(0f, 1f)
+                val navigationAnimating = !settingsDragging && settingsProgress.isRunning
+                val showLibraryLayer = !settingsOpen || settingsDragging || progress < .999f
+                val showSettingsLayer = settingsOpen || progress > .001f
+                Box(Modifier.fillMaxSize().clipToBounds().background(MaterialTheme.colorScheme.background)
+                    .onSizeChanged { viewportWidth = it.width.toFloat().coerceAtLeast(1f) }) {
+                    Box(Modifier.fillMaxSize()
+                        .graphicsLayer {
+                            val scale = 1f - .2f * progress
+                            translationX = -size.width * progress
+                            scaleX = scale
+                            scaleY = scale
+                            transformOrigin = TransformOrigin.Center
+                        }
+                        .then(if (progress < .999f) Modifier.testTag("library-screen") else Modifier)
+                        .then(if (settingsOpen) Modifier.clearAndSetSemantics {} else Modifier)) {
+                        if (showLibraryLayer) {
+                            libraryStateHolder.SaveableStateProvider("library") {
                                 LibraryScreen(state, model, active = !settingsOpen,
-                                    onSettings = { settingsOpen = true }, onChooseLibrary = chooseLibrary)
+                                    onSettings = { navigateSettings(true) }, onChooseLibrary = chooseLibrary)
                             }
                         }
                     }
-                    if (transition.isRunning || transition.currentState != transition.targetState) {
+                    if (showSettingsLayer) {
+                        Box(Modifier.fillMaxSize()
+                            .graphicsLayer { translationX = size.width * (1f - progress) }
+                            .then(if (progress > .001f) Modifier.testTag("settings-screen") else Modifier)
+                            .then(if (!settingsOpen) Modifier.clearAndSetSemantics {} else Modifier)) {
+                            SettingsScreen(
+                                state,
+                                model,
+                                onBack = { navigateSettings(false) },
+                                onChooseLibrary = chooseLibrary,
+                                onSwipeStart = {
+                                    settingsDragging = true
+                                    settingsDragProgress = settingsProgress.value
+                                    navigationScope.launch { settingsProgress.stop() }
+                                },
+                                onSwipe = { dragAmount ->
+                                    settingsDragProgress =
+                                        (settingsDragProgress - dragAmount / viewportWidth).coerceIn(0f, 1f)
+                                },
+                                onSwipeEnd = {
+                                    val draggedDistance = (1f - settingsDragProgress) * viewportWidth
+                                    val shouldClose = draggedDistance >= swipeThreshold
+                                    settingsDragging = false
+                                    if (shouldClose) navigateSettings(false, settingsDragProgress)
+                                    else navigateSettings(true, settingsDragProgress)
+                                },
+                                onSwipeCancel = {
+                                    val currentProgress = settingsDragProgress
+                                    settingsDragging = false
+                                    navigateSettings(true, currentProgress)
+                                }
+                            )
+                        }
+                    }
+                    if (navigationAnimating) {
                         Box(Modifier.matchParentSize().pointerInput(Unit) {
                             awaitPointerEventScope {
                                 while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
@@ -124,7 +173,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                         })
                     }
                 }
-                BackHandler(enabled = settingsOpen) { settingsOpen = false }
+                BackHandler(enabled = settingsOpen) { navigateSettings(false) }
             }
         }
     }
