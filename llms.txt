@@ -1,82 +1,89 @@
 # ZViewer
 
-> ZViewer is an offline native Android comic reader for local archives (ZIP/CBZ, RAR/CBR, 7Z), PDF, image folders, and video folders, built with Kotlin and Jetpack Compose.
+> ZViewer is an offline native Android comic reader for local archives (ZIP/CBZ, RAR/CBR, 7Z), PDF, image folders, and video folders, built with Kotlin 2.1 and Jetpack Compose (Material 3).
 
-ZViewer (`dev.zolive.zviewer`) targets Android 10+ (minSdk 29, compile/target SDK 36) and ships a universal APK for `arm64-v8a` and `x86_64`. All content is processed on-device: the release manifest requests no network, external-storage, or all-files permissions, and uses a Storage Access Framework (SAF) persistent read grant for a user-selected library folder. The UI and Chinese docs are written in Simplified Chinese. Current version: 1.4.3 (`versionCode 13`). License: MIT.
+Package `dev.zolive.zviewer`, version 1.4.3 (`versionCode 13`), MIT license. Targets Android 10+ (minSdk 29, compile/target SDK 36); the universal APK covers `arm64-v8a` and `x86_64`. Everything runs on-device: the app requests no network or storage permissions and reads only a user-selected library folder through a persisted Storage Access Framework (SAF) grant. UI strings and the Chinese docs are in Simplified Chinese.
 
 ## Features
 
-- Comic sources: ZIP / CBZ, RAR / CBR, 7Z (via libarchive), PDF (via `PdfRenderer`), image folders, and video folders or video-only archives.
-- Static images: JPG, JPEG, PNG, WebP, BMP, HEIF, HEIC, AVIF.
-- Animated images: APNG, animated WebP, GIF, animated AVIF (via APNG4Android + libavif).
-- Library: recursive scan, natural filename sorting (`2.jpg` before `10.jpg`), HD covers, search, reading-status filter, recently read, favorites, 2–5 column grid.
-- Reader: continuous vertical or paged horizontal images with adjacent loop boundaries; smooth finger-following video switching (the settled page and its immediate neighbours each keep a preloaded player, so an incoming video has already rendered its saved-position first frame before it slides in; the current video keeps playing until the page settles; if the outgoing video ends mid-transition it loops); mixed image/video books follow the vertical/horizontal reading setting and show the seek slider only on video pages; a finished video replays from the start when revisited after auto-advancing; per-video positions, pinch and double-tap zoom, toolbar play/pause and seek slider, page/video-number jump, keep screen on; an optional diagnostic log can be written to the default app directory or a user-picked SAF folder. Codec support depends on the device's Media3 / system decoders.
-- Appearance: follow-system / light / dark theme, preset or custom accent color, independent light/dark reading backgrounds.
-- Settings → Preferences → Show file type: off by default; optionally shows the comic format in the top-left corner of covers across Library, Favorites, and Recently Read. Theme, grid columns, and reading mode use the selected background color without checkmarks.
-- Settings → Preferences → Show favorite icon: on by default. Long-press a cover in Library, Favorites, or Recently Read to manage favorites regardless of this setting; all favorite buttons become visible and tapping a cover or its button toggles the favorite. The circular close button, Settings, refresh, system back, or choosing a library folder exits management; search, filters, sorting, and tab switches preserve it.
-- Storage: combined reading files, covers, and video frames trigger background reclamation at ~1.5 GiB, targeting ~1 GiB. Active books and in-flight writes stay protected, so this is a soft threshold. Archives retain full extraction for smooth reading; PDF covers no longer retain an extra full document, and identical effective PDF render widths share a cache file.
+- Library: recursive scan, natural filename sorting (`2.jpg` before `10.jpg`), covers, search, reading-status filter, and Library / Favorites / Recently Read tabs that can be switched by swiping. Long-press a cover to enter favorite management, where tapping a cover or its button toggles the favorite. Search, filters, sorting, and tab switches keep management mode on. The close button, Settings, refresh, system back, or picking a new library folder exits it.
+- Reader: continuous vertical scrolling or horizontal paging, optional right-to-left paging, loop mode (first and last pages adjoin), pinch / double-tap / button zoom from 1× to 5×, page jump, keep screen on, and saved per-page and per-video progress.
+- Video: folders or archives that contain only videos, or a mix of images and videos, open in one pager that follows the vertical/horizontal setting. The seek slider appears only on video pages. Options: loop a single video, or open in preview mode (paused until tapped). Codec support depends on the device's Media3 / system decoders.
+- Settings sections: Appearance (follow-system / light / dark theme, preset or custom accent color), Preferences (2–5 cover columns, show file type [off by default], show favorite icon [on by default]), Reading, Library & Storage (library folder, clear cache, clear reading history), and Diagnostics. Swipe right or use system back to leave Settings.
+- Diagnostic log (optional): written to the app-specific external `logs/` directory by default, or to a SAF folder the user picks.
+- Storage: the reading cache (extracted pages, copied images, PDF renders, covers, video frames) starts LRU reclamation at about 1.5 GiB and trims to about 1 GiB. Books that are open and files still being written are protected, so the limit is soft. Clearing the cache or reading history never touches original files or favorites.
 
 ## Supported Formats
 
 | Kind | Extensions |
 | --- | --- |
-| Archives | `zip`, `cbz`, `rar`, `cbr`, `7z` |
-| Documents | `pdf` |
+| Archives | `zip`, `cbz`, `rar`, `cbr`, `7z` (via libarchive) |
+| Documents | `pdf` (via `PdfRenderer`; library root or plain subfolders only) |
 | Static images | `jpg`, `jpeg`, `png`, `webp`, `bmp`, `heif`, `heic`, `avif` |
-| Animated images | `apng`, animated `webp`, `gif`, animated `avif` |
+| Animated images | `apng`, animated `webp`, `gif`, animated `avif` (via APNG4Android + libavif) |
 | Video | `mp4`, `m4v`, `mkv`, `webm`, `avi`, `mov`, `3gp`, `3g2`, `mpg`, `mpeg`, `ts`, `mts`, `m2ts`, `flv`, `wmv`, `ogv`, `vob`, `rm`, `rmvb` |
 
-Not supported: encrypted or multi-volume archives, password-protected PDFs, DRM content, animated HEIF. Solid 7Z archives require preparing the whole book on first open.
+Not supported: encrypted or multi-volume archives, password-protected PDFs, PDFs inside archives (the user is asked to extract them first), DRM content, animated HEIF. HEIF/HEIC decoding depends on the device. A solid 7Z archive has to be fully prepared on first open.
 
 ## Architecture
 
-- `app/src/main/java/dev/zolive/zviewer/MainActivity.kt` — single Activity, edge-to-edge Compose host.
-- `LibraryViewModel.kt` — app state, SAF folder selection, scan/open jobs, error mapping, settings and progress.
-- `data/PreferenceStore.kt` — SharedPreferences persistence for tree URI, book index JSON, page/video progress, favorites, settings, and the diagnostic-log options.
-- `data/DiagnosticLog.kt` — optional in-app diagnostic logging. When enabled it appends app start, device info, app lifecycle, library scan/open, video prepare/buffering/ready/ended, play-when-ready and is-playing changes, video and surface sizes, first-frame rendering, surface-ownership handovers, playback-gate decisions, the player pool, cover extraction timing, and uncaught exceptions to a per-process `zviewer-<date>-<time>.log`. It defaults to the app-specific external `logs/` directory (no permission) and can be pointed at a user-picked SAF directory such as Download (only that tree's persisted read/write grant is held; no all-files access). Writes are serialized on an IO coroutine and the crash handler flushes synchronously; an unwritable directory falls back to the default one.
-- `data/BookRepository.kt` — `DocumentsContract` bulk queries, background extraction, PDF rendering, video preparation, cover and page caches; enforces safety limits.
-- `data/Models.kt` — `Book`, `BookSession`, media-aware `PageSource`, `ReadingProgress`, `ReaderSettings`, `NaturalOrder`, `ReaderException`.
-- `reader/ImageLoader.kt` — PNG-chunk APNG detection, AVIF via APNG4Android + libavif, other formats via `ImageDecoder`, sampled animation wrapper.
-- `reader/ZoomImageView.kt` — native matrix zoom/pan in an `AndroidView`; unzoomed gestures pass through to Compose lists/pager.
-- `ui/LibraryScreen.kt` — `ZViewerApp` entry, library grid, search/filter, continue-reading card.
-- `reader/ReaderPaging.kt` — virtual loop positions mapped to real page numbers for LazyColumn / HorizontalPager.
-- `reader/ZoomVideoView.kt` — Android gesture detection, zoom/pan, a cached first-frame cover under the Media3 TextureView, and unzoomed drags passed through to the surrounding Compose Pager.
-- `ui/ReaderScreen.kt`, `ui/VideoReader.kt` — image reader and Media3 video playback with shared toolbar visibility, play/pause, a seek slider, and optional diagnostic logging. All video books (pure and mixed) use the same Compose Pager in the user's vertical or horizontal direction: a finger-following drag keeps the settled video playing while the incoming page is already showing its live frame. Players are preloaded for the settled page and its two immediate neighbours (at most three); each neighbour renders its saved-position first frame into its own TextureView while off-screen, so a swipe never creates or destroys a surface mid-gesture and cannot flash. Players are retained while their page stays inside the Pager composition window and released when the page moves two or more positions away (or leaves the composition), so an aborted drag or repeated back-and-forth keeps the same player instance; looping duplicate virtual items are never all given players. Farther pages (including duplicates) are cover-only from a small session-level LRU cover cache. Every video page keeps the same `AndroidView` structure whether or not it currently has a player, so switching cannot flash between a cover view and a player view. Each player has a single owning view: ownership is transferred by detaching the previous view before binding the replacement, stale views cannot clear the live surface, and releasing a transient duplicate falls back to the still-settled view. Playback additionally requires the owning view's TextureView surface to be attached; without it the player pauses until the surface returns. Media3's black shutter is made transparent and the cached cover always sits behind the video, so the cover shows until the opaque first frame covers it without toggling visibility; the buffering spinner only appears on the settled page before its first frame is rendered. `repeatMode` is set only from the single-video-loop / loop-mode settings and never toggled by scrolling or transitions: ExoPlayer re-initializes its decoder output when the repeat mode changes near the end of a clip (video size drops to 0x0 and the first frame is re-rendered), which caused a visible flash; a video that ends mid-transition is replayed from the start by the `onEnded` callback instead. Reactivating an ended player also seeks back to the start and honors the preview setting. Video folders play directly from SAF URIs; video archive members use extracted files. Covers use MediaMetadataRetriever to sample the naturally sorted first video; per-page first-frame covers are cached per session and retried once on failure.
-- `ui/SettingsScreen.kt`, `ui/Theme.kt` — Material 3 settings and theming.
+Source root: `app/src/main/java/dev/zolive/zviewer/`.
 
-Data flow: user picks a folder → SAF persistent read permission → background recursive scan → book index → cover generated on demand → book opened → image pages decoded or video members extracted → visible media played → page/video number and video position saved.
+- `MainActivity.kt`: the single Activity; edge-to-edge Compose host.
+- `LibraryViewModel.kt`: app state, SAF folder selection, scan/open jobs, error mapping, settings, and progress.
+- `data/Models.kt`: `Book`, `BookSession`, media-aware `PageSource`, `ReadingProgress`, `ReaderSettings`, `NaturalOrder`, `ReaderException`.
+- `data/PreferenceStore.kt`: SharedPreferences storage for the tree URI, the book index JSON, page/video progress, favorites, settings, and log options.
+- `data/BookRepository.kt`: bulk `DocumentsContract` queries, background extraction, PDF rendering, video preparation, cover and page caches, and safety limits.
+- `data/ReadingCache.kt`: size accounting and LRU trimming of `books/` and `covers/`, with reference-counted protection for open books.
+- `data/DiagnosticLog.kt`: an optional log, one file per process (`zviewer-<date>-<time>.log`), covering lifecycle, scan/open, video playback and surface events, the player pool, cover timing, and uncaught exceptions. Writes are serialized on an IO coroutine; the crash handler flushes synchronously. If the chosen folder can't be written, it falls back to the default directory.
+- `reader/ImageLoader.kt`: APNG detection from PNG chunks, AVIF via APNG4Android + libavif, all other formats via `ImageDecoder`.
+- `reader/SampledAnimationDrawable.kt`: draws animations at a downsampled target size.
+- `reader/ZoomImageView.kt`, `reader/ZoomVideoView.kt`: native matrix zoom/pan inside an `AndroidView`. Unzoomed gestures pass through to the Compose list or pager. The video view keeps a cached first-frame cover behind the Media3 `TextureView`.
+- `reader/ReaderPaging.kt`: maps virtual loop positions to real page numbers for `LazyColumn` / `HorizontalPager`.
+- `ui/LibraryScreen.kt`: `ZViewerApp` entry point, library tabs and grid, search/filter, continue-reading card, favorite management.
+- `ui/ReaderScreen.kt`: the image reader and its shared toolbar.
+- `ui/VideoReader.kt`: Media3 playback. Details are below.
+- `ui/SettingsScreen.kt`, `ui/Theme.kt`: Material 3 settings (with the swipe-right exit gesture) and theming.
+
+Video playback design (`ui/VideoReader.kt`):
+
+- Player pool: players are preloaded for the settled page and its two neighbours, at most three. Each off-screen neighbour renders its saved-position first frame into its own `TextureView`, so swiping never creates or destroys a surface. A player is released once its page is two or more positions away or leaves the composition, so aborted or back-and-forth drags reuse the same instance. Looping duplicate items never all get players. Pages farther out show only a cover from a session LRU cache.
+- No flashing: every video page has the same `AndroidView` structure with or without a player. The Media3 shutter is transparent and the cover sits behind the video until the first frame paints over it. Each player belongs to exactly one view, and ownership moves by detaching the old view before binding the new one. Playback also requires the owning surface to be attached.
+- `repeatMode` is set only from the loop settings and is never changed during transitions. Changing it near the end of a clip makes ExoPlayer reinitialize its output and flash. Instead, a video that ends mid-transition restarts from the beginning in `onEnded`, and a finished video restarts when the user returns to it.
+- Video folders play directly from SAF URIs. Videos inside archives play from extracted files. Covers come from `MediaMetadataRetriever` using the first video in natural order.
+
+Data flow: the user picks a folder → persisted SAF read grant → background recursive scan → book index → covers generated on demand → a book is opened → images decoded or archive members extracted → visible media shown or played → page / video index and video position saved.
 
 ## Privacy and Security
 
-- No `INTERNET`, external-storage read/write, or `MANAGE_EXTERNAL_STORAGE` permission; no accounts, ads, or telemetry.
-- Only the user-granted directory is read; original comic files are never modified, moved, or deleted.
-- Backups and device-to-device migration are disabled so URI grants do not migrate with app data.
-- Archive members are written to app-generated sequential filenames; hidden files, macOS metadata (`.`, `__MACOSX`), symlinks, and unsupported entries are skipped. Member names are decoded as UTF-8 (`Archive.setCharset` overrides Android's C locale) so Chinese filenames do not raise ARCHIVE_WARN. An archive containing both images and videos opens as a mixed horizontal book. Any readable archive containing a PDF reports that PDFs must be extracted before reading, including mixed archives; parser failures retain the corrupt/archive error path.
-- Safety limits: 20,000 pages per comic, 256 MB per image, 4 GB extracted per book, archive scan recursion depth 32.
+- No `INTERNET`, external-storage, or `MANAGE_EXTERNAL_STORAGE` permission. No accounts, ads, or telemetry.
+- Only the granted directory is read. Original files are never modified, moved, or deleted.
+- Backup and device-to-device transfer are disabled, so URI grants don't move with app data.
+- Archive members are written under generated sequential filenames. Hidden files, `__MACOSX`, symlinks, and unsupported entries are skipped. Member names are decoded as UTF-8 (`Archive.setCharset`) so Chinese names work.
+- Safety limits: 20,000 pages per book, 256 MB per image, 4 GB extracted per book, archive scan depth 32.
 
 ## Build and Test
 
-Requirements: JDK 17, Android SDK 36, network access for dependency download, Gradle 8.11.1 wrapper (bundled).
+Requirements: JDK 17, Android SDK 36, the bundled Gradle 8.11.1 wrapper (AGP 8.10.1), and network access to download dependencies.
 
 ```sh
 export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 export ANDROID_HOME="$HOME/Android"
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
-./gradlew :app:connectedDebugAndroidTest              # device format integration tests
-./gradlew :app:assembleRelease                          # signed release build
+./gradlew :app:connectedDebugAndroidTest   # instrumented tests on an emulator/device
+./gradlew :app:assembleRelease             # signed release build
 ```
 
-- Unit tests: `app/src/test/java/dev/zolive/zviewer/data/NaturalOrderTest.kt` (natural ordering, hidden-file filtering, cache keys, image extensions).
-- Paging tests: `app/src/test/java/dev/zolive/zviewer/reader/ReaderPagingTest.kt` (both loop boundaries, repeated cycles, single-page books, large page counts).
-- Video and gesture regression tests: `VideoIntegrationTest.kt`, `ReaderInteractionTest.kt` in `app/src/androidTest/`; video samples are generated by `python3 tools/generate_video_fixtures.py` using FFmpeg.
-- Instrumented tests: `app/src/androidTest/java/dev/zolive/zviewer/FormatIntegrationTest.kt` covering CBZ/ZIP, RAR4/CBR, RAR5, 7Z, PDF, image folders, HEIF/HEIC/AVIF, animated formats, corrupt/empty archives, path traversal, and a 4800×3200 APNG.
-- Fixtures: generated by `tools/generate_fixtures.py`; `tools/ui_smoke.py` replays most manual UI flows.
-- Release signing: key `.signing/zviewer-release.jks` (alias `zviewer`), passwords from `ZVIEWER_STORE_PASSWORD` / `ZVIEWER_KEY_PASSWORD`; output `app/build/outputs/apk/release/app-release.apk`. Never commit `.signing/`.
-- Distributed APKs live in `dist/` with SHA-256 checksums (e.g. `ZViewer-1.4.3-release.apk`).
+- Unit tests (`app/src/test/`): `NaturalOrderTest` (ordering, hidden files, cache keys, extensions), `ReadingCacheTest` (limits, LRU order, protection of books in use), `ReaderPagingTest` (loop boundaries, single-page and large books).
+- Instrumented tests (`app/src/androidTest/`): `FormatIntegrationTest` (every archive/PDF/image format, corrupt or empty archives, path traversal, large APNG), `VideoIntegrationTest`, `ReaderInteractionTest`, `NavigationInteractionTest` (tab swipes, Settings transitions and swipe exit), `FavoriteManagementTest`, `CacheIntegrationTest`, `DiagnosticLogTest`. SAF access is provided by `FixtureDocumentsProvider`.
+- Fixtures: `tools/generate_fixtures.py` and `tools/generate_video_fixtures.py` (needs FFmpeg) write to `tools/fixtures/`, which is packaged as androidTest assets.
+- Emulator UI smoke scripts (uiautomator2): `tools/ui_smoke.py`, `tools/ui_navigation_smoke.py`, `tools/ui_cache_smoke.py`. `tools/collect_licenses.py` regenerates the open source notices.
+- Release signing: `.signing/zviewer-release.jks` (alias `zviewer`), with passwords from `ZVIEWER_STORE_PASSWORD` / `ZVIEWER_KEY_PASSWORD`. Never commit `.signing/`.
+- Output: development builds go to `app/build/outputs/apk/release/`. Official release APKs and their SHA-256 checksums go to `dist/` (e.g. `ZViewer-1.4.3-release.apk`).
 
 ## Key Dependencies
 
-`androidx.compose:compose-bom:2025.05.01`, `androidx.activity:activity-compose:1.10.1`, `androidx.lifecycle:*:2.9.0`, `androidx.media3:media3-exoplayer:1.6.1` and `:media3-ui:1.6.1`, Kotlin coroutines 1.10.2, `me.zhanghai.android.libarchive:library:1.1.6`, `com.github.penfeizhou.android.animation:apng:3.0.5` and `:avif:3.0.5`, `org.aomedia.avif.android:avif:1.3.0.841110fd`. Android framework gestures and thumbnail extraction use AOSP APIs (Apache 2.0).
+Compose BOM `2025.05.01`, `activity-compose:1.10.1`, `lifecycle:2.9.0`, `core-ktx:1.16.0`, Media3 `exoplayer` / `ui` `1.6.1`, kotlinx-coroutines `1.10.2`, `me.zhanghai.android.libarchive:library:1.1.6`, APNG4Android `apng` / `avif` `3.0.5`, `org.aomedia.avif.android:avif:1.3.0.841110fd`.
 
 ## Docs
 
@@ -90,4 +97,4 @@ export ANDROID_HOME="$HOME/Android"
 ## Optional
 
 - [License (MIT)](LICENSE)
-- [Release APK 1.4.3 and checksum](dist/ZViewer-1.4.3-release.apk.sha256)
+- [Release 1.4.3 checksum](dist/ZViewer-1.4.3-release.apk.sha256)
