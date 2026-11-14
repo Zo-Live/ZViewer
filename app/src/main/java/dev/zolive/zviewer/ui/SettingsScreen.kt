@@ -26,11 +26,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.zolive.zviewer.BuildConfig
 import dev.zolive.zviewer.LibraryState
@@ -79,7 +81,7 @@ fun SettingsScreen(
     }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("外观", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            SettingsSectionTitle("外观", Icons.Outlined.Style, topPadding = 8.dp)
             SettingsCard {
                 Text("应用主题", style = MaterialTheme.typography.titleMedium)
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 12.dp)) {
@@ -103,7 +105,7 @@ fun SettingsScreen(
                     IconButton(onClick = { customColor = true }, Modifier.size(44.dp)) { Icon(Icons.Outlined.Palette, "自定义主题颜色") }
                 }
             }
-            Text("偏好", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            SettingsSectionTitle("偏好", Icons.Outlined.Tune)
             SettingsCard {
                 Text("每行封面数", style = MaterialTheme.typography.titleMedium)
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 12.dp)) {
@@ -120,63 +122,56 @@ fun SettingsScreen(
                     model.settings(settings.copy(showFavoriteIcon = it))
                 }
             }
-            Text("阅读", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            SettingsSectionTitle("阅读", Icons.Outlined.AutoStories)
             SettingsCard { ReaderPreferences(settings, model::settings) }
-            Text("书库与存储", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            SettingsSectionTitle("书库与存储", Icons.Outlined.FolderOpen)
             SettingsCard {
-                ListItem(headlineContent = { Text("书库目录") }, supportingContent = {
+                SettingsListItem(headlineContent = { Text("书库目录") }, supportingContent = {
                     Text(state.treeUri?.let { android.net.Uri.decode(it.substringAfterLast('/')) } ?: "尚未选择")
-                }, leadingContent = { Icon(Icons.Outlined.FolderOpen, null) },
-                    modifier = Modifier.clickable(onClick = onChooseLibrary), colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                },
+                    modifier = Modifier.clickable(onClick = onChooseLibrary))
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
-                ListItem(headlineContent = { Text("清理阅读缓存") }, supportingContent = {
+                SettingsListItem(headlineContent = { Text("清理阅读缓存") }, supportingContent = {
                     Text("${Formatter.formatShortFileSize(context, cacheSize)} · 双击清除临时解压文件" +
                         if (settings.clearCovers) "和封面" else "")
-                }, leadingContent = { Icon(Icons.Outlined.CleaningServices, null) },
-                    modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearCache),
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent))
-                ListItem(headlineContent = { Text("清理封面") },
-                    leadingContent = { Icon(Icons.Outlined.Image, null) },
+                },
+                    modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearCache))
+                SettingsListItem(headlineContent = { Text("清理封面") },
                     trailingContent = { Switch(checked = settings.clearCovers, onCheckedChange = null) },
                     modifier = Modifier.toggleable(value = settings.clearCovers, role = Role.Switch) {
                         model.settings(settings.copy(clearCovers = it))
-                    }, colors = ListItemDefaults.colors(containerColor = Color.Transparent))
-                ListItem(headlineContent = { Text("清理阈值") },
-                    leadingContent = { Icon(Icons.Outlined.Storage, null) },
+                    })
+                SettingsListItem(headlineContent = { Text("清理阈值") },
                     trailingContent = { Text(if (cacheLimitMiB < 1024) "$cacheLimitMiB MiB"
-                        else "${(cacheLimitMiB / 1024f).toString().removeSuffix(".0")} GiB") },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                        else "${(cacheLimitMiB / 1024f).toString().removeSuffix(".0")} GiB") })
                 Slider(value = cacheLimitMiB.toFloat(),
                     onValueChange = { cacheLimitMiB = (it / CacheLimits.STEP_MIB).roundToInt() * CacheLimits.STEP_MIB },
                     onValueChangeFinished = { model.settings(settings.copy(cacheLimitMiB = cacheLimitMiB)) },
                     valueRange = CacheLimits.MIN_MIB.toFloat()..CacheLimits.MAX_MIB.toFloat(),
                     steps = (CacheLimits.MAX_MIB - CacheLimits.MIN_MIB) / CacheLimits.STEP_MIB - 1,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).semantics { contentDescription = "清理阈值" })
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "清理阈值" })
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
-                ListItem(headlineContent = { Text("清除阅读记录") }, supportingContent = {
+                SettingsListItem(headlineContent = { Text("清除阅读记录") }, supportingContent = {
                     Text("双击清除所有漫画的页码和视频播放进度")
-                }, leadingContent = { Icon(Icons.Outlined.History, null) },
-                    modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearReadingProgress),
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                },
+                    modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearReadingProgress))
             }
-            Text("诊断", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+            SettingsSectionTitle("诊断", Icons.Outlined.BugReport)
             SettingsCard {
-                ListItem(headlineContent = { Text("输出诊断日志") }, supportingContent = {
+                SettingsListItem(headlineContent = { Text("输出诊断日志") }, supportingContent = {
                     Text("记录应用运行、视频切换、播放错误与崩溃信息")
-                }, leadingContent = { Icon(Icons.Outlined.BugReport, null) },
+                },
                     trailingContent = {
                         Switch(checked = settings.diagnosticLog,
                             onCheckedChange = { model.settings(settings.copy(diagnosticLog = it)) })
                     },
-                    modifier = Modifier.clickable { model.settings(settings.copy(diagnosticLog = !settings.diagnosticLog)) },
-                    colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                    modifier = Modifier.clickable { model.settings(settings.copy(diagnosticLog = !settings.diagnosticLog)) })
                 if (settings.diagnosticLog) {
                     HorizontalDivider(Modifier.padding(vertical = 6.dp))
-                    ListItem(headlineContent = { Text("日志目录") }, supportingContent = {
+                    SettingsListItem(headlineContent = { Text("日志目录") }, supportingContent = {
                         Text(settings.logDirectory?.let(::logDirectoryLabel) ?: "默认：应用专属目录 logs/")
-                    }, leadingContent = { Icon(Icons.Outlined.FolderOpen, null) },
-                        modifier = Modifier.clickable { logPicker.launch(null) },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                    },
+                        modifier = Modifier.clickable { logPicker.launch(null) })
                     if (settings.logDirectory != null) {
                         TextButton(onClick = { model.setLogDirectory(null) }, Modifier.align(Alignment.End).padding(bottom = 4.dp)) {
                             Text("恢复默认目录")
@@ -216,6 +211,39 @@ fun SettingsScreen(
         AlertDialog(onDismissRequest = { licenses = false }, title = { Text("开源许可") },
             text = { Text(notices, Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall) },
             confirmButton = { TextButton(onClick = { licenses = false }) { Text("关闭") } })
+    }
+}
+
+@Composable
+private fun SettingsSectionTitle(title: String, icon: ImageVector, topPadding: Dp = 12.dp) {
+    Row(Modifier.padding(top = topPadding), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+        Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+@Composable
+private fun SettingsListItem(
+    headlineContent: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    supportingContent: (@Composable () -> Unit)? = null,
+    trailingContent: (@Composable () -> Unit)? = null
+) {
+    // 水平留白由 SettingsCard 统一提供，避免列表项再叠加默认的 16 dp。
+    Row(modifier.fillMaxWidth().semantics(mergeDescendants = true) {}
+        .heightIn(min = if (supportingContent == null) 56.dp else 72.dp).padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            ProvideTextStyle(MaterialTheme.typography.bodyLarge, headlineContent)
+            if (supportingContent != null) {
+                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                    ProvideTextStyle(MaterialTheme.typography.bodyMedium, supportingContent)
+                }
+            }
+        }
+        if (trailingContent != null) {
+            ProvideTextStyle(MaterialTheme.typography.labelSmall, trailingContent)
+        }
     }
 }
 

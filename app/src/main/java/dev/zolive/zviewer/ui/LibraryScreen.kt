@@ -208,20 +208,20 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     var filter by rememberSaveable { mutableIntStateOf(0) }
     var sort by rememberSaveable { mutableIntStateOf(0) }
     var managingFavorites by rememberSaveable { mutableStateOf(false) }
+    val contentInset = 24.dp
+    val actionInset = contentInset - 12.dp
     BackHandler(enabled = active && (managingFavorites || searching)) {
         if (managingFavorites) managingFavorites = false
         else { searching = false; query = "" }
     }
     Scaffold(
         topBar = {
-            TopAppBar(title = {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(9.dp)) {
-                    Icon(Icons.AutoMirrored.Outlined.MenuBook, null, tint = MaterialTheme.colorScheme.primary)
-                    Text("ZViewer", fontWeight = FontWeight.SemiBold, fontSize = 21.sp)
-                }
+            // 顶栏默认标题 / 操作区边距为 16 / 4 dp；图标在 48 dp 点击区内各留 12 dp。
+            TopAppBar(modifier = Modifier.padding(start = contentInset - 16.dp, end = actionInset - 4.dp), title = {
+                Text("ZViewer", fontWeight = FontWeight.SemiBold, fontSize = 21.sp)
             }, actions = {
                 IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(Icons.Outlined.Search, "搜索漫画") }
-                IconButton(onClick = { managingFavorites = false; onSettings() }) { Icon(Icons.Outlined.Tune, "设置") }
+                IconButton(onClick = { managingFavorites = false; onSettings() }) { Icon(Icons.Outlined.Settings, "设置") }
             })
         },
         bottomBar = {
@@ -256,7 +256,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                     slideOutVertically(tween(220, easing = FastOutSlowInEasing)) { -it / 4 } +
                     fadeOut(tween(150))
             ) {
-                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
+                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = contentInset, vertical = 8.dp),
                     placeholder = { Text("搜索书名") }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
                     trailingIcon = { IconButton(onClick = { query = ""; searching = false }) { Icon(Icons.Outlined.Close, "关闭搜索") } },
                     shape = RoundedCornerShape(28.dp), singleLine = true)
@@ -287,7 +287,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                     .then(if (pagerState.currentPage != tab) Modifier.clearAndSetSemantics {} else Modifier)) {
                     if (state.treeUri == null) WelcomeScreen(onChooseLibrary)
                     else {
-                        Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 16.dp, top = 14.dp, bottom = 8.dp),
+                        Row(Modifier.fillMaxWidth().padding(start = contentInset, end = actionInset, top = 14.dp, bottom = 8.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(titles[tab], style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
@@ -305,7 +305,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                                 }
                             }
                         }
-                        Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(Modifier.padding(horizontal = contentInset), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             listOf("全部", "在读", "未读", "已读").forEachIndexed { index, label ->
                                 FilterChip(selected = filter == index, onClick = { filter = index }, label = { Text(label) })
                             }

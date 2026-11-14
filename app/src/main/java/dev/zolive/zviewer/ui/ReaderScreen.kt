@@ -236,17 +236,10 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             }
             AnimatedVisibility(visible = controls, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.TopCenter)) {
                 TopAppBar(title = {
-                    Column {
-                        Text(session.book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                        Text(when {
-                            verticalReading -> if (videoBook) "垂直翻页" else "垂直连续"
-                            settings.rightToLeft -> "水平翻页 · 从右向左"
-                            else -> "水平翻页"
-                        }, style = MaterialTheme.typography.labelSmall)
-                    }
+                    Text(session.book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 }, navigationIcon = {
                     IconButton(onClick = { onProgress(currentPage); onBack() }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回书库") }
-                }, actions = { IconButton(onClick = { preferences = true }) { Icon(Icons.Outlined.Tune, "阅读设置") } },
+                }, actions = { IconButton(onClick = { preferences = true }) { Icon(Icons.Outlined.Settings, "阅读设置") } },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = .97f)))
             }
             AnimatedVisibility(visible = controls, modifier = Modifier.align(Alignment.BottomCenter),
@@ -277,9 +270,6 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                             IconButton(onClick = { zoomPage = currentPage; zoomAction = 1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomIn, if (currentPageIsVideo) "放大视频" else "放大图片") }
                             IconButton(onClick = { jump(currentPage + 1) }, enabled = settings.loopMode || currentPage < session.pages.lastIndex) { Icon(Icons.AutoMirrored.Outlined.NavigateNext, "下一页") }
                         }
-                        Text(if (currentPageIsVideo) "轻点画面收起 · 双击缩放，拖动播放进度条定位" else "轻点画面收起 · 双指缩放，双击缩放图片",
-                            Modifier.align(Alignment.CenterHorizontally).padding(bottom = 2.dp),
-                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
