@@ -41,6 +41,9 @@ import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.CacheLimits
 import kotlin.math.roundToInt
 
+private val SettingsContentInset = 24.dp
+private val SettingsSectionIconSize = 20.dp
+
 @Composable
 fun SettingsScreen(
     state: LibraryState,
@@ -76,10 +79,15 @@ fun SettingsScreen(
             onDragEnd = { latestSwipeEnd() },
             onDragCancel = { latestSwipeCancel() }
         )
-    }, topBar = { TopAppBar(title = { Text("设置") }, navigationIcon = {
-        IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回书库") }
-    }) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
+    }, topBar = {
+        // 顶栏默认边距 4 dp，加上 48 dp 点击区的一半，使返回箭头与分区图标中心对齐。
+        val topBarInset = SettingsContentInset + SettingsSectionIconSize / 2 - 28.dp
+        CenterAlignedTopAppBar(modifier = Modifier.padding(horizontal = topBarInset),
+            title = { Text("设置") }, navigationIcon = {
+                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回书库") }
+            })
+    }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = SettingsContentInset),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             SettingsSectionTitle("外观", Icons.Outlined.Style, topPadding = 8.dp)
             SettingsCard {
@@ -217,7 +225,7 @@ fun SettingsScreen(
 @Composable
 private fun SettingsSectionTitle(title: String, icon: ImageVector, topPadding: Dp = 12.dp) {
     Row(Modifier.padding(top = topPadding), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+        Icon(icon, contentDescription = null, modifier = Modifier.size(SettingsSectionIconSize), tint = MaterialTheme.colorScheme.primary)
         Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
     }
 }
