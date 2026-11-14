@@ -145,6 +145,15 @@ class NavigationInteractionTest {
         rule.onNodeWithContentDescription("关闭搜索").assertDoesNotExist()
     }
 
+    @Test fun swipingRightOnSettingsReturnsToLibrary() {
+        launch()
+        rule.onNodeWithContentDescription("设置").performClick()
+        rule.onNodeWithTag("settings-screen").assertIsDisplayed().performTouchInput { swipeRight() }
+        rule.waitForIdle()
+        rule.onNodeWithTag("library-screen").assertIsDisplayed()
+        rule.onNodeWithTag("settings-screen").assertDoesNotExist()
+    }
+
     @Test fun gridPositionSurvivesTabSwitchSettingsAndRecreation() {
         launch()
         rule.onNodeWithTag("library-grid-0").performTouchInput { swipeUp() }

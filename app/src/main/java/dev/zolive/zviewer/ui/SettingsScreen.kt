@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -24,7 +25,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -40,11 +43,27 @@ fun SettingsScreen(state: LibraryState, model: LibraryViewModel, onBack: () -> U
     var about by remember { mutableStateOf(false) }
     var licenses by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val density = LocalDensity.current
+    val latestOnBack by rememberUpdatedState(onBack)
     val cacheSize by produceState(0L, state.cacheRevision) { value = model.repository.cacheSize() }
     val logPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) model.setLogDirectory(uri)
     }
-    Scaffold(topBar = { TopAppBar(title = { Text("设置") }, navigationIcon = {
+    Scaffold(modifier = Modifier.pointerInput(density) {
+        val swipeThreshold = with(density) { 96.dp.toPx() }
+        var totalDrag = 0f
+        detectHorizontalDragGestures(
+            onHorizontalDrag = { change, dragAmount ->
+                totalDrag += dragAmount
+                change.consume()
+            },
+            onDragEnd = {
+                if (totalDrag >= swipeThreshold) latestOnBack()
+                totalDrag = 0f
+            },
+            onDragCancel = { totalDrag = 0f }
+        )
+    }, topBar = { TopAppBar(title = { Text("设置") }, navigationIcon = {
         IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回书库") }
     }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
