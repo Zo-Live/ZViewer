@@ -1,3 +1,3 @@
-- 开发过程中更新相应文档。必要时才更新 README，不要把 README 当成 changelog 记录每个更新细节
-- 除了单元测试，还需通过 Android Emulator 进行功能测试与端到端测试
-- 开发构建目录为 app/build/outputs/apk/release ，dist 为正式构建目录
+- 开发过程中更新相应文档。README 简洁地说明大体功能，不追求完整反映具体实现，不需要一一讲解用户简单摸索后即可了解的功能。必要时才更新 README，不要当成 Changelog 记录每个更新细节。
+- 除了单元测试，还需通过 Android Emulator 进行功能测试与端到端测试。
+- 开发构建目录为 app/build/outputs/apk/release ，dist 为正式构建目录。

@@ -36,7 +36,7 @@ import kotlin.math.roundToInt
 
 class BookRepository(private val context: Context) : Closeable {
     private val resolver = context.contentResolver
-    private val readingCache = ReadingCache(context.cacheDir)
+    private val readingCache = ReadingCache(context.cacheDir, context.filesDir)
     private val cache = readingCache.books
     private val covers = readingCache.covers
     private val frames = File(covers, "frames").apply { mkdirs() }
@@ -91,7 +91,7 @@ class BookRepository(private val context: Context) : Closeable {
         } ?: throw ReaderException("无法读取目录，请重新选择书库并允许访问。")
     }
 
-    suspend fun scan(treeUri: Uri): List<Book> = withContext(Dispatchers.IO) {
+    suspend fun scan(treeUri: Uri, previousBooks: List<Book> = emptyList()): List<Book> = withContext(Dispatchers.IO) {
         val root = DocumentsContract.buildDocumentUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri))
         val rootName = resolver.query(root, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
             ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "图片集"
@@ -109,7 +109,10 @@ class BookRepository(private val context: Context) : Closeable {
                     else -> "folder"
                 }
                 books += Book(uri.toString().stableId(), uri.toString(), name, kind,
-                    (images + videos).maxOf { it.modified }, (images + videos).sumOf { it.size })
+                    (images + videos).maxOf { it.modified }, (images + videos).sumOf { it.size },
+                    (images + videos).sortedBy { it.uri.toString() }.joinToString("\n") {
+                        "${it.uri}\u0000${it.name}\u0000${it.modified}\u0000${it.size}"
+                    }.stableId())
             }
             for (entry in entries) {
                 currentCoroutineContext().ensureActive()
@@ -124,6 +127,16 @@ class BookRepository(private val context: Context) : Closeable {
             }
         }
         visit(root, rootName, 0)
+        currentCoroutineContext().ensureActive()
+        // 只有整次扫描成功后才删除变更或移除书目的旧缓存，权限失败与取消不代表文件被删除。
+        val currentById = books.associateBy { it.id }
+        val upgradedKeys = previousBooks.mapNotNull { previous ->
+            val current = currentById[previous.id] ?: return@mapNotNull null
+            if (previous.contentSignature.isEmpty() && current.contentSignature.isNotEmpty() &&
+                previous.modified == current.modified && previous.size == current.size && previous.kind == current.kind)
+                previous.cacheKey to current.cacheKey else null
+        }.toMap()
+        readingCache.reconcile(previousBooks.map { it.cacheKey }.toSet(), books.map { it.cacheKey }.toSet(), upgradedKeys)
         books.sortedWith { first, second -> NaturalOrder.compare(first.title, second.title) }
     }
 
@@ -231,14 +244,11 @@ class BookRepository(private val context: Context) : Closeable {
 
     suspend fun cover(book: Book): File = withBookCache(book) {
         val cover = File(covers, "${book.cacheKey}.jpg")
-        if (cover.isFile) {
-            cover.setLastModified(System.currentTimeMillis())
-            return@withBookCache cover
-        }
+        if (cover.isFile) return@withBookCache cover
         coverLocks.getOrPut(book.cacheKey) { Mutex() }.withLock {
             coverSlots.withPermit {
                 if (cover.isFile) return@withPermit cover
-                val scratch = File(covers, "${book.cacheKey}.source")
+                val scratch = File(readingCache.temporaryCovers, "${book.cacheKey}.source")
                 try {
                     val bitmap = when (book.kind) {
                         "folder" -> {

@@ -44,6 +44,7 @@ class NaturalOrderTest {
         val book = Book("book", "content://book", "漫画", "cbz", 1, 20)
         assertNotEquals(book.cacheKey, book.copy(modified = 2).cacheKey)
         assertNotEquals(book.cacheKey, book.copy(size = 30).cacheKey)
+        assertNotEquals(book.cacheKey, book.copy(contentSignature = "目录成员已变化").cacheKey)
         assertEquals(book.cacheKey, book.copy(title = "新书名").cacheKey)
     }
 }

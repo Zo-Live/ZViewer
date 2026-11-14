@@ -72,7 +72,8 @@ class PreferenceStore(context: Context) {
         (0 until entries.length()).map { index ->
             val book = entries.getJSONObject(index)
             Book(book.getString("id"), book.getString("uri"), book.getString("title"),
-                book.getString("kind"), book.getLong("modified"), book.getLong("size"))
+                book.getString("kind"), book.getLong("modified"), book.getLong("size"),
+                book.optString("contentSignature"))
         }
     }.getOrDefault(emptyList())
 
@@ -80,7 +81,8 @@ class PreferenceStore(context: Context) {
         val entries = JSONArray()
         books.forEach { book ->
             entries.put(JSONObject().put("id", book.id).put("uri", book.uri).put("title", book.title)
-                .put("kind", book.kind).put("modified", book.modified).put("size", book.size))
+                .put("kind", book.kind).put("modified", book.modified).put("size", book.size)
+                .put("contentSignature", book.contentSignature))
         }
         preferences.edit().putString("books", entries.toString()).apply()
     }

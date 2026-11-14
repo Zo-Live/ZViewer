@@ -75,7 +75,7 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
             mutable.update { it.copy(scanning = true) }
             try {
                 DiagnosticLog.log("Library", "开始扫描书库")
-                val books = repository.scan(Uri.parse(uri))
+                val books = repository.scan(Uri.parse(uri), store.readLibrary())
                 store.saveLibrary(books)
                 mutable.update { it.copy(books = books, error = null) }
                 refreshProgress()

@@ -1,11 +1,14 @@
 package dev.zolive.zviewer
 
 import android.graphics.BitmapFactory
+import android.net.Uri
+import android.os.Bundle
 import android.provider.DocumentsContract
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
+import dev.zolive.zviewer.data.PreferenceStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
@@ -34,7 +37,8 @@ class CacheIntegrationTest {
         repository.close()
     }
 
-    private fun sparse(path: String, bytes: Long): File = File(context.cacheDir, path).apply {
+    private fun sparse(path: String, bytes: Long): File = File(
+        if (path.startsWith("covers/")) context.filesDir else context.cacheDir, path).apply {
         parentFile!!.mkdirs()
         RandomAccessFile(this, "rw").use { it.setLength(bytes) }
         setLastModified(1)
@@ -66,15 +70,108 @@ class CacheIntegrationTest {
         assertTrue(repository.cacheSize() < limit)
     }
 
-    @Test fun coverAndVideoFrameBytesTriggerAutomaticReclamation() = runBlocking {
+    @Test fun coverAndVideoFrameBytesTriggerReclamationButAreNeverEvicted() = runBlocking {
         val book = repository.scan(tree).first { it.kind == "folder" }
         val cover = sparse("covers/old.jpg", limit / 2)
         val frame = sparse("covers/frames/old-0.jpg", limit / 2)
-        repository.cover(book)
-        withTimeout(10_000) { while (repository.cacheSize() >= limit) delay(50) }
-        assertFalse(cover.exists() && frame.exists())
-        assertTrue(File(context.cacheDir, "covers/${book.cacheKey}.jpg").isFile)
+        val pages = sparse("books/old/page.bin", 1024)
+        val generated = repository.cover(book)
+        withTimeout(10_000) { while (pages.exists()) delay(50) }
+        assertTrue(cover.isFile)
+        assertTrue(frame.isFile)
+        assertTrue(generated.isFile)
+        assertTrue(repository.cacheSize() >= limit)
     }
+
+    @Test fun agedCoverAndVideoFrameSurviveRestartAndSystemCacheDeletion() = runBlocking {
+        val formats = DocumentsContract.buildTreeDocumentUri("dev.zolive.zviewer.test.documents", "root/formats/video-folder")
+        val book = repository.scan(formats).single()
+        val cover = repository.cover(book)
+        val session = repository.open(book).also { sessions += it }
+        val frame = repository.videoFrame(session, 0)!!
+        repository.close(session)
+        val coverBytes = cover.readBytes()
+        val frameBytes = frame.readBytes()
+        assertTrue(cover.setLastModified(1000))
+        assertTrue(frame.setLastModified(1000))
+        repository.close()
+        context.cacheDir.deleteRecursively()
+        BookRepository(context).use { restarted ->
+            restarted.trimCache()
+            val scanned = restarted.scan(formats, listOf(book)).single()
+            assertEquals(book.cacheKey, scanned.cacheKey)
+            assertArrayEquals(coverBytes, restarted.cover(scanned).readBytes())
+            assertEquals(1000L, cover.lastModified())
+            val reopened = restarted.open(scanned)
+            try {
+                assertArrayEquals(frameBytes, restarted.videoFrame(reopened, 0)!!.readBytes())
+                assertEquals(1000L, frame.lastModified())
+            } finally { restarted.close(reopened) }
+        }
+    }
+
+    @Test fun changedFileRebuildsOnlyItsCoverAndManualClearRemovesAllCovers() = runBlocking {
+        val previous = repository.scan(tree)
+        val book = previous.first { it.kind == "cbz" }
+        val other = previous.first { it.kind == "pdf" }
+        val oldCover = repository.cover(book)
+        val unchanged = repository.cover(other)
+        assertTrue(unchanged.setLastModified(1000))
+        val id = DocumentsContract.getDocumentId(Uri.parse(book.uri))
+        val oldModified = change("setModified", id, Bundle().apply { putLong("modified", book.modified + 60_000) })!!.getLong("previous")
+        try {
+            val current = repository.scan(tree, previous)
+            assertFalse(oldCover.exists())
+            assertEquals(unchanged, repository.cover(current.first { it.id == other.id }))
+            assertEquals(1000L, unchanged.lastModified())
+            val regenerated = repository.cover(current.first { it.id == book.id })
+            assertNotEquals(oldCover, regenerated)
+            assertNotNull(BitmapFactory.decodeFile(regenerated.absolutePath).also { it?.recycle() })
+            repository.clearCache()
+            assertFalse(regenerated.exists())
+            assertFalse(unchanged.exists())
+            assertTrue(repository.cover(current.first { it.id == book.id }).isFile)
+        } finally { change("setModified", id, Bundle().apply { putLong("modified", oldModified) }) }
+    }
+
+    @Test fun folderRenameInvalidatesCoverEvenWhenTotalSizeAndLatestModificationAreUnchanged() = runBlocking {
+        val previous = repository.scan(tree)
+        val book = previous.first { it.kind == "folder" }
+        val session = repository.open(book).also { sessions += it }
+        val id = DocumentsContract.getDocumentId(Uri.parse(session.pages.first().uri))
+        repository.close(session)
+        val cover = repository.cover(book)
+        val changedId = change("rename", id, Bundle().apply { putString("name", "cache-test-last.png") })!!.getString("documentId")!!
+        try {
+            val current = repository.scan(tree, previous)
+            val changed = current.first { it.id == book.id }
+            assertEquals(book.modified, changed.modified)
+            assertEquals(book.size, changed.size)
+            assertNotEquals(book.cacheKey, changed.cacheKey)
+            assertFalse(cover.exists())
+            assertTrue(repository.cover(changed).isFile)
+            val preferences = PreferenceStore(context)
+            val saved = preferences.readLibrary()
+            try {
+                preferences.saveLibrary(current)
+                assertEquals(current, preferences.readLibrary())
+            } finally { preferences.saveLibrary(saved) }
+        } finally { change("rename", changedId, Bundle().apply { putString("name", id.substringAfterLast('/')) }) }
+    }
+
+    @Test fun failedScanDoesNotRemoveCoversFromPreviousLibrary() = runBlocking {
+        val previous = repository.scan(tree)
+        val cover = repository.cover(previous.first { it.kind == "cbz" })
+        val folder = previous.first { it.kind == "folder" }
+        change("failChildren", DocumentsContract.getDocumentId(Uri.parse(folder.uri)))
+        try {
+            assertTrue(runCatching { repository.scan(tree, previous) }.isFailure)
+            assertTrue(cover.isFile)
+        } finally { change("failChildren", null) }
+    }
+
+    private fun change(method: String, id: String?, extras: Bundle? = null): Bundle? =
+        context.contentResolver.call("dev.zolive.zviewer.test.documents", method, id, extras)
 
     @Test fun pdfCoverDoesNotLeaveFullDocumentCopy() = runBlocking {
         val book = repository.scan(tree).first { it.kind == "pdf" }

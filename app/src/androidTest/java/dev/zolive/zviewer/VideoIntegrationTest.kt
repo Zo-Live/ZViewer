@@ -25,7 +25,7 @@ class VideoIntegrationTest {
 
     @Test fun folderAndArchiveCoversUseFirstVideoInNaturalOrder() = runBlocking {
         for (book in listOf(book("video-folder", "video-folder"), book("videos.zip", "zip"))) {
-            File(context.cacheDir, "covers/${book.cacheKey}.jpg").delete()
+            File(context.filesDir, "covers/${book.cacheKey}.jpg").delete()
             val cover = repository.cover(book)
             val bitmap = BitmapFactory.decodeFile(cover.absolutePath)
             assertNotNull(bitmap)

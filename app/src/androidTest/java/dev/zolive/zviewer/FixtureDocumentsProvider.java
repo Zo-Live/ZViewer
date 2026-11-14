@@ -3,6 +3,7 @@ package dev.zolive.zviewer;
 import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.os.CancellationSignal;
+import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
 import android.content.ContentProvider;
@@ -16,6 +17,7 @@ import java.io.InputStream;
 
 public class FixtureDocumentsProvider extends ContentProvider {
     private File base;
+    private String failingChildren;
     private static final String[] DOCUMENT_COLUMNS = {
         DocumentsContract.Document.COLUMN_DOCUMENT_ID,
         DocumentsContract.Document.COLUMN_DISPLAY_NAME,
@@ -119,10 +121,33 @@ public class FixtureDocumentsProvider extends ContentProvider {
     }
 
     public Cursor queryChildDocuments(String parentDocumentId, String[] projection, String sortOrder) throws FileNotFoundException {
+        if (parentDocumentId.equals(failingChildren)) throw new FileNotFoundException("模拟目录暂时不可用");
         MatrixCursor cursor = new MatrixCursor(projection != null ? projection : DOCUMENT_COLUMNS);
         File[] children = file(parentDocumentId).listFiles();
         if (children != null) for (File child : children) addDocument(cursor, parentDocumentId + "/" + child.getName());
         return cursor;
+    }
+
+    // 仅测试 APK 提供：模拟真实文件变更及扫描中途失败，测试结束后由调用方恢复。
+    @Override public Bundle call(String method, String arg, Bundle extras) {
+        Bundle result = new Bundle();
+        if ("failChildren".equals(method)) {
+            failingChildren = arg;
+            return result;
+        }
+        try {
+            File source = file(arg);
+            if ("setModified".equals(method)) {
+                result.putLong("previous", source.lastModified());
+                if (!source.setLastModified(extras.getLong("modified"))) throw new IllegalStateException("修改时间失败");
+            } else if ("rename".equals(method)) {
+                String name = extras.getString("name");
+                if (name == null || name.contains("/") || name.equals("..")) throw new IllegalArgumentException("非法文件名");
+                if (!source.renameTo(new File(source.getParentFile(), name))) throw new IllegalStateException("改名失败");
+                result.putString("documentId", arg.substring(0, arg.lastIndexOf('/') + 1) + name);
+            } else return super.call(method, arg, extras);
+        } catch (FileNotFoundException error) { throw new IllegalStateException(error); }
+        return result;
     }
 
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
