@@ -36,6 +36,7 @@ import kotlin.math.roundToInt
 
 class BookRepository(private val context: Context) : Closeable {
     private val resolver = context.contentResolver
+    private val preferences = PreferenceStore(context)
     private val readingCache = ReadingCache(context.cacheDir, context.filesDir)
     private val cache = readingCache.books
     private val covers = readingCache.covers
@@ -513,12 +514,13 @@ class BookRepository(private val context: Context) : Closeable {
         readingCache.size()
     }
 
-    suspend fun clearCache() = withContext(Dispatchers.IO) {
-        readingCache.clear()
+    suspend fun clearCache(includeCovers: Boolean = false) = withContext(Dispatchers.IO) {
+        readingCache.clear(includeCovers)
     }
 
     suspend fun trimCache(protectedKey: String? = null) = withContext(Dispatchers.IO) {
-        val reclaimed = readingCache.trim(protectedKey)
+        val limit = CacheLimits.bytes(preferences.settings().cacheLimitMiB)
+        val reclaimed = readingCache.trim(protectedKey, limit = limit, target = limit * 2 / 3)
         if (reclaimed > 0) DiagnosticLog.log("Cache", "自动回收 $reclaimed 字节阅读缓存")
     }
 }

@@ -95,12 +95,12 @@ class ReadingCacheTest {
         val active = file("books/active/page.png", 100, 1)
         val old = file("covers/old.jpg", 100, 1)
         val lease = cache.acquire("active")
-        cache.clear()
+        cache.clear(includeCovers = true)
         assertTrue(original.isFile)
         assertTrue(active.isFile)
         assertFalse(old.exists())
         lease.close()
-        cache.clear()
+        cache.clear(includeCovers = true)
         assertFalse(active.exists())
         assertTrue(original.isFile)
     }
@@ -115,6 +115,35 @@ class ReadingCacheTest {
         assertFalse(page.exists())
         assertFalse(interrupted.exists())
         assertEquals(160L, cache.size())
+    }
+
+    @Test fun manualClearPreservesCoversByDefaultAndIncludesThemOnlyWhenEnabled() {
+        val cache = ReadingCache(root, persistentRoot)
+        val cover = file("covers/book.jpg", 20, 1)
+        val frame = file("covers/frames/book-0.jpg", 20, 1)
+        val page = file("books/book/page.png", 20, 1)
+        val temporary = file("covers/book.tmp", 20, 1)
+        cache.clear()
+        assertFalse(page.exists())
+        assertFalse(temporary.exists())
+        assertTrue(cover.isFile)
+        assertTrue(frame.isFile)
+        cache.clear(includeCovers = true)
+        assertFalse(cover.exists())
+        assertFalse(frame.exists())
+    }
+
+    @Test fun changingThresholdUsesNewLimitAndTargetWithoutEvictingCovers() {
+        val cache = ReadingCache(root, persistentRoot)
+        val cover = file("covers/book.jpg", 20, 1)
+        val old = file("books/old/page.png", 80, 2)
+        val recent = file("books/recent/page.png", 80, 3)
+        assertEquals(0L, cache.trim(limit = 300, target = 200))
+        assertEquals(80L, cache.trim(limit = 150, target = 100))
+        assertTrue(cover.isFile)
+        assertFalse(old.exists())
+        assertTrue(recent.isFile)
+        assertEquals(100L, cache.size())
     }
 
     @Test fun legacyCoversAndFramesMigrateWithoutRegenerationAndSurviveSystemCacheDeletion() {

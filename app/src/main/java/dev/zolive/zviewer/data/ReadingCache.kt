@@ -94,7 +94,8 @@ internal class ReadingCache(
         }
     }
 
-    @Synchronized fun trim(protectedKey: String? = null): Long {
+    @Synchronized fun trim(protectedKey: String? = null, limit: Long = this.limit, target: Long = this.target): Long {
+        require(target in 0 until limit)
         val entries = entries()
         var total = entries.sumOf { it.bytes }
         if (total < limit) return 0
@@ -108,9 +109,9 @@ internal class ReadingCache(
         return before - total
     }
 
-    @Synchronized fun clear() {
+    @Synchronized fun clear(includeCovers: Boolean = false) {
         for (entry in entries()) {
-            if (entry.key !in users) entry.file.deleteRecursively()
+            if (entry.key !in users && (includeCovers || !entry.completedCover)) entry.file.deleteRecursively()
         }
         books.mkdirs()
         covers.mkdirs()

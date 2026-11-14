@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -28,12 +29,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.zolive.zviewer.BuildConfig
 import dev.zolive.zviewer.LibraryState
 import dev.zolive.zviewer.LibraryViewModel
 import dev.zolive.zviewer.data.ReaderSettings
+import dev.zolive.zviewer.data.CacheLimits
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(
@@ -50,6 +54,7 @@ fun SettingsScreen(
     var customColor by remember { mutableStateOf(false) }
     var about by remember { mutableStateOf(false) }
     var licenses by remember { mutableStateOf(false) }
+    var cacheLimitMiB by remember(settings.cacheLimitMiB) { mutableIntStateOf(settings.cacheLimitMiB) }
     val context = LocalContext.current
     val latestSwipeStart by rememberUpdatedState(onSwipeStart)
     val latestSwipe by rememberUpdatedState(onSwipe)
@@ -125,10 +130,28 @@ fun SettingsScreen(
                     modifier = Modifier.clickable(onClick = onChooseLibrary), colors = ListItemDefaults.colors(containerColor = Color.Transparent))
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 ListItem(headlineContent = { Text("清理阅读缓存") }, supportingContent = {
-                    Text("${Formatter.formatShortFileSize(context, cacheSize)} · 双击清除临时解压文件和封面")
+                    Text("${Formatter.formatShortFileSize(context, cacheSize)} · 双击清除临时解压文件" +
+                        if (settings.clearCovers) "和封面" else "")
                 }, leadingContent = { Icon(Icons.Outlined.CleaningServices, null) },
                     modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearCache),
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                ListItem(headlineContent = { Text("清理封面") },
+                    leadingContent = { Icon(Icons.Outlined.Image, null) },
+                    trailingContent = { Switch(checked = settings.clearCovers, onCheckedChange = null) },
+                    modifier = Modifier.toggleable(value = settings.clearCovers, role = Role.Switch) {
+                        model.settings(settings.copy(clearCovers = it))
+                    }, colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                ListItem(headlineContent = { Text("清理阈值") },
+                    leadingContent = { Icon(Icons.Outlined.Storage, null) },
+                    trailingContent = { Text(if (cacheLimitMiB < 1024) "$cacheLimitMiB MiB"
+                        else "${(cacheLimitMiB / 1024f).toString().removeSuffix(".0")} GiB") },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent))
+                Slider(value = cacheLimitMiB.toFloat(),
+                    onValueChange = { cacheLimitMiB = (it / CacheLimits.STEP_MIB).roundToInt() * CacheLimits.STEP_MIB },
+                    onValueChangeFinished = { model.settings(settings.copy(cacheLimitMiB = cacheLimitMiB)) },
+                    valueRange = CacheLimits.MIN_MIB.toFloat()..CacheLimits.MAX_MIB.toFloat(),
+                    steps = (CacheLimits.MAX_MIB - CacheLimits.MIN_MIB) / CacheLimits.STEP_MIB - 1,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).semantics { contentDescription = "清理阈值" })
                 HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 ListItem(headlineContent = { Text("清除阅读记录") }, supportingContent = {
                     Text("双击清除所有漫画的页码和视频播放进度")

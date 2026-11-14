@@ -138,9 +138,14 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun settings(settings: ReaderSettings) {
+        val previousLimit = mutable.value.settings.cacheLimitMiB
         store.saveSettings(settings)
         mutable.update { it.copy(settings = settings) }
         DiagnosticLog.configure(getApplication(), settings.diagnosticLog, settings.logDirectory)
+        if (previousLimit != settings.cacheLimitMiB) viewModelScope.launch {
+            repository.trimCache()
+            mutable.update { it.copy(cacheRevision = it.cacheRevision + 1) }
+        }
     }
 
     fun setLogDirectory(uri: Uri?) {
@@ -171,9 +176,10 @@ class LibraryViewModel(application: Application) : AndroidViewModel(application)
 
     fun clearCache() {
         if (mutable.value.session != null || mutable.value.opening != null) return
+        val includeCovers = mutable.value.settings.clearCovers
         viewModelScope.launch {
             try {
-                repository.clearCache()
+                repository.clearCache(includeCovers)
                 mutable.update { it.copy(cacheRevision = it.cacheRevision + 1) }
             } catch (error: Exception) { showError(error) }
         }

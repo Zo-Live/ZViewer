@@ -25,6 +25,8 @@ class PreferenceStore(context: Context) {
         loopMode = preferences.getBoolean("loop_mode", false),
         diagnosticLog = preferences.getBoolean("diagnostic_log", false),
         logDirectory = preferences.getString("log_directory", null),
+        clearCovers = preferences.getBoolean("clear_covers", false),
+        cacheLimitMiB = CacheLimits.normalize(preferences.getInt("cache_limit_mib", CacheLimits.DEFAULT_MIB)),
     )
 
     fun saveSettings(settings: ReaderSettings) {
@@ -38,7 +40,9 @@ class PreferenceStore(context: Context) {
             .putBoolean("video_preview", settings.videoPreview)
             .putBoolean("loop_mode", settings.loopMode)
             .putBoolean("diagnostic_log", settings.diagnosticLog)
-            .putString("log_directory", settings.logDirectory).apply()
+            .putString("log_directory", settings.logDirectory)
+            .putBoolean("clear_covers", settings.clearCovers)
+            .putInt("cache_limit_mib", CacheLimits.normalize(settings.cacheLimitMiB)).apply()
     }
 
     fun progress(bookId: String): ReadingProgress = ReadingProgress(

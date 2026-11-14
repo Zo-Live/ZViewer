@@ -29,11 +29,15 @@ class CacheIntegrationTest {
     private val sessions = mutableListOf<BookSession>()
     private val limit = 1536L * 1024 * 1024
 
-    @Before fun clear() = runBlocking { repository.clearCache() }
+    @Before fun clear() = runBlocking {
+        val store = PreferenceStore(context)
+        store.saveSettings(store.settings().copy(cacheLimitMiB = 1536))
+        repository.clearCache(includeCovers = true)
+    }
 
     @After fun finish() = runBlocking {
         sessions.forEach { repository.close(it) }
-        repository.clearCache()
+        repository.clearCache(includeCovers = true)
         repository.close()
     }
 
@@ -127,7 +131,7 @@ class CacheIntegrationTest {
             val regenerated = repository.cover(current.first { it.id == book.id })
             assertNotEquals(oldCover, regenerated)
             assertNotNull(BitmapFactory.decodeFile(regenerated.absolutePath).also { it?.recycle() })
-            repository.clearCache()
+            repository.clearCache(includeCovers = true)
             assertFalse(regenerated.exists())
             assertFalse(unchanged.exists())
             assertTrue(repository.cover(current.first { it.id == book.id }).isFile)
