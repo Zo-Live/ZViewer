@@ -7,6 +7,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Animatable
@@ -240,7 +247,15 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             if (state.scanning) LinearProgressIndicator(Modifier.fillMaxWidth())
-            if (searching) {
+            AnimatedVisibility(
+                visible = searching,
+                enter = expandVertically(tween(280, easing = FastOutSlowInEasing), expandFrom = Alignment.Top) +
+                    slideInVertically(tween(280, easing = FastOutSlowInEasing)) { -it / 4 } +
+                    fadeIn(tween(180)),
+                exit = shrinkVertically(tween(220, easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) +
+                    slideOutVertically(tween(220, easing = FastOutSlowInEasing)) { -it / 4 } +
+                    fadeOut(tween(150))
+            ) {
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
                     placeholder = { Text("搜索书名") }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
                     trailingIcon = { IconButton(onClick = { query = ""; searching = false }) { Icon(Icons.Outlined.Close, "关闭搜索") } },

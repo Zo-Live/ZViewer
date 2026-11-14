@@ -145,6 +145,74 @@ class NavigationInteractionTest {
         rule.onNodeWithContentDescription("关闭搜索").assertDoesNotExist()
     }
 
+    @Test fun searchMovesContentSmoothlyOnEveryTab() {
+        launch()
+        rule.onNodeWithTag("library-grid-0").performScrollToIndex(4)
+        listOf("书库", "收藏", "最近阅读").forEachIndexed { index, title ->
+            tab(title).performClick()
+            val pager = rule.onNodeWithTag("library-pager")
+            val grid = rule.onNodeWithTag("library-grid-$index")
+            val original = pager.fetchSemanticsNode().boundsInRoot
+            val scroll = grid.fetchSemanticsNode()
+                .config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange].value()
+            rule.mainClock.autoAdvance = false
+            rule.onNodeWithContentDescription("搜索漫画").performClick()
+            rule.mainClock.advanceTimeBy(96)
+            val entering = pager.fetchSemanticsNode().boundsInRoot
+            rule.mainClock.advanceTimeBy(80)
+            val expanding = pager.fetchSemanticsNode().boundsInRoot
+            rule.mainClock.advanceTimeBy(300)
+            val expanded = pager.fetchSemanticsNode().boundsInRoot
+            assertTrue(entering.top > original.top)
+            assertTrue(expanding.top > entering.top)
+            assertTrue(expanded.top > expanding.top)
+            assertEquals(original.bottom, expanded.bottom, 1f)
+            rule.onNodeWithContentDescription("关闭搜索").assertIsDisplayed().performClick()
+            rule.mainClock.advanceTimeBy(64)
+            val leaving = pager.fetchSemanticsNode().boundsInRoot
+            rule.mainClock.advanceTimeBy(64)
+            val collapsing = pager.fetchSemanticsNode().boundsInRoot
+            assertTrue(leaving.top < expanded.top)
+            assertTrue(collapsing.top < leaving.top && collapsing.top > original.top)
+            rule.mainClock.advanceTimeBy(300)
+            rule.mainClock.autoAdvance = true
+            assertEquals(original, pager.fetchSemanticsNode().boundsInRoot)
+            assertEquals(scroll, grid.fetchSemanticsNode()
+                .config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange].value(), .01f)
+            rule.onNodeWithContentDescription("关闭搜索").assertDoesNotExist()
+            tab(title).assertIsSelected()
+        }
+    }
+
+    @Test fun searchTransitionCanReverseAndBackClearsQuery() {
+        launch()
+        val pager = rule.onNodeWithTag("library-pager")
+        val original = pager.fetchSemanticsNode().boundsInRoot
+        rule.mainClock.autoAdvance = false
+        rule.onNodeWithContentDescription("搜索漫画").performClick()
+        rule.mainClock.advanceTimeBy(96)
+        assertTrue(pager.fetchSemanticsNode().boundsInRoot.top > original.top)
+        rule.onNodeWithContentDescription("搜索漫画").performClick()
+        rule.mainClock.advanceTimeBy(32)
+        rule.onNodeWithContentDescription("搜索漫画").performClick()
+        rule.mainClock.advanceTimeBy(400)
+        rule.onNodeWithContentDescription("关闭搜索").assertIsDisplayed()
+        rule.onNode(hasSetTextAction()).performTextReplacement("搜索动效验收_无匹配")
+        rule.mainClock.advanceTimeByFrame()
+        rule.onNodeWithText("没有符合条件的漫画").assertIsDisplayed()
+        systemBack()
+        rule.mainClock.advanceTimeBy(64)
+        assertTrue(pager.fetchSemanticsNode().boundsInRoot.top > original.top)
+        rule.mainClock.advanceTimeBy(300)
+        rule.mainClock.autoAdvance = true
+        assertEquals(original, pager.fetchSemanticsNode().boundsInRoot)
+        rule.onNodeWithContentDescription("关闭搜索").assertDoesNotExist()
+        rule.onNodeWithContentDescription("搜索漫画").performClick()
+        rule.onNode(hasSetTextAction()).assert(SemanticsMatcher.expectValue(
+            androidx.compose.ui.semantics.SemanticsProperties.EditableText,
+            androidx.compose.ui.text.AnnotatedString("")))
+    }
+
     @Test fun swipingRightOnSettingsReturnsToLibrary() {
         launch()
         rule.onNodeWithContentDescription("设置").performClick()
