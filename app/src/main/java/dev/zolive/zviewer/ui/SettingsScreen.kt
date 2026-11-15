@@ -141,7 +141,6 @@ fun SettingsScreen(
                     Text(state.treeUri?.let { android.net.Uri.decode(it.substringAfterLast('/')) } ?: "尚未选择")
                 },
                     modifier = Modifier.clickable(onClick = onChooseLibrary))
-                HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 SettingsListItem(headlineContent = { Text("清理阅读缓存") }, supportingContent = {
                     Text("${Formatter.formatShortFileSize(context, cacheSize)} · 双击清除临时解压文件" +
                         if (settings.clearCovers) "和封面" else "")
@@ -161,7 +160,6 @@ fun SettingsScreen(
                     valueRange = CacheLimits.MIN_MIB.toFloat()..CacheLimits.MAX_MIB.toFloat(),
                     steps = (CacheLimits.MAX_MIB - CacheLimits.MIN_MIB) / CacheLimits.STEP_MIB - 1,
                     modifier = Modifier.fillMaxWidth().semantics { contentDescription = "清理阈值" })
-                HorizontalDivider(Modifier.padding(vertical = 6.dp))
                 SettingsListItem(headlineContent = { Text("清除阅读记录") }, supportingContent = {
                     Text("双击清除所有漫画的页码和视频播放进度")
                 },
