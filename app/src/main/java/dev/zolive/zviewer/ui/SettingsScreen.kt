@@ -272,7 +272,7 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
             shape = SegmentedButtonDefaults.itemShape(1, 2), icon = {}) { Text("水平翻页") }
     }
     PreferenceSwitch("深色阅读背景", "关闭后使用浅色画布，与应用主题独立", settings.readerDark) { onSettings(settings.copy(readerDark = it)) }
-    PreferenceSwitch("从右向左翻页", "适用于日漫的水平阅读模式", settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }
+    PreferenceSwitch("从右向左翻页", "适用于右开本的水平阅读模式", settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }
     PreferenceSwitch("阅读时屏幕常亮", "离开阅读器后恢复系统设置", settings.keepScreenOn) { onSettings(settings.copy(keepScreenOn = it)) }
     PreferenceSwitch("单个视频循环播放", "视频播放完后留在当前视频并重新开始", settings.videoLoopSingle) { onSettings(settings.copy(videoLoopSingle = it)) }
     PreferenceSwitch("视频默认仅预览", "切换视频时暂停，轻触画面开始播放", settings.videoPreview) { onSettings(settings.copy(videoPreview = it)) }
