@@ -32,4 +32,14 @@ class MainActivity : ComponentActivity() {
         DiagnosticLog.log("App", "onPause")
         super.onPause()
     }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        DiagnosticLog.log("Resources", "内存回收通知 level=$level")
+    }
+
+    override fun onDestroy() {
+        DiagnosticLog.log("App", "onDestroy changingConfigurations=$isChangingConfigurations")
+        super.onDestroy()
+    }
 }

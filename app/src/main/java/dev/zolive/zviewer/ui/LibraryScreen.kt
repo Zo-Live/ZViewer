@@ -109,7 +109,16 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
         if (uri != null) model.selectLibrary(uri)
     }
     val chooseLibrary = { picker.launch(state.treeUri?.let(Uri::parse)) }
-    Surface(Modifier.fillMaxSize()) {
+    Surface(Modifier.fillMaxSize().pointerInput(state.updateNotice, state.session, state.opening) {
+        if (state.updateNotice != null && state.session == null && state.opening == null) {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    if (event.changes.any { it.pressed && !it.previousPressed }) model.dismissUpdateNotice()
+                }
+            }
+        }
+    }) {
         when {
             state.session != null -> ReaderScreen(state.session, state.initialPage, state.settings,
                 model.repository, model::settings, model::saveProgress, model::videoPosition,
@@ -183,6 +192,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                 BackHandler(enabled = settingsOpen) { navigateSettings(false) }
             }
         }
+        UpdateFeedback(state, model, settingsOpen)
     }
     if (state.opening != null) {
         AlertDialog(onDismissRequest = model::cancelOpen, icon = { CircularProgressIndicator(Modifier.size(36.dp)) },
@@ -465,7 +475,10 @@ private fun BookCover(book: Book, repository: BookRepository, revision: Int) {
                 android.graphics.BitmapFactory.decodeFile(repository.cover(book).absolutePath)
             }
         } catch (error: CancellationException) { throw error }
-        catch (_: Exception) { failed = true }
+        catch (error: Exception) {
+            dev.zolive.zviewer.data.DiagnosticLog.error("Cover", "封面加载失败 book=${book.id.take(8)} kind=${book.kind}", error)
+            failed = true
+        }
     }
     if (bitmap != null) Image(bitmap!!.asImageBitmap(), book.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
     else Column(Modifier.fillMaxSize().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally,

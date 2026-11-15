@@ -108,7 +108,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     }
 
     LaunchedEffect(session.book.cacheKey) {
-        DiagnosticLog.log("Reader", "会话开始《${session.book.title}》kind=${session.book.kind} pages=${session.pages.size} " +
+        DiagnosticLog.log("Reader", "会话开始 book=${session.book.id.take(8)} kind=${session.book.kind} pages=${session.pages.size} " +
             "video=$videoBook mixed=$mixedBook vertical=${settings.vertical} rtl=${settings.rightToLeft} " +
             "loop=${settings.loopMode} preview=${settings.videoPreview}")
     }
@@ -145,17 +145,12 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             else if (!paging.looping && !listState.canScrollForward && listState.canScrollBackward) paging.pageCount - 1
             else paging.pageAt(listState.firstVisibleItemIndex)
         }.distinctUntilChanged().collect { page -> currentPage = page; onProgress(page)
-            if (videoBook) DiagnosticLog.log("Reader", "停靠到第 ${page + 1}/${session.pages.size} 项")
+            DiagnosticLog.log("Reader", "停靠到第 ${page + 1}/${session.pages.size} 项")
         }
     }
     LaunchedEffect(videoBook, pagerState.settledPage, active) {
         if (!videoBook || !active) return@LaunchedEffect
         videoPool?.snapshot()?.forEach { (item, state) -> if (item != pagerState.settledPage) state.pause() }
-    }
-    LaunchedEffect(videoBook, pagerState.isScrollInProgress) {
-        if (!videoBook) return@LaunchedEffect
-        DiagnosticLog.log("Reader", "滚动 ${if (pagerState.isScrollInProgress) "开始" else "结束"} " +
-            "current=${pagerState.currentPage} settled=${pagerState.settledPage} target=${pagerState.targetPage}")
     }
     val jump: (Int) -> Unit = { target ->
         val page = paging.destination(target)
@@ -319,20 +314,11 @@ private fun VideoPagerPage(
     if (page.isVideo) {
         val cover = rememberVideoCover(session, index, repository, covers)
         val state = if (neighbor) remember(item) { pool.acquire(item) } else null
-        LaunchedEffect(settled, neighbor, pagerState.targetPage, pagerState.isScrollInProgress) {
-            DiagnosticLog.log("Page", "item=$item index=$index video=true hasPlayer=${state != null} settled=$settled " +
-                "neighbor=$neighbor target=${pagerState.targetPage} scrolling=${pagerState.isScrollInProgress} " +
-                "pool=${pool.size} current=${pagerState.currentPage} frac=${pagerState.currentPageOffsetFraction}")
-        }
         DisposableEffect(state) { onDispose { if (state != null) pool.release(item) } }
         VideoPage(state, index, session, cover, settings,
             videoPosition, onVideoProgress, foreground, active && settled,
             sequence, zoomAction, onTap = onTap, onEnded = onEnded)
     } else {
-        LaunchedEffect(settled) {
-            DiagnosticLog.log("Page", "item=$item index=$index video=false settled=$settled target=${pagerState.targetPage} " +
-                "scrolling=${pagerState.isScrollInProgress}")
-        }
         ReaderPage(session, index, repository, vertical = false, active = active && settled,
             foreground = foreground, zoomSequence = sequence,
             zoomAction = zoomAction, onTap = onTap)
@@ -352,7 +338,10 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
             val file = repository.pageFile(session, index, width)
             value = withContext(Dispatchers.IO) { ImageLoader.load(file, width) }
         } catch (error: CancellationException) { throw error }
-        catch (error: Exception) { failure = "这一页暂时无法解码。请确认图片完整，且设备支持此编码。" }
+        catch (error: Exception) {
+            DiagnosticLog.error("Image", "页面解码失败 book=${session.book.id.take(8)} page=${index + 1} format=${session.pages[index].name.substringAfterLast('.')} targetWidth=$width", error)
+            failure = "这一页暂时无法解码。请确认图片完整，且设备支持此编码。"
+        }
     }
     DisposableEffect(drawable) { onDispose { (drawable as? Animatable)?.stop() } }
     val ratio = drawable?.let { it.intrinsicWidth.toFloat() / it.intrinsicHeight.coerceAtLeast(1) } ?: initialRatio ?: .70f

@@ -76,6 +76,7 @@ data class ReaderSettings(
     val loopMode: Boolean = false,
     val diagnosticLog: Boolean = false,
     val logDirectory: String? = null,
+    val checkUpdatesOnStartup: Boolean = false,
     val clearCovers: Boolean = false,
     val cacheLimitMiB: Int = CacheLimits.DEFAULT_MIB,
 )

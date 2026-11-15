@@ -25,6 +25,7 @@ class PreferenceStore(context: Context) {
         loopMode = preferences.getBoolean("loop_mode", false),
         diagnosticLog = preferences.getBoolean("diagnostic_log", false),
         logDirectory = preferences.getString("log_directory", null),
+        checkUpdatesOnStartup = preferences.getBoolean("check_updates_on_startup", false),
         clearCovers = preferences.getBoolean("clear_covers", false),
         cacheLimitMiB = CacheLimits.normalize(preferences.getInt("cache_limit_mib", CacheLimits.DEFAULT_MIB)),
     )
@@ -41,6 +42,7 @@ class PreferenceStore(context: Context) {
             .putBoolean("loop_mode", settings.loopMode)
             .putBoolean("diagnostic_log", settings.diagnosticLog)
             .putString("log_directory", settings.logDirectory)
+            .putBoolean("check_updates_on_startup", settings.checkUpdatesOnStartup)
             .putBoolean("clear_covers", settings.clearCovers)
             .putInt("cache_limit_mib", CacheLimits.normalize(settings.cacheLimitMiB)).apply()
     }

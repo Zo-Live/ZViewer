@@ -110,7 +110,6 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
      */
     fun bindOwner(view: ZoomVideoView, active: Boolean = false) {
         if (released) {
-            DiagnosticLog.log("View", "bindOwner 已忽略（播放器已释放）index=$index view=${view.hashCode()}")
             return
         }
         if (active) activeView = view
@@ -118,8 +117,6 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
             surfaceAttached = view.isSurfaceAvailable
             return
         }
-        DiagnosticLog.log("View", "bindOwner index=$index view=${view.hashCode()} active=$active " +
-            "from=${ownerView?.hashCode()} surface=${view.isSurfaceAvailable}")
         val previous = ownerView
         if (previous != null && previous.playerView.player === player) previous.playerView.player = null
         ownerView = view
@@ -135,8 +132,6 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
      * back so a cancelled swipe cannot leave the player without a picture.
      */
     fun releaseOwner(view: ZoomVideoView) {
-        DiagnosticLog.log("View", "releaseOwner index=$index view=${view.hashCode()} " +
-            "active=${activeView === view} owner=${ownerView === view}")
         if (activeView === view) activeView = null
         if (ownerView !== view) return
         ownerView = null
@@ -151,9 +146,6 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     /** Updates layout/surface readiness for the owner view only; stale views are ignored. */
     fun surfaceStateChanged(view: ZoomVideoView, layoutReady: Boolean) {
         if (ownerView !== view) return
-        if (surfaceReady != layoutReady) {
-            DiagnosticLog.log("View", "布局就绪 index=$index view=${view.hashCode()} ready=$layoutReady surface=${view.isSurfaceAvailable}")
-        }
         surfaceReady = layoutReady
         surfaceAttached = view.isSurfaceAvailable
     }
@@ -186,7 +178,6 @@ internal class VideoPlaybackPool(private val context: Context) {
     fun acquire(item: Int): VideoPlaybackState {
         val entry = entries.getOrPut(item) { Entry(createVideoPlaybackState(context)) }
         entry.refs++
-        DiagnosticLog.log("Pool", "创建/复用播放器 item=$item refs=${entry.refs} pool=${entries.size}")
         return entry.state
     }
 
@@ -195,7 +186,6 @@ internal class VideoPlaybackPool(private val context: Context) {
         entry.refs--
         if (entry.refs > 0) return
         entries.remove(item)
-        DiagnosticLog.log("Pool", "释放播放器 item=$item pool=${entries.size}")
         entry.state.release()
     }
 
@@ -243,16 +233,12 @@ internal fun rememberVideoPlayback(
                 DiagnosticLog.log("Video", "index=${state.index} 视频尺寸 ${videoSize.width}x${videoSize.height} " +
                     "旋转=${videoSize.unappliedRotationDegrees} 比例=${videoSize.pixelWidthHeightRatio}")
             }
-            override fun onSurfaceSizeChanged(width: Int, height: Int) {
-                DiagnosticLog.log("Video", "index=${state.index} Surface 尺寸 ${width}x$height")
-            }
             override fun onRenderedFirstFrame() {
                 state.firstFrameReady = true
-                DiagnosticLog.log("Video", "index=${state.index} 首帧已渲染 surface=${state.ownerView?.isSurfaceAvailable}")
             }
             override fun onPlayerError(error: PlaybackException) {
                 state.failed = true
-                DiagnosticLog.error("Video", "index=${state.index} 播放失败 uri=${state.player.currentMediaItem?.localConfiguration?.uri}", error)
+                DiagnosticLog.error("Video", "index=${state.index} 播放失败 code=${error.errorCodeName}", error)
             }
         }
         state.player.addListener(listener)
@@ -275,7 +261,7 @@ internal fun rememberVideoPlayback(
         state.playRequested = !settings.videoPreview
         val page = session.pages[index]
         val uri = page.filePath?.let { Uri.fromFile(File(it)) } ?: Uri.parse(page.uri!!)
-        DiagnosticLog.log("Video", "准备 index=$index name=${page.name} position=${videoPosition(index)} uri=$uri")
+        DiagnosticLog.log("Video", "准备 index=$index format=${page.name.substringAfterLast('.')} position=${videoPosition(index)}")
         state.player.setMediaItem(MediaItem.fromUri(uri), videoPosition(index).coerceAtLeast(0L))
         state.player.playWhenReady = false
         state.player.prepare()
@@ -293,8 +279,6 @@ internal fun rememberVideoPlayback(
     }
     LaunchedEffect(state, active, allowPlayback, state.playRequested, state.ready, state.failed, state.surfaceAttached) {
         val shouldPlay = active && allowPlayback && state.playRequested && state.ready && !state.failed && state.surfaceAttached
-        DiagnosticLog.log("Gate", "index=${state.index} shouldPlay=$shouldPlay active=$active allow=$allowPlayback " +
-            "requested=${state.playRequested} ready=${state.ready} failed=${state.failed} surface=${state.surfaceAttached}")
         state.player.playWhenReady = shouldPlay
         if (!shouldPlay) state.player.pause()
         state.refresh()

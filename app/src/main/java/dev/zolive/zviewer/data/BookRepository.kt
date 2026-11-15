@@ -359,7 +359,7 @@ class BookRepository(private val context: Context) : Closeable {
         if (output.isFile) return@withBookCache output
         locks.getOrPut("frame-${session.book.cacheKey}-$index") { Mutex() }.withLock {
             if (output.isFile) return@withLock output
-            DiagnosticLog.log("Cover", "开始抽帧 index=$index name=${page.name}")
+            DiagnosticLog.log("Cover", "开始抽帧 book=${session.book.id.take(8)} index=$index")
             val started = android.os.SystemClock.elapsedRealtime()
             val bitmap = runCatching {
                 MediaMetadataRetriever().use { retriever ->
@@ -368,7 +368,7 @@ class BookRepository(private val context: Context) : Closeable {
                     retriever.getScaledFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 1280, 1280)
                         ?: retriever.getFrameAtTime()
                 }
-            }.onFailure { DiagnosticLog.error("Cover", "视频抽帧失败 ${page.name}", it) }.getOrNull() ?: return@withLock null
+            }.onFailure { DiagnosticLog.error("Cover", "视频抽帧失败 book=${session.book.id.take(8)} index=$index", it) }.getOrNull() ?: return@withLock null
             DiagnosticLog.log("Cover", "抽帧完成 index=$index 耗时=${android.os.SystemClock.elapsedRealtime() - started}ms")
             val temporary = File(frames, "${output.name}.part")
             try {
@@ -515,12 +515,14 @@ class BookRepository(private val context: Context) : Closeable {
     }
 
     suspend fun clearCache(includeCovers: Boolean = false) = withContext(Dispatchers.IO) {
+        val before = readingCache.size()
         readingCache.clear(includeCovers)
+        DiagnosticLog.log("Cache", "手动清理 includeCovers=$includeCovers beforeBytes=$before afterBytes=${readingCache.size()}")
     }
 
     suspend fun trimCache(protectedKey: String? = null) = withContext(Dispatchers.IO) {
         val limit = CacheLimits.bytes(preferences.settings().cacheLimitMiB)
         val reclaimed = readingCache.trim(protectedKey, limit = limit, target = limit * 2 / 3)
-        if (reclaimed > 0) DiagnosticLog.log("Cache", "自动回收 $reclaimed 字节阅读缓存")
+        if (reclaimed > 0) DiagnosticLog.log("Cache", "自动回收 reclaimedBytes=$reclaimed limitBytes=$limit remainingBytes=${readingCache.size()}")
     }
 }

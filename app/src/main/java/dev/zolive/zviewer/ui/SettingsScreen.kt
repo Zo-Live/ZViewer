@@ -168,7 +168,7 @@ fun SettingsScreen(
             SettingsSectionTitle("诊断", Icons.Outlined.BugReport)
             SettingsCard {
                 SettingsListItem(headlineContent = { Text("输出诊断日志") }, supportingContent = {
-                    Text("记录应用运行、视频切换、播放错误与崩溃信息")
+                    Text("记录设备信息、运行状态与错误")
                 },
                     trailingContent = {
                         Switch(checked = settings.diagnosticLog, onCheckedChange = null)
@@ -192,7 +192,26 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            TextButton(onClick = { about = true }, Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp, bottom = 32.dp)) { Text("关于 ZViewer ${BuildConfig.VERSION_NAME}") }
+            SettingsSectionTitle("应用", Icons.Outlined.Info)
+            SettingsCard {
+                SettingsListItem(headlineContent = { Text("检查更新") },
+                    supportingContent = { Text("当前版本：${BuildConfig.VERSION_NAME}") },
+                    trailingContent = {
+                        if (state.checkingUpdate || state.downloadingUpdate) CircularProgressIndicator(
+                            Modifier.size(24.dp).semantics { contentDescription = if (state.downloadingUpdate) "正在准备下载" else "正在检查更新" },
+                            strokeWidth = 2.dp)
+                    },
+                    modifier = Modifier.clickable(enabled = !state.checkingUpdate && !state.downloadingUpdate,
+                        role = Role.Button) { model.checkForUpdates() })
+                SettingsListItem(headlineContent = { Text("启动时检查更新") },
+                    trailingContent = { Switch(checked = settings.checkUpdatesOnStartup, onCheckedChange = null) },
+                    modifier = Modifier.toggleable(value = settings.checkUpdatesOnStartup, role = Role.Switch) {
+                        model.settings(settings.copy(checkUpdatesOnStartup = it))
+                    })
+                SettingsListItem(headlineContent = { Text("关于 ZViewer") },
+                    modifier = Modifier.clickable(role = Role.Button) { about = true })
+            }
+            Spacer(Modifier.height(20.dp))
         }
     }
     if (customColor) {
@@ -209,7 +228,7 @@ fun SettingsScreen(
         }) { Text("应用") } }, dismissButton = { TextButton(onClick = { customColor = false }) { Text("取消") } })
     }
     if (about) AlertDialog(onDismissRequest = { about = false }, title = { Text("ZViewer · 本地漫画阅读器") },
-        text = { Text("版本 ${BuildConfig.VERSION_NAME}\n\n支持 ZIP / CBZ、RAR / CBR、7Z、PDF、图片文件夹与常见视频格式。支持 APNG、动态 WebP、GIF、AVIF 及常用静态图片。\n\n全部阅读数据仅保存在本机，不联网、不上传文件。密码保护、分卷压缩包及 DRM 文件请先自行转换。\n\n开源组件：AndroidX / Compose（Apache 2.0）、Media3（Apache 2.0）、APNG4Android（Apache 2.0）、libarchive（BSD）、libavif（BSD）。\n\nHEIF / HEIC 的可解码范围取决于设备系统解码器。") },
+        text = { Text("版本 ${BuildConfig.VERSION_NAME}\n\n支持 ZIP / CBZ、RAR / CBR、7Z、PDF、图片文件夹与常见视频格式。支持 APNG、动态 WebP、GIF、AVIF 及常用静态图片。\n\n全部阅读数据仅保存在本机，仅检查和下载更新时联网，不上传阅读文件。密码保护、分卷压缩包及 DRM 文件请先自行转换。\n\n开源组件：AndroidX / Compose（Apache 2.0）、Media3（Apache 2.0）、APNG4Android（Apache 2.0）、libarchive（BSD）、libavif（BSD）。\n\nHEIF / HEIC 的可解码范围取决于设备系统解码器。", Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) },
         confirmButton = { TextButton(onClick = { about = false }) { Text("知道了") } },
         dismissButton = { TextButton(onClick = { about = false; licenses = true }) { Text("开源许可") } })
     if (licenses) {

@@ -45,7 +45,7 @@ Android usually does not allow granting access to the internal storage root, the
 
 ## Privacy and Data
 
-ZViewer does not request network permission and contains no accounts or ads. Reading history, covers, and caches are stored locally on the device.
+ZViewer contains no accounts or ads. Reading history, covers, and caches stay on the device. Network access is used only to check for and download updates from GitHub; reading files are never uploaded. Checking for updates at startup is off by default and can be enabled in Settings.
 
 - Archives are fully extracted on first read, and the extracted content counts toward the reading cache.
 - When the reading cache reaches the configured limit, background cleanup removes idle files. Originals, covers, reading history, and favorites are preserved.
