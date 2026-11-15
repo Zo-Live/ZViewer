@@ -264,11 +264,17 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize().testTag("library-pager"),
                 key = { it }) { tab ->
                 var sortMenu by remember { mutableStateOf(false) }
-                val books = remember(state.books, state.favorites, state.progress, tab, query, filter, sort) {
+                val filterOptions = if (tab == 2) {
+                    listOf(0 to "全部", 1 to "在读", 3 to "已读")
+                } else {
+                    listOf(0 to "全部", 1 to "在读", 2 to "未读", 3 to "已读")
+                }
+                val selectedFilter = if (tab == 2 && filter == 2) 0 else filter
+                val books = remember(state.books, state.favorites, state.progress, tab, query, selectedFilter, sort) {
                     state.books.filter { book ->
                         val progress = state.progress[book.id] ?: ReadingProgress()
                         val matchesTab = when (tab) { 1 -> book.id in state.favorites; 2 -> progress.updated > 0; else -> true }
-                        val matchesFilter = when (filter) {
+                        val matchesFilter = when (selectedFilter) {
                             1 -> progress.updated > 0 && progress.fraction < 1f
                             2 -> progress.updated == 0L
                             3 -> progress.total > 0 && progress.fraction >= 1f
@@ -308,8 +314,8 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                             }
                         }
                         Row(Modifier.padding(horizontal = contentInset), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf("全部", "在读", "未读", "已读").forEachIndexed { index, label ->
-                                FilterChip(selected = filter == index, onClick = { filter = index }, label = { Text(label) })
+                            filterOptions.forEach { (value, label) ->
+                                FilterChip(selected = selectedFilter == value, onClick = { filter = value }, label = { Text(label) })
                             }
                         }
                         if (books.isEmpty()) {
@@ -332,7 +338,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                             LazyVerticalGrid(columns = GridCells.Fixed(state.settings.gridColumns),
                                 modifier = Modifier.fillMaxSize().testTag("library-grid-$tab"), contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 88.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-                                val recent = if (tab == 0 && query.isEmpty() && filter == 0) books
+                                val recent = if (tab == 0 && query.isEmpty() && selectedFilter == 0) books
                                     .filter { (state.progress[it.id]?.updated ?: 0) > 0 && (state.progress[it.id]?.fraction ?: 0f) < 1f }
                                     .maxByOrNull { state.progress[it.id]?.updated ?: 0 } else null
                                 if (recent != null) item(span = { GridItemSpan(maxLineSpan) }) {
