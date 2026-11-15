@@ -57,9 +57,9 @@ def jump(page):
 
 
 device.app_start("dev.zolive.zviewer", stop=True)
-if device(text="选择书库文件夹").wait(timeout=3):
+if device(text="选择书库目录").wait(timeout=3):
     screenshot("01-首次启动")
-    click(text="选择书库文件夹")
+    click(text="选择书库目录")
     if device(text="Download").exists:
         click(text="Download")
     elif device(description="Show roots").exists:

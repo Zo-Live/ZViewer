@@ -105,7 +105,7 @@ class NavigationInteractionTest {
         tab("收藏").assertIsSelected()
         swipe(true)
         tab("最近阅读").assertIsSelected()
-        rule.onNodeWithText("选择书库文件夹").assertIsDisplayed()
+        rule.onNodeWithText("选择书库目录").assertIsDisplayed()
     }
 
     @Test fun partialDragCanBeCancelledAndVerticalScrollDoesNotChangeTab() {

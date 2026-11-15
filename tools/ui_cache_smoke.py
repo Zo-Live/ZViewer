@@ -88,8 +88,8 @@ def jump(page):
 
 app_shell("id")
 start()
-if device(text="选择书库文件夹").wait(timeout=3):
-    device(text="选择书库文件夹").click()
+if device(text="选择书库目录").wait(timeout=3):
+    device(text="选择书库目录").click()
     if device(text="Download").wait(timeout=2):
         device(text="Download").click()
         time.sleep(.6)

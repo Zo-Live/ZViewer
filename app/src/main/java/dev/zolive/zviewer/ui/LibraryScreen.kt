@@ -380,7 +380,7 @@ private fun WelcomeScreen(onChooseLibrary: () -> Unit) {
         }
         Spacer(Modifier.height(30.dp))
         Button(onClick = onChooseLibrary, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            Icon(Icons.Outlined.CreateNewFolder, null); Spacer(Modifier.width(10.dp)); Text("选择书库文件夹", fontSize = 16.sp)
+            Icon(Icons.Outlined.CreateNewFolder, null); Spacer(Modifier.width(10.dp)); Text("选择书库目录", fontSize = 16.sp)
         }
     }
 }
