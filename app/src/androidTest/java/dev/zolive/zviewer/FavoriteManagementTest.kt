@@ -93,7 +93,7 @@ class FavoriteManagementTest {
         rule.onNodeWithContentDescription("退出收藏管理").assertIsDisplayed()
         if (title == "收藏") {
             cover().assertDoesNotExist()
-            rule.onNodeWithText("没有符合条件的漫画").assertIsDisplayed()
+            rule.onNodeWithText("暂无收藏的漫画").assertIsDisplayed()
             selectTab("书库")
             cover().performScrollTo()
         }

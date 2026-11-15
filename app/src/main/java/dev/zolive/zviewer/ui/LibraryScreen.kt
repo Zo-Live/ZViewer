@@ -283,6 +283,8 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                         }
                     }
                 }
+                val hasFavorites = state.books.any { it.id in state.favorites }
+                val hasRecent = state.books.any { (state.progress[it.id]?.updated ?: 0L) > 0L }
                 Column(Modifier.fillMaxSize()
                     .then(if (pagerState.currentPage != tab) Modifier.clearAndSetSemantics {} else Modifier)) {
                     if (state.treeUri == null) WelcomeScreen(onChooseLibrary)
@@ -311,7 +313,21 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                             }
                         }
                         if (books.isEmpty()) {
-                            EmptyLibrary(state.scanning, state.books.isEmpty(), tab == 0, onChooseLibrary)
+                            EmptyLibrary(
+                                scanning = state.scanning,
+                                directoryEmpty = state.books.isEmpty(),
+                                onChooseLibrary = onChooseLibrary,
+                                emptyTitle = when {
+                                    tab == 1 && !hasFavorites -> "暂无收藏的漫画"
+                                    tab == 2 && !hasRecent -> "暂无最近阅读的漫画"
+                                    else -> null
+                                },
+                                emptyDescription = when {
+                                    tab == 1 && !hasFavorites -> "长按漫画封面以批量管理收藏"
+                                    tab == 2 && !hasRecent -> "点击漫画封面以开始阅读"
+                                    else -> null
+                                }
+                            )
                         } else {
                             LazyVerticalGrid(columns = GridCells.Fixed(state.settings.gridColumns),
                                 modifier = Modifier.fillMaxSize().testTag("library-grid-$tab"), contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 88.dp),
@@ -364,17 +380,23 @@ private fun WelcomeScreen(onChooseLibrary: () -> Unit) {
 }
 
 @Composable
-private fun EmptyLibrary(scanning: Boolean, directoryEmpty: Boolean, showChooseButton: Boolean, onChooseLibrary: () -> Unit) {
+private fun EmptyLibrary(
+    scanning: Boolean,
+    directoryEmpty: Boolean,
+    onChooseLibrary: () -> Unit,
+    emptyTitle: String? = null,
+    emptyDescription: String? = null,
+) {
     Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Icon(Icons.AutoMirrored.Outlined.MenuBook, null, Modifier.size(52.dp), tint = MaterialTheme.colorScheme.primary)
         Text(when {
             scanning -> "正在整理你的书库…"
             directoryEmpty -> "此目录无漫画"
-            else -> "没有符合条件的漫画"
+            else -> emptyTitle ?: "没有符合条件的漫画"
         }, Modifier.padding(top = 20.dp), style = MaterialTheme.typography.titleMedium)
-        if (!directoryEmpty) Text("尝试其他筛选条件", Modifier.fillMaxWidth().padding(top = 12.dp),
+        if (!directoryEmpty) Text(emptyDescription ?: "尝试其他筛选条件", Modifier.fillMaxWidth().padding(top = 12.dp),
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-        if (directoryEmpty && !scanning && showChooseButton) {
+        if (directoryEmpty && !scanning) {
             TextButton(onClick = onChooseLibrary, Modifier.padding(top = 12.dp)) { Text("选择其他目录") }
         }
     }

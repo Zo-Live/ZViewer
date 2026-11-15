@@ -95,7 +95,7 @@ class NavigationInteractionTest {
         launch()
         swipe(true)
         tab("收藏").assertIsSelected()
-        rule.onNodeWithText("没有符合条件的漫画").assertIsDisplayed()
+        rule.onNodeWithText("暂无收藏的漫画").assertIsDisplayed()
         swipe(true)
         tab("最近阅读").assertIsSelected()
         scenario.close()
