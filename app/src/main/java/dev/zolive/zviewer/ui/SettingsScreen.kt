@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -103,7 +104,9 @@ fun SettingsScreen(
                     val colors = listOf(0xFF49684D to "苔绿", 0xFF476A8A to "雾蓝", 0xFF79618C to "藤紫", 0xFF9A5357 to "蔷薇", 0xFF8B683E to "琥珀")
                     colors.forEach { (color, name) ->
                         Box(Modifier.size(44.dp).semantics { contentDescription = "主题颜色：$name" }
-                            .clickable { model.settings(settings.copy(accent = color)) }
+                            .selectable(selected = settings.accent == color, role = Role.RadioButton) {
+                                model.settings(settings.copy(accent = color))
+                            }
                             .padding(4.dp).background(Color(color), CircleShape)
                             .then(if (settings.accent == color) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier),
                             contentAlignment = Alignment.Center) {
@@ -170,10 +173,11 @@ fun SettingsScreen(
                     Text("记录应用运行、视频切换、播放错误与崩溃信息")
                 },
                     trailingContent = {
-                        Switch(checked = settings.diagnosticLog,
-                            onCheckedChange = { model.settings(settings.copy(diagnosticLog = it)) })
+                        Switch(checked = settings.diagnosticLog, onCheckedChange = null)
                     },
-                    modifier = Modifier.clickable { model.settings(settings.copy(diagnosticLog = !settings.diagnosticLog)) })
+                    modifier = Modifier.toggleable(value = settings.diagnosticLog, role = Role.Switch) {
+                        model.settings(settings.copy(diagnosticLog = it))
+                    })
                 if (settings.diagnosticLog) {
                     HorizontalDivider(Modifier.padding(vertical = 6.dp))
                     SettingsListItem(headlineContent = { Text("日志目录") }, supportingContent = {
@@ -281,12 +285,16 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
 
 @Composable
 private fun PreferenceSwitch(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth()
+        .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
+        .padding(top = 18.dp)
+        .semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
             Text(subtitle, Modifier.padding(top = 3.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked, onChange)
+        Switch(checked, onCheckedChange = null)
     }
 }
 
