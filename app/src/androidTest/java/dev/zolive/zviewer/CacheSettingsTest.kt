@@ -97,6 +97,21 @@ class CacheSettingsTest {
         assertEquals(256, PreferenceStore(context).settings().cacheLimitMiB)
     }
 
+    @Test fun taskRemovalSwitchesDefaultOffAndPersistIndependently() {
+        launchSettings()
+        val cache = rule.onNodeWithText("移除后台时清理阅读缓存")
+        val progress = rule.onNodeWithText("移除后台时清除阅读记录")
+        progress.performScrollTo().assertIsOff()
+        cache.performScrollTo().assertIsOff().performClick().assertIsOn()
+        assertTrue(store.settings().clearCacheOnTaskRemoval)
+        assertFalse(store.settings().clearProgressOnTaskRemoval)
+        progress.performScrollTo().performClick().assertIsOn()
+        scenario.recreate()
+        cache.performScrollTo().assertIsOn().performClick().assertIsOff()
+        assertFalse(store.settings().clearCacheOnTaskRemoval)
+        progress.performScrollTo().assertIsOn()
+    }
+
     @Test fun loweringThresholdImmediatelyTrimsAndRaisingItPreservesReadingFiles() = runBlocking {
         launchSettings()
         rule.onNodeWithText("清理封面").performClick()

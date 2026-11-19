@@ -28,6 +28,8 @@ class PreferenceStore(context: Context) {
         checkUpdatesOnStartup = preferences.getBoolean("check_updates_on_startup", false),
         clearCovers = preferences.getBoolean("clear_covers", false),
         cacheLimitMiB = CacheLimits.normalize(preferences.getInt("cache_limit_mib", CacheLimits.DEFAULT_MIB)),
+        clearCacheOnTaskRemoval = preferences.getBoolean("clear_cache_on_task_removal", false),
+        clearProgressOnTaskRemoval = preferences.getBoolean("clear_progress_on_task_removal", false),
     )
 
     fun saveSettings(settings: ReaderSettings) {
@@ -44,6 +46,8 @@ class PreferenceStore(context: Context) {
             .putString("log_directory", settings.logDirectory)
             .putBoolean("check_updates_on_startup", settings.checkUpdatesOnStartup)
             .putBoolean("clear_covers", settings.clearCovers)
+            .putBoolean("clear_cache_on_task_removal", settings.clearCacheOnTaskRemoval)
+            .putBoolean("clear_progress_on_task_removal", settings.clearProgressOnTaskRemoval)
             .putInt("cache_limit_mib", CacheLimits.normalize(settings.cacheLimitMiB)).apply()
     }
 
@@ -85,7 +89,8 @@ class PreferenceStore(context: Context) {
     fun clearProgress() {
         val editor = preferences.edit()
         preferences.all.keys.filter { it.startsWith("page_") || it.startsWith("total_") ||
-            it.startsWith("read_") || it.startsWith("video_") }.forEach(editor::remove)
+            it.startsWith("read_") || (it.startsWith("video_") && it.substringAfterLast('_').toIntOrNull() != null)
+        }.forEach(editor::remove)
         editor.apply()
     }
 

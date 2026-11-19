@@ -160,10 +160,20 @@ fun SettingsScreen(
                     valueRange = CacheLimits.MIN_MIB.toFloat()..CacheLimits.MAX_MIB.toFloat(),
                     steps = (CacheLimits.MAX_MIB - CacheLimits.MIN_MIB) / CacheLimits.STEP_MIB - 1,
                     modifier = Modifier.fillMaxWidth().semantics { contentDescription = "自动清理阈值" })
+                SettingsListItem(headlineContent = { Text("移除后台时清理阅读缓存") },
+                    trailingContent = { Switch(checked = settings.clearCacheOnTaskRemoval, onCheckedChange = null) },
+                    modifier = Modifier.toggleable(value = settings.clearCacheOnTaskRemoval, role = Role.Switch) {
+                        model.settings(settings.copy(clearCacheOnTaskRemoval = it))
+                    })
                 SettingsListItem(headlineContent = { Text("清除阅读记录") }, supportingContent = {
                     Text("双击清除所有漫画的页码和视频播放进度")
                 },
                     modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearReadingProgress))
+                SettingsListItem(headlineContent = { Text("移除后台时清除阅读记录") },
+                    trailingContent = { Switch(checked = settings.clearProgressOnTaskRemoval, onCheckedChange = null) },
+                    modifier = Modifier.toggleable(value = settings.clearProgressOnTaskRemoval, role = Role.Switch) {
+                        model.settings(settings.copy(clearProgressOnTaskRemoval = it))
+                    })
             }
             SettingsSectionTitle("诊断", Icons.Outlined.BugReport)
             SettingsCard {
