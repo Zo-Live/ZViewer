@@ -21,8 +21,9 @@ internal fun releaseJson(version: String = "9.0.0", assets: Boolean = true): Str
 
 class UpdateCheckerTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
+    private val preferences = context.getSharedPreferences("zviewer_updates", Context.MODE_PRIVATE)
     @Before fun clear() {
-        context.getSharedPreferences("zviewer_updates", Context.MODE_PRIVATE).edit().clear().commit()
+        preferences.edit().clear().commit()
     }
 
     @Test fun cacheSurvivesNewCheckerAndRevalidatesWithEtag() = runBlocking {
@@ -56,34 +57,70 @@ class UpdateCheckerTest {
         assertEquals(1, calls.get())
     }
 
-    @Test fun rateLimitHonorsRetryAfterAndCanRecover() = runBlocking {
-        var time = 100_000L
+    @Test fun httpErrorsCanBeRetriedImmediately() = runBlocking {
         var calls = 0
-        val checker = UpdateChecker(context, { calls++; if (calls == 1) ReleaseResponse(429, retryAfterSeconds = 120)
-            else ReleaseResponse(200, releaseJson()) }) { time }
+        val checker = UpdateChecker(context, {
+            when (++calls) {
+                1 -> ReleaseResponse(429)
+                2 -> ReleaseResponse(503)
+                else -> ReleaseResponse(200, releaseJson())
+            }
+        })
         assertTrue(runCatching { checker.latest(true) }.exceptionOrNull() is IOException)
-        time += 61_000
         assertTrue(runCatching { checker.latest(true) }.isFailure)
-        assertEquals(1, calls)
-        time += 60_000
+        assertTrue(preferences.all.isEmpty())
         assertEquals("9.0.0", checker.latest(true).version)
-        assertEquals(2, calls)
+        assertEquals(3, calls)
     }
 
     @Test fun timeoutAndMalformedResponsesNeverBecomeLatestResults() = runBlocking {
-        var time = 100_000L
         var calls = 0
         val checker = UpdateChecker(context, {
             calls++
             if (calls == 1) throw SocketTimeoutException("test timeout")
-            ReleaseResponse(200, "{broken}")
-        }) { time }
+            if (calls == 2) ReleaseResponse(200, "{broken}") else ReleaseResponse(200, releaseJson())
+        })
         assertTrue(runCatching { checker.latest(true) }.isFailure)
-        assertTrue(runCatching { checker.latest(true) }.isFailure)
-        assertEquals(1, calls)
-        time += 61_000
         assertTrue(runCatching { checker.latest(true) }.isFailure)
         assertEquals(2, calls)
+        assertTrue(preferences.all.isEmpty())
+        assertEquals("9.0.0", checker.latest(true).version)
+    }
+
+    @Test fun installedAndOlderVersionsNeverBecomeCacheEntries() = runBlocking {
+        val installed = BuildConfig.VERSION_NAME
+        preferences.edit().putString("release", releaseJson(installed)).putString("etag", "old-etag")
+            .putLong("checked_at", 100_000).putLong("retry_at", 160_000).commit()
+        var calls = 0
+        val checker = UpdateChecker(context, { etag ->
+            assertNull(etag)
+            val version = if (++calls == 1) installed else "0.0.0"
+            ReleaseResponse(200, releaseJson(version), "new-etag")
+        }) { 100_001 }
+        assertEquals(installed, checker.latest(manual = false).version)
+        assertEquals("0.0.0", checker.latest(manual = true).version)
+        assertTrue(preferences.all.isEmpty())
+    }
+
+    @Test fun failureLeavesExpiredCacheUnchangedAndNewerReleaseCanBeWithdrawn() = runBlocking {
+        var time = 100_000L
+        var calls = 0
+        val checker = UpdateChecker(context, { etag ->
+            when (++calls) {
+                1 -> ReleaseResponse(200, releaseJson(), "release-etag")
+                2 -> throw SocketTimeoutException("test timeout")
+                else -> {
+                    assertEquals("release-etag", etag)
+                    ReleaseResponse(200, releaseJson(BuildConfig.VERSION_NAME))
+                }
+            }
+        }) { time }
+        checker.latest(manual = true)
+        time += 61_000
+        assertTrue(runCatching { checker.latest(manual = true) }.isFailure)
+        assertEquals(100_000L, preferences.getLong("checked_at", 0))
+        assertEquals(BuildConfig.VERSION_NAME, checker.latest(manual = true).version)
+        assertTrue(preferences.all.isEmpty())
     }
 
     @Test fun parsesOnlyStableReleasesAndExpectedApk() {

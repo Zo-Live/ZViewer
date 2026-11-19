@@ -107,7 +107,7 @@ class UpdateInteractionTest {
         checkUpdate()
         waitForCheck()
         rule.onNodeWithText("当前为最新版本").assertExists()
-        assertEquals(1, calls.get())
+        assertEquals(2, calls.get())
         rule.mainClock.advanceTimeBy(4_000)
         rule.onNodeWithText("当前为最新版本").assertDoesNotExist()
     }
@@ -150,7 +150,7 @@ class UpdateInteractionTest {
         waitForCheck()
         rule.onNodeWithText("检查更新失败，请检查网络或稍后重试").assertIsDisplayed()
         rule.onNodeWithText("当前为最新版本").assertDoesNotExist()
-        assertEquals(1, calls.get())
+        assertEquals(2, calls.get())
     }
 
     @Test fun failedDownloadCanBeDismissedWithoutLeavingSettings() {

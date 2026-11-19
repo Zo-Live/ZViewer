@@ -77,7 +77,7 @@ class LibraryViewModel(
         viewModelScope.launch {
             try {
                 val info = updateChecker.latest(manual)
-                val newer = AppVersion.parse(info.version)!! > AppVersion.parse(BuildConfig.VERSION_NAME)!!
+                val newer = info.isNewerThanInstalled
                 mutable.update { it.copy(updatePrompt = info.takeIf { newer },
                     updateNotice = if (!newer && manualUpdateRequested) "当前为最新版本" else null) }
             } catch (error: CancellationException) { throw error }
@@ -102,7 +102,7 @@ class LibraryViewModel(
                 // 确认时后台重新验证发布信息，避免使用已被替换或撤回的安装包地址。
                 val latest = updateChecker.latest(manual = true, refresh = true)
                 if (AppVersion.parse(latest.version)!! < AppVersion.parse(offered.version)!! ||
-                    AppVersion.parse(latest.version)!! <= AppVersion.parse(BuildConfig.VERSION_NAME)!!) {
+                    !latest.isNewerThanInstalled) {
                     throw IllegalStateException("发布版本已变更")
                 }
                 downloadUpdate(latest)

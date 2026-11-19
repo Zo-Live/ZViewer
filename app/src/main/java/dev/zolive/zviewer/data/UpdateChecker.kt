@@ -32,11 +32,13 @@ data class AppVersion(val major: Long, val minor: Long, val patch: Long) : Compa
     }
 }
 
-data class UpdateInfo(val version: String, val downloadUrl: String?)
-data class ReleaseResponse(val status: Int, val body: String = "", val etag: String? = null,
-    val retryAfterSeconds: Long? = null)
+data class UpdateInfo(val version: String, val downloadUrl: String?) {
+    internal val isNewerThanInstalled: Boolean
+        get() = AppVersion.parse(version)!! > AppVersion.parse(BuildConfig.VERSION_NAME)!!
+}
+data class ReleaseResponse(val status: Int, val body: String = "", val etag: String? = null)
 
-/** 缓存可跨进程复用；短期手动检查合并，自动检查降低 GitHub 请求频率。 */
+/** 仅缓存高于当前安装版本的正式发布。 */
 class UpdateChecker(
     context: Context,
     private val request: (String?) -> ReleaseResponse = ::requestGitHubRelease,
@@ -45,18 +47,23 @@ class UpdateChecker(
     private val preferences = context.getSharedPreferences("zviewer_updates", Context.MODE_PRIVATE)
     private val mutex = Mutex()
 
+    init {
+        if (preferences.contains("retry_at")) preferences.edit().remove("retry_at").apply()
+    }
+
     suspend fun latest(manual: Boolean, refresh: Boolean = false): UpdateInfo = withContext(Dispatchers.IO) {
         mutex.withLock {
             val time = now()
-            val cached = preferences.getString("release", null)?.let { runCatching { parseRelease(it) }.getOrNull() }
+            val storedRelease = preferences.getString("release", null)
+            val cached = storedRelease?.let { runCatching { parseRelease(it) }.getOrNull() }
+                ?.takeIf { it.isNewerThanInstalled }
+            if (storedRelease != null && cached == null) clearReleaseCache()
             val age = time - preferences.getLong("checked_at", 0)
             val ttl = if (manual) 60_000L else 6 * 60 * 60_000L
             if (!refresh && cached != null && age in 0 until ttl) {
                 DiagnosticLog.log("Update", "使用版本缓存 version=${cached.version} ageMs=$age")
                 return@withLock cached
             }
-            val retryAt = preferences.getLong("retry_at", 0)
-            if (retryAt > time && retryAt - time <= 60 * 60_000L) throw IOException("更新检查暂时不可用，请稍后重试")
             val started = android.os.SystemClock.elapsedRealtime()
             try {
                 val response = request(if (cached != null) preferences.getString("etag", null) else null)
@@ -64,27 +71,26 @@ class UpdateChecker(
                 val info = when (response.status) {
                     HttpURLConnection.HTTP_NOT_MODIFIED -> cached ?: throw IOException("版本缓存不可用")
                     HttpURLConnection.HTTP_OK -> parseRelease(response.body)
-                    else -> {
-                        val seconds = (response.retryAfterSeconds ?: 60).coerceIn(60, 3600)
-                        preferences.edit().putLong("retry_at", time + seconds * 1000).apply()
-                        throw IOException("版本服务响应异常：${response.status}")
+                    else -> throw IOException("版本服务响应异常：${response.status}")
+                }
+                if (info.isNewerThanInstalled) {
+                    val editor = preferences.edit().putLong("checked_at", now())
+                    if (response.status == HttpURLConnection.HTTP_OK) {
+                        editor.putString("release", response.body).putString("etag", response.etag)
                     }
-                }
-                val editor = preferences.edit().putLong("checked_at", now()).remove("retry_at")
-                if (response.status == HttpURLConnection.HTTP_OK) {
-                    editor.putString("release", response.body).putString("etag", response.etag)
-                }
-                editor.apply()
+                    editor.apply()
+                } else if (cached != null) clearReleaseCache()
                 info
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) {
-                if (preferences.getLong("retry_at", 0) <= time) {
-                    preferences.edit().putLong("retry_at", time + 60_000).apply()
-                }
                 DiagnosticLog.error("Update", "检查更新失败 elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}", error)
                 throw error
             }
         }
+    }
+
+    private fun clearReleaseCache() {
+        preferences.edit().remove("release").remove("etag").remove("checked_at").apply()
     }
 
     companion object {
@@ -140,8 +146,7 @@ private fun requestGitHubRelease(etag: String?): ReleaseResponse {
             }
             bytes.toString("UTF-8")
         } else ""
-        return ReleaseResponse(status, body, connection.getHeaderField("ETag"),
-            connection.getHeaderField("Retry-After")?.toLongOrNull())
+        return ReleaseResponse(status, body, connection.getHeaderField("ETag"))
     } finally {
         timeout.cancel(false)
         connection.disconnect()
