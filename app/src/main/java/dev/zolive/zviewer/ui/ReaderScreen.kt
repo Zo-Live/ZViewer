@@ -330,14 +330,16 @@ private fun VideoPagerPage(
 private fun ReaderPage(session: BookSession, index: Int, repository: BookRepository, vertical: Boolean, active: Boolean,
     foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float? = null,
     onRatio: (Float) -> Unit = {}, onTap: () -> Unit) {
-    val width = (LocalWindowInfo.current.containerSize.width * 2).coerceIn(480, 3200)
+    val viewportWidth = LocalWindowInfo.current.containerSize.width
+    val width = (viewportWidth * 2).coerceIn(480, 3200)
+    val animationWidth = viewportWidth.coerceIn(480, 3200)
     var retry by remember { mutableIntStateOf(0) }
     var failure by remember(session.book.cacheKey, index) { mutableStateOf<String?>(null) }
-    val drawable by produceState<Drawable?>(null, session.book.cacheKey, index, width, retry) {
+    val drawable by produceState<Drawable?>(null, session.book.cacheKey, index, width, animationWidth, retry) {
         failure = null
         try {
             val file = repository.pageFile(session, index, width)
-            value = withContext(Dispatchers.IO) { ImageLoader.load(file, width) }
+            value = withContext(Dispatchers.IO) { ImageLoader.load(file, width, animationWidth) }
         } catch (error: CancellationException) { throw error }
         catch (error: Exception) {
             DiagnosticLog.error("Image", "页面解码失败 book=${session.book.id.take(8)} page=${index + 1} format=${session.pages[index].name.substringAfterLast('.')} targetWidth=$width", error)

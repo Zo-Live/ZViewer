@@ -1,9 +1,13 @@
 package dev.zolive.zviewer
 
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.drawable.Animatable
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.DocumentsContract
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -165,13 +169,40 @@ class FormatIntegrationTest {
         val drawable = ImageLoader.load(fixture("large.apng"), 1200)
         assertEquals(1200, drawable.intrinsicWidth)
         assertEquals(800, drawable.intrinsicHeight)
-        assertTrue(drawable is Animatable)
+        val animation = drawable as Animatable
+        val pixel = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(pixel).apply { scale(1f / 1200, 1f / 800) }
+        val colors = mutableSetOf<Int>()
         instrumentation.runOnMainSync {
             drawable.setBounds(0, 0, 1200, 800)
-            (drawable as Animatable).start()
+            animation.start()
         }
-        Thread.sleep(500)
-        instrumentation.runOnMainSync { (drawable as Animatable).stop() }
+        try {
+            val deadline = SystemClock.uptimeMillis() + 5_000
+            while (colors.size < 2 && SystemClock.uptimeMillis() < deadline) {
+                instrumentation.runOnMainSync {
+                    pixel.eraseColor(Color.TRANSPARENT)
+                    drawable.draw(canvas)
+                    val color = pixel.getPixel(0, 0)
+                    if (Color.alpha(color) == 255) colors.add(color)
+                }
+                Thread.sleep(16)
+            }
+            assertEquals(setOf(Color.rgb(56, 87, 78), Color.rgb(232, 237, 222)), colors)
+        } finally {
+            instrumentation.runOnMainSync { animation.stop() }
+            pixel.recycle()
+        }
+    }
+
+    @Test fun nativeAnimationsUseViewportWidth() {
+        for (extension in listOf("gif", "webp")) {
+            val drawable = ImageLoader.load(fixture("animated.$extension"), width = 400, animationWidth = 160)
+            assertTrue(extension, drawable is Animatable)
+            assertEquals(extension, 160, drawable.intrinsicWidth)
+            assertEquals(extension, 240, drawable.intrinsicHeight)
+        }
+        assertEquals(400, ImageLoader.load(fixture("static.png"), width = 400, animationWidth = 160).intrinsicWidth)
     }
 
     @Test fun emptyAndBrokenArchivesFailWithoutCreatingPages() = runBlocking {
