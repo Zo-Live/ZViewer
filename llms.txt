@@ -100,4 +100,4 @@ Kotlin `2.1.21`, Compose BOM `2025.05.01`, `activity-compose:1.10.1`, `lifecycle
 ## Optional
 
 - [License (MIT)](LICENSE)
-- [Release 1.8.0 checksum](dist/ZViewer-1.8.0-release.apk.sha256)
+- [Release 1.8.1 checksum](dist/ZViewer-1.8.1-release.apk.sha256)
