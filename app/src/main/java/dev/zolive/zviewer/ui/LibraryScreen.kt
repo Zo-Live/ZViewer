@@ -57,16 +57,20 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.intl.LocaleList
+import androidx.compose.ui.text.style.LineBreak
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -316,75 +320,86 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                 }
                 val hasFavorites = state.books.any { it.id in state.favorites }
                 val hasRecent = state.books.any { (state.progress[it.id]?.updated ?: 0L) > 0L }
-                Column(Modifier.fillMaxSize()
-                    .then(if (pagerState.currentPage != tab) Modifier.clearAndSetSemantics {} else Modifier)) {
-                    if (state.treeUri == null) WelcomeScreen(onChooseLibrary)
-                    else {
-                        Row(Modifier.fillMaxWidth().padding(start = contentInset, end = actionInset, top = 14.dp, bottom = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(titles[tab], style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                                Text(pluralStringResource(R.plurals.comic_count, books.size, books.size), Modifier.padding(top = 5.dp),
-                                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            IconButton(onClick = { managingFavorites = false; model.refresh() }, enabled = !state.scanning) { Icon(Icons.Outlined.Refresh, stringResource(R.string.refresh_library)) }
-                            EndAlignedDropdownMenu(
-                                expanded = sortMenu,
-                                onDismissRequest = { sortMenu = false },
-                                anchor = {
-                                    IconButton(onClick = { sortMenu = true }) {
-                                        Icon(Icons.AutoMirrored.Outlined.Sort, stringResource(R.string.sort))
-                                    }
-                                },
-                            ) {
-                                listOf(stringResource(R.string.sort_by_name), stringResource(R.string.sort_modified), stringResource(R.string.recent_reads)).forEachIndexed { index, label ->
-                                    DropdownMenuItem(text = { Text(label) }, onClick = { sort = index; sortMenu = false },
-                                        trailingIcon = { if (sort == index) Icon(Icons.Outlined.Check, null) })
+                val pageModifier = Modifier.fillMaxSize()
+                    .then(if (pagerState.currentPage != tab) Modifier.clearAndSetSemantics {} else Modifier)
+                if (state.treeUri == null) {
+                    Box(pageModifier) { WelcomeScreen(onChooseLibrary) }
+                } else {
+                    Layout(modifier = pageModifier, content = {
+                        Column {
+                            Row(Modifier.fillMaxWidth().padding(start = contentInset, end = actionInset, top = 14.dp, bottom = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(titles[tab], style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                                    Text(pluralStringResource(R.plurals.comic_count, books.size, books.size), Modifier.padding(top = 5.dp),
+                                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                            }
-                        }
-                        Row(Modifier.padding(horizontal = contentInset), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            filterOptions.forEach { (value, label) ->
-                                FilterChip(selected = selectedFilter == value, onClick = { filter = value }, label = { Text(label) })
-                            }
-                        }
-                        Box(Modifier.fillMaxSize()) {
-                            LazyVerticalGrid(columns = GridCells.Fixed(state.settings.gridColumns),
-                                state = gridStates[tab], modifier = Modifier.fillMaxSize().testTag("library-grid-$tab"),
-                                contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 88.dp),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-                                val recent = if (tab == 0 && query.isEmpty() && selectedFilter == 0) books
-                                    .filter { (state.progress[it.id]?.updated ?: 0) > 0 && (state.progress[it.id]?.fraction ?: 0f) < 1f }
-                                    .maxByOrNull { state.progress[it.id]?.updated ?: 0 } else null
-                                if (recent != null) item(span = { GridItemSpan(maxLineSpan) }) {
-                                    ContinueCard(recent, state.progress.getValue(recent.id), onClick = { model.open(recent) })
-                                }
-                                items(books, key = { it.id }) { book ->
-                                    BookCard(book, state.progress[book.id] ?: ReadingProgress(), book.id in state.favorites,
-                                        model.repository, state.cacheRevision, state.settings.showFileType,
-                                        showFavoriteIcon = state.settings.showFavoriteIcon || managingFavorites,
-                                        onClick = { if (managingFavorites) model.toggleFavorite(book) else model.open(book) },
-                                        onLongClick = { managingFavorites = true },
-                                        onFavorite = { model.toggleFavorite(book) })
-                                }
-                            }
-                            if (books.isEmpty()) {
-                                EmptyLibrary(
-                                    scanning = state.scanning,
-                                    directoryEmpty = state.books.isEmpty(),
-                                    onChooseLibrary = onChooseLibrary,
-                                    emptyTitle = when {
-                                        tab == 1 && !hasFavorites -> stringResource(R.string.no_favorites)
-                                        tab == 2 && !hasRecent -> stringResource(R.string.no_recent_reads)
-                                        else -> null
+                                IconButton(onClick = { managingFavorites = false; model.refresh() }, enabled = !state.scanning) { Icon(Icons.Outlined.Refresh, stringResource(R.string.refresh_library)) }
+                                EndAlignedDropdownMenu(
+                                    expanded = sortMenu,
+                                    onDismissRequest = { sortMenu = false },
+                                    anchor = {
+                                        IconButton(onClick = { sortMenu = true }) {
+                                            Icon(Icons.AutoMirrored.Outlined.Sort, stringResource(R.string.sort))
+                                        }
                                     },
-                                    emptyDescription = when {
-                                        tab == 1 && !hasFavorites -> stringResource(R.string.favorite_management_hint)
-                                        tab == 2 && !hasRecent -> stringResource(R.string.start_reading_hint)
-                                        else -> null
+                                ) {
+                                    listOf(stringResource(R.string.sort_by_name), stringResource(R.string.sort_modified), stringResource(R.string.recent_reads)).forEachIndexed { index, label ->
+                                        DropdownMenuItem(text = { Text(label) }, onClick = { sort = index; sortMenu = false },
+                                            trailingIcon = { if (sort == index) Icon(Icons.Outlined.Check, null) })
                                     }
-                                )
+                                }
                             }
+                            LibraryFilters(filterOptions, selectedFilter, contentInset) { filter = it }
+                        }
+                        LazyVerticalGrid(columns = GridCells.Fixed(state.settings.gridColumns),
+                            state = gridStates[tab], modifier = Modifier.fillMaxSize().testTag("library-grid-$tab"),
+                            contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 88.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+                            val recent = if (tab == 0 && query.isEmpty() && selectedFilter == 0) books
+                                .filter { (state.progress[it.id]?.updated ?: 0) > 0 && (state.progress[it.id]?.fraction ?: 0f) < 1f }
+                                .maxByOrNull { state.progress[it.id]?.updated ?: 0 } else null
+                            if (recent != null) item(span = { GridItemSpan(maxLineSpan) }) {
+                                ContinueCard(recent, state.progress.getValue(recent.id), onClick = { model.open(recent) })
+                            }
+                            items(books, key = { it.id }) { book ->
+                                BookCard(book, state.progress[book.id] ?: ReadingProgress(), book.id in state.favorites,
+                                    model.repository, state.cacheRevision, state.settings.showFileType,
+                                    showFavoriteIcon = state.settings.showFavoriteIcon || managingFavorites,
+                                    onClick = { if (managingFavorites) model.toggleFavorite(book) else model.open(book) },
+                                    onLongClick = { managingFavorites = true },
+                                    onFavorite = { model.toggleFavorite(book) })
+                            }
+                        }
+                        if (books.isEmpty()) {
+                            EmptyLibrary(
+                                scanning = state.scanning,
+                                directoryEmpty = state.books.isEmpty(),
+                                onChooseLibrary = onChooseLibrary,
+                                emptyTitle = when {
+                                    tab == 1 && !hasFavorites -> stringResource(R.string.no_favorites)
+                                    tab == 2 && !hasRecent -> stringResource(R.string.no_recent_reads)
+                                    else -> null
+                                },
+                                emptyDescription = when {
+                                    tab == 1 && !hasFavorites -> stringResource(R.string.favorite_management_hint)
+                                    tab == 2 && !hasRecent -> stringResource(R.string.start_reading_hint)
+                                    else -> null
+                                }
+                            )
+                        }
+                    }) { measurables, constraints ->
+                        val looseHeight = constraints.copy(minHeight = 0)
+                        val header = measurables[0].measure(looseHeight)
+                        val grid = measurables[1].measure(looseHeight.copy(maxHeight = constraints.maxHeight - header.height))
+                        // 书本图标以分页视口为基准，说明文字高度不影响位置。
+                        val iconTop = (constraints.maxHeight - EmptyLibraryIconSize.roundToPx()) / 2
+                        val emptyTop = maxOf(header.height, iconTop)
+                        val empty = measurables.getOrNull(2)?.measure(looseHeight.copy(maxHeight = constraints.maxHeight - emptyTop))
+                        layout(constraints.maxWidth, constraints.maxHeight) {
+                            header.placeRelative(0, 0)
+                            grid.placeRelative(0, header.height)
+                            empty?.placeRelative(0, emptyTop)
                         }
                     }
                 }
@@ -483,6 +498,9 @@ private fun WelcomeScreen(onChooseLibrary: () -> Unit) {
     }
 }
 
+private val EmptyLibraryIconSize = 52.dp
+private val EmptyLibraryLineBreak = LineBreak.Paragraph.copy(wordBreak = LineBreak.WordBreak.Phrase)
+
 @Composable
 private fun EmptyLibrary(
     scanning: Boolean,
@@ -491,15 +509,24 @@ private fun EmptyLibrary(
     emptyTitle: String? = null,
     emptyDescription: String? = null,
 ) {
-    Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        Icon(Icons.AutoMirrored.Outlined.MenuBook, null, Modifier.size(52.dp), tint = MaterialTheme.colorScheme.primary)
+    val languageTag = LocalConfiguration.current.locales[0].toLanguageTag()
+    val locales = remember(languageTag) { LocaleList(languageTag) }
+    Column(
+        Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 32.dp, end = 32.dp, bottom = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(Icons.AutoMirrored.Outlined.MenuBook, null,
+            Modifier.size(EmptyLibraryIconSize).testTag("empty-library-icon"), tint = MaterialTheme.colorScheme.primary)
         Text(when {
             scanning -> stringResource(R.string.scanning_library)
             directoryEmpty -> stringResource(R.string.empty_directory)
             else -> emptyTitle ?: stringResource(R.string.no_matching_comics)
-        }, Modifier.padding(top = 20.dp), style = MaterialTheme.typography.titleMedium)
+        }, Modifier.padding(top = 20.dp),
+            style = MaterialTheme.typography.titleMedium.copy(localeList = locales, lineBreak = EmptyLibraryLineBreak),
+            textAlign = TextAlign.Center)
         if (!directoryEmpty) Text(emptyDescription ?: stringResource(R.string.try_other_filters), Modifier.fillMaxWidth().padding(top = 12.dp),
-            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+            style = MaterialTheme.typography.bodyMedium.copy(localeList = locales, lineBreak = EmptyLibraryLineBreak),
+            color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         if (directoryEmpty && !scanning) {
             TextButton(onClick = onChooseLibrary, Modifier.padding(top = 12.dp)) { Text(stringResource(R.string.choose_other_directory)) }
         }

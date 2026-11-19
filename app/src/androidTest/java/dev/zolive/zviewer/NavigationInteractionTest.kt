@@ -9,6 +9,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.zolive.zviewer.data.AppLanguage
 import dev.zolive.zviewer.data.Book
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.PreferenceStore
@@ -108,6 +109,42 @@ class NavigationInteractionTest {
         swipe(true)
         tab("最近阅读").assertIsSelected()
         rule.onNodeWithText("选择书库目录").assertIsDisplayed()
+    }
+
+    @Test fun emptyIconsAlignAcrossTabsWithEnglishFiltersAndMessages() {
+        store.saveFavorites(emptySet())
+        store.saveSettings(store.settings().copy(language = AppLanguage.ENGLISH))
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        rule.onNodeWithText("Finished").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithText("Finished").performClick().assertIsSelected()
+        rule.onNodeWithText("No matching comics").assertIsDisplayed()
+        val icon = rule.onNodeWithTag("empty-library-icon")
+        val libraryCenter = icon.assertIsDisplayed().fetchSemanticsNode().boundsInRoot.center.y
+
+        tab("Favorites").performClick()
+        rule.onNodeWithText("No favorites yet").assertIsDisplayed()
+        assertEquals(libraryCenter, icon.assertIsDisplayed().fetchSemanticsNode().boundsInRoot.center.y, 1f)
+
+        tab("Recently read").performClick()
+        rule.onNodeWithText("No matching comics").assertIsDisplayed()
+        rule.onNodeWithText("Unread").assertDoesNotExist()
+        assertEquals(libraryCenter, icon.assertIsDisplayed().fetchSemanticsNode().boundsInRoot.center.y, 1f)
+    }
+
+    @Test fun swipingFiltersKeepsTheCurrentTabWhenTheRowFits() {
+        launch()
+        tab("收藏").performClick()
+        val filters = rule.onNodeWithTag("library-filters")
+        val scrollRange = filters.fetchSemanticsNode().config[SemanticsProperties.HorizontalScrollAxisRange]
+        assertEquals(0f, scrollRange.maxValue(), 0f)
+        filters.performTouchInput { swipeLeft() }
+        tab("收藏").assertIsSelected()
+        filters.performTouchInput { swipeRight() }
+        tab("收藏").assertIsSelected()
+        assertEquals(0f, scrollRange.value(), 0f)
+        rule.onNodeWithText("已读").performClick().assertIsSelected()
+        swipe(true)
+        tab("最近阅读").assertIsSelected()
     }
 
     @Test fun partialDragCanBeCancelledAndVerticalScrollDoesNotChangeTab() {
