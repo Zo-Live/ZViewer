@@ -64,7 +64,7 @@ class ReaderInteractionTest {
             var ready = false
             rule.runOnUiThread {
                 ready = descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>()
-                    .any { it.drawable != null && it.contentDescription.startsWith("第 ${initialPage + 1} 页") }
+                    .any { it.drawable != null && it.contentDescription == context.getString(R.string.image_accessibility, initialPage + 1) }
             }
             ready
         }
@@ -116,7 +116,7 @@ class ReaderInteractionTest {
     private fun toggleControls(visible: Boolean = true) {
         rule.onRoot().performTouchInput { click(Offset(centerX, height * .35f)) }
         rule.waitUntil(15_000) {
-            rule.onAllNodesWithContentDescription("视频播放进度").fetchSemanticsNodes().isNotEmpty() == visible
+            rule.onAllNodesWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).fetchSemanticsNodes().isNotEmpty() == visible
         }
         rule.waitForIdle()
     }
@@ -341,11 +341,11 @@ class ReaderInteractionTest {
         }
         toggleControls()
         repeat(6) {
-            rule.onNodeWithContentDescription("下一页").performClick()
+            rule.onNodeWithContentDescription(rule.activity.getString(R.string.next_page)).performClick()
             rule.waitUntil(15_000) { currentPage == (it + 1) % 3 }
         }
         repeat(6) {
-            rule.onNodeWithContentDescription("上一页").performClick()
+            rule.onNodeWithContentDescription(rule.activity.getString(R.string.previous_page)).performClick()
             rule.waitUntil(15_000) { currentPage == Math.floorMod(-it - 1, 3) }
         }
         waitForVideo()
@@ -379,7 +379,7 @@ class ReaderInteractionTest {
         }
         toggleControls()
         val before = screenshot("video-controls")
-        rule.onNodeWithContentDescription("视频播放进度").assertIsDisplayed().performTouchInput {
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).assertIsDisplayed().performTouchInput {
             down(Offset(width * .1f, centerY))
             moveTo(Offset(width * .6f, centerY), 500)
         }
@@ -390,18 +390,18 @@ class ReaderInteractionTest {
         assertEquals(before.getPixel(before.width / 2, before.height / 2), dragging.getPixel(dragging.width / 2, dragging.height / 2))
         before.recycle()
         dragging.recycle()
-        rule.onNodeWithContentDescription("视频播放进度").performTouchInput { up() }
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).performTouchInput { up() }
         rule.waitUntil(15_000) { (saved[0] ?: 0L) in 5_000L..9_000L }
-        rule.onNodeWithContentDescription("播放视频").performClick()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.play_video)).performClick()
         rule.waitUntil(15_000) {
             var playing = false
             rule.runOnUiThread { playing = currentVideoView().playerView.player!!.isPlaying }
             playing
         }
-        rule.onNodeWithContentDescription("暂停视频").performClick()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.pause_video)).performClick()
         toggleControls(visible = false)
-        rule.onNodeWithContentDescription("视频播放进度").assertDoesNotExist()
-        rule.onNodeWithContentDescription("下一页").assertDoesNotExist()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).assertDoesNotExist()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.next_page)).assertDoesNotExist()
     }
 
     @Test fun horizontalImageLoopHasAdjacentPagesInBothDirections() {
@@ -415,7 +415,8 @@ class ReaderInteractionTest {
             rule.runOnUiThread {
                 val visible = descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>()
                     .filter { it.getGlobalVisibleRect(Rect()) }.map { it.contentDescription.toString() }
-                adjacent = visible.any { it.startsWith("第 3 页") } && visible.any { it.startsWith("第 1 页") }
+                adjacent = rule.activity.getString(R.string.image_accessibility, 3) in visible &&
+                    rule.activity.getString(R.string.image_accessibility, 1) in visible
             }
             adjacent
         }
@@ -442,8 +443,8 @@ class ReaderInteractionTest {
         swipe(forward = false)
         rule.runOnIdle { assertEquals(0, currentPage) }
         toggleControls()
-        rule.onNodeWithContentDescription("上一页").assertIsNotEnabled()
-        rule.onNodeWithContentDescription("视频播放进度").performTouchInput {
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.previous_page)).assertIsNotEnabled()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).performTouchInput {
             swipe(Offset(width * .1f, centerY), Offset(width * .5f, centerY), 300)
         }
         rule.waitUntil(15_000) { (saved[0] ?: 0L) > 4000L }
@@ -457,11 +458,11 @@ class ReaderInteractionTest {
             assertEquals(position, player.currentPosition)
         }
         repeat(2) { step ->
-            rule.onNodeWithContentDescription("下一页").performClick()
+            rule.onNodeWithContentDescription(rule.activity.getString(R.string.next_page)).performClick()
             rule.waitUntil(15_000) { currentPage == step + 1 }
         }
         waitForVideo()
-        rule.onNodeWithContentDescription("下一页").assertIsNotEnabled()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.next_page)).assertIsNotEnabled()
         toggleControls(visible = false)
         swipe()
         rule.runOnIdle { assertEquals(2, currentPage) }
@@ -490,12 +491,12 @@ class ReaderInteractionTest {
         waitForVideo()
         waitForPlayback()
         toggleControls()
-        rule.onNodeWithContentDescription("视频播放进度").assertIsDisplayed()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).assertIsDisplayed()
         toggleControls(visible = false)
         swipe(vertical = true)
         rule.waitUntil(15_000) { currentPage == 2 }
         toggleControls(visible = false)
-        rule.onNodeWithContentDescription("视频播放进度").assertDoesNotExist()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).assertDoesNotExist()
     }
 
     @Test fun mixedContentStartsVideoAfterImageAndKeepsNextVideoPlayable() {

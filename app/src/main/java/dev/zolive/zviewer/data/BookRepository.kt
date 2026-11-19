@@ -9,6 +9,8 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
+import androidx.annotation.StringRes
+import dev.zolive.zviewer.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -57,6 +59,9 @@ class BookRepository(private val context: Context) : Closeable {
         }
     }
 
+    private fun readerError(@StringRes id: Int): ReaderException =
+        ReaderException(preferences.language.localizedContext(context).getString(id))
+
     private fun requestTrim() { trimRequests.trySend(Unit) }
 
     override fun close() { maintenance.cancel(); trimRequests.close() }
@@ -89,7 +94,7 @@ class BookRepository(private val context: Context) : Closeable {
                         cursor.getLong(3), cursor.getLong(4)))
                 }
             }
-        } ?: throw ReaderException("无法读取目录，请重新选择书库并允许访问。")
+        } ?: throw readerError(R.string.directory_read_error)
     }
 
     suspend fun scan(treeUri: Uri, previousBooks: List<Book> = emptyList()): List<Book> = withContext(Dispatchers.IO) {
@@ -99,7 +104,7 @@ class BookRepository(private val context: Context) : Closeable {
         val books = mutableListOf<Book>()
         suspend fun visit(uri: Uri, name: String, depth: Int) {
             currentCoroutineContext().ensureActive()
-            if (depth > 32) throw ReaderException("目录层级超过 32 层，请选择更具体的书库目录。")
+            if (depth > 32) throw readerError(R.string.directory_depth_error)
             val entries = children(uri)
             val images = entries.filter { !it.directory && isImage(it.name) }
             val videos = entries.filter { !it.directory && isVideo(it.name) }
@@ -156,6 +161,7 @@ class BookRepository(private val context: Context) : Closeable {
 
     private suspend fun prepare(book: Book, status: (String) -> Unit): BookSession = withContext(Dispatchers.IO) {
         locks.getOrPut(book.cacheKey) { Mutex() }.withLock {
+            val resources = preferences.language.localizedContext(context).resources
             val folder = File(cache, book.cacheKey).apply { mkdirs(); setLastModified(System.currentTimeMillis()) }
             when (book.kind) {
                 "folder", "video-folder", "mixed-folder" -> {
@@ -163,15 +169,15 @@ class BookRepository(private val context: Context) : Closeable {
                     val pages = entries.map { entry ->
                         PageSource(entry.name, uri = entry.uri.toString(), mediaType = if (isVideo(entry.name)) "video" else "image")
                     }
-                    if (pages.isEmpty()) throw ReaderException("这个文件夹中没有可阅读的图片或视频。")
+                    if (pages.isEmpty()) throw readerError(R.string.no_folder_media)
                     orderedSession(book, pages)
                 }
                 "pdf" -> {
-                    status("正在准备 PDF…")
+                    status(resources.getString(R.string.preparing_pdf))
                     val file = localPdf(book, folder)
                     val count = pdfRenderer(file).use { it.pageCount }
-                    if (count == 0) throw ReaderException("这份 PDF 没有页面。")
-                    BookSession(book, List(count) { PageSource("第 ${it + 1} 页", pdfPage = it) }, file.absolutePath)
+                    if (count == 0) throw readerError(R.string.empty_pdf)
+                    BookSession(book, List(count) { PageSource(resources.getString(R.string.pdf_page_name, it + 1), pdfPage = it) }, file.absolutePath)
                 }
                 else -> {
                     val manifest = File(folder, "media.json")
@@ -206,19 +212,22 @@ class BookRepository(private val context: Context) : Closeable {
                                 val video = regular && isVideo(name)
                                 foundPdf = foundPdf || (regular && isPdf(name))
                                 if (image || video) {
-                                    if (extracted.size >= 20_000) throw ReaderException("漫画超过 20,000 页，无法继续解压。")
+                                    if (extracted.size >= 20_000) throw readerError(R.string.archive_page_limit)
                                     checkEntrySize(entry, if (video) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024)
                                     val output = File(folder, "${extracted.size}.${name.extensionLower()}")
                                     totalBytes += extract(archive, output, 4L * 1024 * 1024 * 1024 - totalBytes,
                                         if (video) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024)
                                     extracted += Triple(name, output, if (video) "video" else "image")
-                                    status("正在准备第 ${extracted.size} ${if (video) "个视频" else "页"}…")
+                                    status(resources.getString(
+                                        if (video) R.string.preparing_archive_video else R.string.preparing_archive_page,
+                                        extracted.size,
+                                    ))
                                 }
                                 entry = Archive.readNextHeader(archive)
                             }
                         }
-                        if (foundPdf) throw ReaderException("压缩包本身可以读取，但其中的 PDF 暂不支持直接阅读，请先解压到书库目录后再打开。")
-                        if (extracted.isEmpty()) throw ReaderException("压缩包中没有支持的图片或视频。")
+                        if (foundPdf) throw readerError(R.string.archive_contains_pdf)
+                        if (extracted.isEmpty()) throw readerError(R.string.no_archive_media)
                         manifest.writeText(JSONArray(extracted.map { (name, file, type) ->
                             org.json.JSONObject().put("name", name).put("path", file.name).put("type", type)
                         }).toString())
@@ -256,7 +265,7 @@ class BookRepository(private val context: Context) : Closeable {
                         "folder" -> {
                             val first = children(Uri.parse(book.uri)).filter { !it.directory && isImage(it.name) }
                                 .minWithOrNull { first, second -> NaturalOrder.compare(first.name, second.name) }
-                                ?: throw ReaderException("图片文件夹为空。")
+                                ?: throw readerError(R.string.empty_image_folder)
                             decodeBitmap(ImageDecoder.createSource(resolver, first.uri), 1000)
                         }
                         "pdf" -> locks.getOrPut(book.cacheKey) { Mutex() }.withLock {
@@ -265,7 +274,7 @@ class BookRepository(private val context: Context) : Closeable {
                             else {
                                 val renderer = runCatching {
                                     val descriptor = resolver.openFileDescriptor(Uri.parse(book.uri), "r")
-                                        ?: throw ReaderException("原文件不可用，请刷新书库或重新授权目录。")
+                                        ?: throw readerError(R.string.source_unavailable)
                                     pdfRenderer(descriptor)
                                 }.getOrNull()
                                 if (renderer != null) renderer.use { renderPdf(it, 0, 1000) }
@@ -278,13 +287,13 @@ class BookRepository(private val context: Context) : Closeable {
                         "video-folder" -> {
                             val first = children(Uri.parse(book.uri)).filter { !it.directory && isVideo(it.name) }
                                 .minWithOrNull { first, second -> NaturalOrder.compare(first.name, second.name) }
-                                ?: throw ReaderException("视频文件夹为空。")
+                                ?: throw readerError(R.string.empty_video_folder)
                             videoCover(first.uri)
                         }
                         "mixed-folder" -> {
                             val first = children(Uri.parse(book.uri)).filter { !it.directory && (isImage(it.name) || isVideo(it.name)) }
                                 .minWithOrNull { first, second -> NaturalOrder.compare(first.name, second.name) }
-                                ?: throw ReaderException("图片和视频文件夹为空。")
+                                ?: throw readerError(R.string.empty_mixed_folder)
                             if (isVideo(first.name)) videoCover(first.uri)
                             else decodeBitmap(ImageDecoder.createSource(resolver, first.uri), 1000)
                         }
@@ -311,8 +320,8 @@ class BookRepository(private val context: Context) : Closeable {
                                     entry = Archive.readNextHeader(archive)
                                 }
                             }
-                            if (foundPdf) throw ReaderException("压缩包本身可以读取，但其中的 PDF 暂不支持直接阅读，请先解压到书库目录后再打开。")
-                            if (firstName == null) throw ReaderException("未找到封面。")
+                            if (foundPdf) throw readerError(R.string.archive_contains_pdf)
+                            if (firstName == null) throw readerError(R.string.no_cover)
                             val limit = if (foundVideos) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024
                             withArchive(book) { archive ->
                                 var entry = Archive.readNextHeader(archive)
@@ -333,7 +342,7 @@ class BookRepository(private val context: Context) : Closeable {
                     val temporary = File(covers, "${book.cacheKey}.tmp")
                     try {
                         temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 93, it) }
-                        if (!temporary.renameTo(cover)) throw ReaderException("封面缓存写入失败。")
+                        if (!temporary.renameTo(cover)) throw readerError(R.string.cover_cache_write_error)
                         if (book.kind != "pdf") File(covers, "${book.cacheKey}.jpg").delete()
                     } finally { bitmap.recycle(); temporary.delete() }
                     cover
@@ -346,7 +355,7 @@ class BookRepository(private val context: Context) : Closeable {
         retriever.setDataSource(context, uri)
         retriever.getScaledFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 1000, 1000)
             ?: retriever.getScaledFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 1000, 1000)
-            ?: throw ReaderException("无法从第一个视频生成封面，设备可能不支持此编码。")
+            ?: throw readerError(R.string.video_cover_error)
     }
 
     /**
@@ -401,7 +410,7 @@ class BookRepository(private val context: Context) : Closeable {
                     val temporary = File(folder, "${output.name}.part")
                     try {
                         temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                        if (!temporary.renameTo(output)) throw ReaderException("页面缓存写入失败，请检查剩余存储空间。")
+                        if (!temporary.renameTo(output)) throw readerError(R.string.page_cache_write_error)
                     } finally { bitmap.recycle(); temporary.delete() }
                 }
                 return@withLock output
@@ -431,13 +440,13 @@ class BookRepository(private val context: Context) : Closeable {
                         val count = input.read(buffer)
                         if (count == -1) break
                         total += count
-                        if (total > limit) throw ReaderException("文件超出安全大小限制。")
+                        if (total > limit) throw readerError(R.string.file_size_limit)
                         output.write(buffer, 0, count)
                         if (total / (16 * 1024 * 1024) != (total - count) / (16 * 1024 * 1024)) requestTrim()
                     }
                 }
-            } ?: throw ReaderException("原文件不可用，请刷新书库或重新授权目录。")
-            if (!temporary.renameTo(destination)) throw ReaderException("缓存写入失败，请检查剩余存储空间。")
+            } ?: throw readerError(R.string.source_unavailable)
+            if (!temporary.renameTo(destination)) throw readerError(R.string.cache_write_error)
         } finally { temporary.delete() }
     }
 
@@ -453,14 +462,14 @@ class BookRepository(private val context: Context) : Closeable {
                 Archive.readOpenFd(archive, descriptor.fd, 128 * 1024)
                 block(archive)
             } finally { Archive.free(archive) }
-        } ?: throw ReaderException("无法打开压缩包，请重新授权书库。")
+        } ?: throw readerError(R.string.archive_open_error)
     }
 
     private fun entryName(entry: Long): String = ArchiveEntry.pathnameUtf8(entry)
         ?: ArchiveEntry.pathname(entry)?.toString(Charsets.UTF_8) ?: ""
 
     private fun checkEntrySize(entry: Long, limit: Long = 256L * 1024 * 1024) {
-        if (ArchiveEntry.size(entry) > limit) throw ReaderException("单个媒体文件超过安全大小限制，无法解压。")
+        if (ArchiveEntry.size(entry) > limit) throw readerError(R.string.archive_entry_size_limit)
     }
 
     private suspend fun extract(archive: Long, output: File, remaining: Long, entryLimit: Long = 256L * 1024 * 1024): Long {
@@ -475,7 +484,7 @@ class BookRepository(private val context: Context) : Closeable {
                 if (!buffer.hasRemaining()) break
                 val count = buffer.remaining()
                 total += count
-                if (total > minOf(remaining, entryLimit)) throw ReaderException("解压大小超过安全限制（单个媒体 4 GB / 每本 4 GB）。")
+                if (total > minOf(remaining, entryLimit)) throw readerError(R.string.archive_total_size_limit)
                 while (buffer.hasRemaining()) channel.write(buffer)
                 if (total / (16 * 1024 * 1024) != (total - count) / (16 * 1024 * 1024)) requestTrim()
             }

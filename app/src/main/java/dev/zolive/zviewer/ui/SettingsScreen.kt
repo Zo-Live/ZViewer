@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -27,18 +28,25 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.zolive.zviewer.BuildConfig
 import dev.zolive.zviewer.LibraryState
 import dev.zolive.zviewer.LibraryViewModel
+import dev.zolive.zviewer.R
+import dev.zolive.zviewer.data.AppLanguage
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.CacheLimits
 import dev.zolive.zviewer.data.UpdateDownload
@@ -87,26 +95,29 @@ fun SettingsScreen(
         // 顶栏默认边距 4 dp，加上 48 dp 点击区的一半，使返回箭头与分区图标中心对齐。
         val topBarInset = SettingsContentInset + SettingsSectionIconSize / 2 - 28.dp
         CenterAlignedTopAppBar(modifier = Modifier.padding(horizontal = topBarInset),
-            title = { Text("设置") }, navigationIcon = {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回书库") }
+            title = { Text(stringResource(R.string.settings)) }, navigationIcon = {
+                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back_to_library)) }
             })
     }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = SettingsContentInset),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            SettingsSectionTitle("外观", Icons.Outlined.Style, topPadding = 8.dp)
+            SettingsSectionTitle(stringResource(R.string.appearance), Icons.Outlined.Style, topPadding = 8.dp)
             SettingsCard {
-                Text("应用主题", style = MaterialTheme.typography.titleMedium)
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                    listOf("system" to "跟随系统", "light" to "浅色", "dark" to "深色").forEachIndexed { index, (value, label) ->
-                        SegmentedButton(selected = settings.theme == value, onClick = { model.settings(settings.copy(theme = value)) },
-                            shape = SegmentedButtonDefaults.itemShape(index, 3), icon = {}) { Text(label) }
-                    }
-                }
-                Text("主题颜色", Modifier.padding(top = 24.dp), style = MaterialTheme.typography.titleMedium)
+                PreferenceMenu(
+                    title = stringResource(R.string.app_theme),
+                    selectedValue = settings.theme,
+                    options = listOf(
+                        "system" to stringResource(R.string.theme_system),
+                        "light" to stringResource(R.string.theme_light),
+                        "dark" to stringResource(R.string.theme_dark),
+                    ),
+                ) { model.settings(settings.copy(theme = it)) }
+                Text(stringResource(R.string.theme_color), Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleMedium)
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    val colors = listOf(0xFF49684D to "苔绿", 0xFF476A8A to "雾蓝", 0xFF79618C to "藤紫", 0xFF9A5357 to "蔷薇", 0xFF8B683E to "琥珀")
+                    val colors = listOf(0xFF49684D to stringResource(R.string.color_moss), 0xFF476A8A to stringResource(R.string.color_mist), 0xFF79618C to stringResource(R.string.color_wisteria), 0xFF9A5357 to stringResource(R.string.color_rose), 0xFF8B683E to stringResource(R.string.color_amber))
                     colors.forEach { (color, name) ->
-                        Box(Modifier.size(44.dp).semantics { contentDescription = "主题颜色：$name" }
+                        val description = stringResource(R.string.theme_color_description, name)
+                        Box(Modifier.size(44.dp).semantics { contentDescription = description }
                             .selectable(selected = settings.accent == color, role = Role.RadioButton) {
                                 model.settings(settings.copy(accent = color))
                             }
@@ -116,72 +127,78 @@ fun SettingsScreen(
                             if (settings.accent == color) Icon(Icons.Outlined.Check, null, Modifier.size(20.dp), Color.White)
                         }
                     }
-                    IconButton(onClick = { customColor = true }, Modifier.size(44.dp)) { Icon(Icons.Outlined.Palette, "自定义主题颜色") }
+                    IconButton(onClick = { customColor = true }, Modifier.size(44.dp)) { Icon(Icons.Outlined.Palette, stringResource(R.string.custom_theme_color)) }
                 }
             }
-            SettingsSectionTitle("偏好", Icons.Outlined.Tune)
+            SettingsSectionTitle(stringResource(R.string.preferences), Icons.Outlined.Tune)
             SettingsCard {
-                Text("每行封面数", style = MaterialTheme.typography.titleMedium)
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-                    (2..5).forEachIndexed { index, count ->
-                        SegmentedButton(selected = settings.gridColumns == count,
-                            onClick = { model.settings(settings.copy(gridColumns = count)) },
-                            shape = SegmentedButtonDefaults.itemShape(index, 4), icon = {}) { Text("$count") }
-                    }
-                }
-                PreferenceSwitch("显示文件类型", "在封面左上角显示漫画格式", settings.showFileType) {
+                PreferenceMenu(
+                    title = stringResource(R.string.language),
+                    selectedValue = settings.language,
+                    options = AppLanguage.entries.map { it to it.endonym },
+                    valueIcon = Icons.Outlined.Language,
+                ) { model.settings(settings.copy(language = it)) }
+                PreferenceMenu(
+                    title = stringResource(R.string.grid_columns),
+                    selectedValue = settings.gridColumns,
+                    options = (2..5).map { it to it.toString() },
+                ) { model.settings(settings.copy(gridColumns = it)) }
+                PreferenceSwitch(stringResource(R.string.show_file_type), stringResource(R.string.show_file_type_hint), settings.showFileType) {
                     model.settings(settings.copy(showFileType = it))
                 }
-                PreferenceSwitch("显示收藏图标", "在封面右下角显示收藏按钮", settings.showFavoriteIcon) {
+                PreferenceSwitch(stringResource(R.string.show_favorite_icon), stringResource(R.string.show_favorite_icon_hint), settings.showFavoriteIcon) {
                     model.settings(settings.copy(showFavoriteIcon = it))
                 }
             }
-            SettingsSectionTitle("阅读", Icons.Outlined.AutoStories)
+            SettingsSectionTitle(stringResource(R.string.reading), Icons.Outlined.AutoStories)
             SettingsCard { ReaderPreferences(settings, model::settings) }
-            SettingsSectionTitle("书库与存储", Icons.Outlined.FolderOpen)
+            SettingsSectionTitle(stringResource(R.string.library_and_storage), Icons.Outlined.FolderOpen)
             SettingsCard {
-                SettingsListItem(headlineContent = { Text("书库目录") }, supportingContent = {
-                    Text(state.treeUri?.let { android.net.Uri.decode(it.substringAfterLast('/')) } ?: "尚未选择")
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.library_directory)) }, supportingContent = {
+                    Text(state.treeUri?.let { android.net.Uri.decode(it.substringAfterLast('/')) } ?: stringResource(R.string.no_directory_selected))
                 },
                     modifier = Modifier.clickable(onClick = onChooseLibrary))
-                SettingsListItem(headlineContent = { Text("清理阅读缓存") }, supportingContent = {
-                    Text("${Formatter.formatShortFileSize(context, cacheSize)} · 双击清除临时解压文件" +
-                        if (settings.clearCovers) "和封面" else "")
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_reading_cache)) }, supportingContent = {
+                    Text(stringResource(
+                        if (settings.clearCovers) R.string.clear_reading_cache_with_covers_hint else R.string.clear_reading_cache_hint,
+                        Formatter.formatShortFileSize(context, cacheSize),
+                    ))
                 },
                     modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearCache))
-                SettingsListItem(headlineContent = { Text("清理封面") },
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_covers)) },
                     trailingContent = { Switch(checked = settings.clearCovers, onCheckedChange = null) },
                     modifier = Modifier.toggleable(value = settings.clearCovers, role = Role.Switch) {
                         model.settings(settings.copy(clearCovers = it))
                     })
-                SettingsListItem(headlineContent = { Text("自动清理阈值") },
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.cache_limit)) },
                     trailingContent = { Text(if (cacheLimitMiB < 1024) "$cacheLimitMiB MiB"
                         else "${(cacheLimitMiB / 1024f).toString().removeSuffix(".0")} GiB") })
+                val cacheLimitDescription = stringResource(R.string.cache_limit)
                 Slider(value = cacheLimitMiB.toFloat(),
                     onValueChange = { cacheLimitMiB = (it / CacheLimits.STEP_MIB).roundToInt() * CacheLimits.STEP_MIB },
                     onValueChangeFinished = { model.settings(settings.copy(cacheLimitMiB = cacheLimitMiB)) },
                     valueRange = CacheLimits.MIN_MIB.toFloat()..CacheLimits.MAX_MIB.toFloat(),
                     steps = (CacheLimits.MAX_MIB - CacheLimits.MIN_MIB) / CacheLimits.STEP_MIB - 1,
-                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "自动清理阈值" })
-                SettingsListItem(headlineContent = { Text("移除后台时清理阅读缓存") },
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = cacheLimitDescription })
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_cache_on_removal)) },
                     trailingContent = { Switch(checked = settings.clearCacheOnTaskRemoval, onCheckedChange = null) },
                     modifier = Modifier.toggleable(value = settings.clearCacheOnTaskRemoval, role = Role.Switch) {
                         model.settings(settings.copy(clearCacheOnTaskRemoval = it))
                     })
-                SettingsListItem(headlineContent = { Text("清除阅读记录") }, supportingContent = {
-                    Text("双击清除所有漫画的页码和视频播放进度")
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_reading_history)) }, supportingContent = {
+                    Text(stringResource(R.string.clear_reading_history_hint))
                 },
                     modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearReadingProgress))
-                SettingsListItem(headlineContent = { Text("移除后台时清除阅读记录") },
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_history_on_removal)) },
                     trailingContent = { Switch(checked = settings.clearProgressOnTaskRemoval, onCheckedChange = null) },
                     modifier = Modifier.toggleable(value = settings.clearProgressOnTaskRemoval, role = Role.Switch) {
                         model.settings(settings.copy(clearProgressOnTaskRemoval = it))
                     })
             }
-            SettingsSectionTitle("诊断", Icons.Outlined.BugReport)
+            SettingsSectionTitle(stringResource(R.string.diagnostics), Icons.Outlined.BugReport)
             SettingsCard {
-                SettingsListItem(headlineContent = { Text("输出诊断日志") }, supportingContent = {
-                    Text("记录设备信息、运行状态与错误")
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.write_diagnostic_logs)) }, supportingContent = {
+                    Text(stringResource(R.string.write_diagnostic_logs_hint))
                 },
                     trailingContent = {
                         Switch(checked = settings.diagnosticLog, onCheckedChange = null)
@@ -191,35 +208,38 @@ fun SettingsScreen(
                     })
                 if (settings.diagnosticLog) {
                     HorizontalDivider(Modifier.padding(vertical = 6.dp))
-                    SettingsListItem(headlineContent = { Text("日志目录") }, supportingContent = {
-                        Text(settings.logDirectory?.let(::logDirectoryLabel) ?: "默认：应用专属目录 logs/")
+                    SettingsListItem(headlineContent = { Text(stringResource(R.string.log_directory)) }, supportingContent = {
+                        Text(settings.logDirectory?.let(::logDirectoryLabel) ?: stringResource(R.string.log_default_directory))
                     },
                         modifier = Modifier.clickable { logPicker.launch(null) })
                     if (settings.logDirectory != null) {
                         TextButton(onClick = { model.setLogDirectory(null) }, Modifier.align(Alignment.End).padding(bottom = 4.dp)) {
-                            Text("恢复默认目录")
+                            Text(stringResource(R.string.restore_default_directory))
                         }
                     }
-                    Text("日志写入所选目录的 zviewer-日期-时间.log（部分文件管理器会补 .txt 后缀）",
+                    Text(stringResource(R.string.log_filename_hint),
                         Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            SettingsSectionTitle("应用", Icons.Outlined.Info)
+            SettingsSectionTitle(stringResource(R.string.app), Icons.Outlined.Info)
             SettingsCard {
                 val download = state.updateDownload
                 val updateLabel = when (download) {
-                    is UpdateDownload.Pending -> if (download.waiting) "等待下载更新" else "正在下载更新"
-                    is UpdateDownload.Ready -> "安装更新"
-                    is UpdateDownload.Failed -> "重试下载更新"
-                    null -> "检查更新"
+                    is UpdateDownload.Pending -> if (download.waiting) stringResource(R.string.update_download_waiting) else stringResource(R.string.update_downloading)
+                    is UpdateDownload.Ready -> stringResource(R.string.update_install)
+                    is UpdateDownload.Failed -> stringResource(R.string.update_download_retry)
+                    null -> stringResource(R.string.update_check)
                 }
                 SettingsListItem(headlineContent = { Text(updateLabel) },
-                    supportingContent = { Text(download?.let { "ZViewer ${it.version}" } ?: "当前版本：${BuildConfig.VERSION_NAME}") },
+                    supportingContent = { Text(download?.let { "ZViewer ${it.version}" } ?: stringResource(R.string.current_version, BuildConfig.VERSION_NAME)) },
                     trailingContent = {
-                        if (state.checkingUpdate || state.downloadingUpdate) CircularProgressIndicator(
-                            Modifier.size(24.dp).semantics { contentDescription = if (state.downloadingUpdate) "正在准备下载" else "正在检查更新" },
-                            strokeWidth = 2.dp)
+                        if (state.checkingUpdate || state.downloadingUpdate) {
+                            val description = stringResource(
+                                if (state.downloadingUpdate) R.string.update_download_preparing else R.string.update_checking,
+                            )
+                            CircularProgressIndicator(Modifier.size(24.dp).semantics { contentDescription = description }, strokeWidth = 2.dp)
+                        }
                     },
                     modifier = Modifier.clickable(
                         enabled = !state.checkingUpdate && !state.downloadingUpdate && download !is UpdateDownload.Pending,
@@ -229,12 +249,12 @@ fun SettingsScreen(
                             if (activity != null) openUpdateInstaller(activity, model, download)
                         } else model.checkForUpdates()
                     })
-                SettingsListItem(headlineContent = { Text("启动时检查更新") },
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.update_check_on_start)) },
                     trailingContent = { Switch(checked = settings.checkUpdatesOnStartup, onCheckedChange = null) },
                     modifier = Modifier.toggleable(value = settings.checkUpdatesOnStartup, role = Role.Switch) {
                         model.settings(settings.copy(checkUpdatesOnStartup = it))
                     })
-                SettingsListItem(headlineContent = { Text("关于 ZViewer") },
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.about)) },
                     modifier = Modifier.clickable(role = Role.Button) { about = true })
             }
             Spacer(Modifier.height(20.dp))
@@ -243,29 +263,29 @@ fun SettingsScreen(
     if (customColor) {
         var value by remember { mutableStateOf("%06X".format(settings.accent and 0xFFFFFF)) }
         val valid = value.matches(Regex("[0-9a-fA-F]{6}"))
-        AlertDialog(onDismissRequest = { customColor = false }, title = { Text("自定义主题颜色") }, text = {
+        AlertDialog(onDismissRequest = { customColor = false }, title = { Text(stringResource(R.string.custom_theme_color)) }, text = {
             Column {
-                Text("输入六位十六进制色值，界面将自动生成对应的明暗配色")
+                Text(stringResource(R.string.color_hex_hint))
                 OutlinedTextField(value, { value = it.removePrefix("#").take(6) }, Modifier.padding(top = 16.dp),
-                    label = { Text("颜色值") }, prefix = { Text("#") }, singleLine = true, isError = !valid)
+                    label = { Text(stringResource(R.string.color_value)) }, prefix = { Text("#") }, singleLine = true, isError = !valid)
             }
         }, confirmButton = { TextButton(enabled = valid, onClick = {
             model.settings(settings.copy(accent = AndroidColor.parseColor("#$value").toLong() and 0xFFFFFFFF)); customColor = false
-        }) { Text("应用") } }, dismissButton = { TextButton(onClick = { customColor = false }) { Text("取消") } })
+        }) { Text(stringResource(R.string.apply)) } }, dismissButton = { TextButton(onClick = { customColor = false }) { Text(stringResource(R.string.cancel)) } })
     }
-    if (about) AlertDialog(onDismissRequest = { about = false }, title = { Text("ZViewer · 本地漫画阅读器") },
-        text = { Text("版本 ${BuildConfig.VERSION_NAME}\n\n支持 ZIP / CBZ、RAR / CBR、7Z、PDF、图片文件夹与常见视频格式。支持 APNG、动态 WebP、GIF、AVIF 及常用静态图片。\n\n全部阅读数据仅保存在本机，仅检查和下载更新时联网，不上传阅读文件。密码保护、分卷压缩包及 DRM 文件请先自行转换。\n\n开源组件：AndroidX / Compose（Apache 2.0）、Media3（Apache 2.0）、APNG4Android（Apache 2.0）、libarchive（BSD）、libavif（BSD）。\n\nHEIF / HEIC 的可解码范围取决于设备系统解码器。", Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) },
-        confirmButton = { TextButton(onClick = { about = false }) { Text("知道了") } },
-        dismissButton = { TextButton(onClick = { about = false; licenses = true }) { Text("开源许可") } })
+    if (about) AlertDialog(onDismissRequest = { about = false }, title = { Text(stringResource(R.string.about_title)) },
+        text = { Text(stringResource(R.string.about_description, BuildConfig.VERSION_NAME), Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) },
+        confirmButton = { TextButton(onClick = { about = false }) { Text(stringResource(R.string.ok)) } },
+        dismissButton = { TextButton(onClick = { about = false; licenses = true }) { Text(stringResource(R.string.open_source_licenses)) } })
     if (licenses) {
-        val notices by produceState("正在读取许可文本…") {
+        val notices by produceState(stringResource(R.string.loading_licenses)) {
             value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 context.assets.open("open_source_notices.txt").bufferedReader().use { it.readText() }
             }
         }
-        AlertDialog(onDismissRequest = { licenses = false }, title = { Text("开源许可") },
+        AlertDialog(onDismissRequest = { licenses = false }, title = { Text(stringResource(R.string.open_source_licenses)) },
             text = { Text(notices, Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()), style = MaterialTheme.typography.bodySmall) },
-            confirmButton = { TextButton(onClick = { licenses = false }) { Text("关闭") } })
+            confirmButton = { TextButton(onClick = { licenses = false }) { Text(stringResource(R.string.close)) } })
     }
 }
 
@@ -310,20 +330,83 @@ private fun SettingsCard(content: @Composable ColumnScope.() -> Unit) {
 }
 
 @Composable
-fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> Unit) {
-    Text("阅读模式", style = MaterialTheme.typography.titleMedium)
-    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        SegmentedButton(selected = settings.vertical, onClick = { onSettings(settings.copy(vertical = true)) },
-            shape = SegmentedButtonDefaults.itemShape(0, 2), icon = {}) { Text("垂直连续") }
-        SegmentedButton(selected = !settings.vertical, onClick = { onSettings(settings.copy(vertical = false)) },
-            shape = SegmentedButtonDefaults.itemShape(1, 2), icon = {}) { Text("水平翻页") }
+private fun <T> PreferenceMenu(
+    title: String,
+    selectedValue: T,
+    options: List<Pair<T, String>>,
+    valueIcon: ImageVector? = null,
+    onSelect: (T) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val current = options.firstOrNull { it.first == selectedValue } ?: options.first()
+    val action = stringResource(if (expanded) R.string.menu_collapse else R.string.menu_expand)
+    val menuState = stringResource(if (expanded) R.string.menu_expanded else R.string.menu_collapsed)
+    EndAlignedDropdownMenu(
+        expanded = expanded,
+        onDismissRequest = { expanded = false },
+        modifier = Modifier.selectableGroup(),
+        anchor = {
+            BoxWithConstraints {
+                val spacing = 12.dp
+                val valueMaxWidth = ((maxWidth - spacing) / 2).coerceAtLeast(0.dp)
+                Row(
+                    Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable(role = Role.Button, onClickLabel = action) { expanded = !expanded }
+                        .semantics { stateDescription = menuState }
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(spacing),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                    Row(
+                        Modifier.widthIn(max = valueMaxWidth),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        if (valueIcon != null) Icon(valueIcon, null, Modifier.size(18.dp), tint)
+                        Text(current.second, Modifier.weight(1f, fill = false),
+                            style = MaterialTheme.typography.bodyMedium, color = tint)
+                        Icon(if (expanded) Icons.Outlined.ArrowDropUp else Icons.Outlined.ArrowDropDown,
+                            null, Modifier.size(20.dp), tint)
+                    }
+                }
+            }
+        },
+    ) {
+        options.forEach { option ->
+            val isSelected = option == current
+            DropdownMenuItem(
+                text = { Text(option.second) },
+                onClick = {
+                    expanded = false
+                    if (!isSelected) onSelect(option.first)
+                },
+                modifier = Modifier.semantics {
+                    role = Role.RadioButton
+                    selected = isSelected
+                },
+                trailingIcon = {
+                    if (isSelected) Icon(Icons.Outlined.Check, null, tint = MaterialTheme.colorScheme.primary)
+                },
+            )
+        }
     }
-    PreferenceSwitch("深色阅读背景", "关闭后使用浅色画布，与应用主题独立", settings.readerDark) { onSettings(settings.copy(readerDark = it)) }
-    PreferenceSwitch("从右向左翻页", "适用于右开本的水平阅读模式", settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }
-    PreferenceSwitch("阅读时屏幕常亮", "离开阅读器后恢复系统设置", settings.keepScreenOn) { onSettings(settings.copy(keepScreenOn = it)) }
-    PreferenceSwitch("单个视频循环播放", "视频播放完后留在当前视频并重新开始", settings.videoLoopSingle) { onSettings(settings.copy(videoLoopSingle = it)) }
-    PreferenceSwitch("视频默认仅预览", "切换视频时暂停，轻触画面开始播放", settings.videoPreview) { onSettings(settings.copy(videoPreview = it)) }
-    PreferenceSwitch("循环模式", "读到漫画结尾后继续翻页回到第一页", settings.loopMode) { onSettings(settings.copy(loopMode = it)) }
+}
+
+@Composable
+fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> Unit) {
+    PreferenceMenu(
+        title = stringResource(R.string.reading_mode),
+        selectedValue = settings.vertical,
+        options = listOf(true to stringResource(R.string.reading_vertical), false to stringResource(R.string.reading_horizontal)),
+    ) { onSettings(settings.copy(vertical = it)) }
+    PreferenceSwitch(stringResource(R.string.reader_dark), stringResource(R.string.reader_dark_hint), settings.readerDark) { onSettings(settings.copy(readerDark = it)) }
+    PreferenceSwitch(stringResource(R.string.reader_rtl), stringResource(R.string.reader_rtl_hint), settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }
+    PreferenceSwitch(stringResource(R.string.keep_screen_on), stringResource(R.string.keep_screen_on_hint), settings.keepScreenOn) { onSettings(settings.copy(keepScreenOn = it)) }
+    PreferenceSwitch(stringResource(R.string.loop_single_video), stringResource(R.string.loop_single_video_hint), settings.videoLoopSingle) { onSettings(settings.copy(videoLoopSingle = it)) }
+    PreferenceSwitch(stringResource(R.string.video_preview), stringResource(R.string.video_preview_hint), settings.videoPreview) { onSettings(settings.copy(videoPreview = it)) }
+    PreferenceSwitch(stringResource(R.string.loop_mode), stringResource(R.string.loop_mode_hint), settings.loopMode) { onSettings(settings.copy(loopMode = it)) }
 }
 
 @Composable
@@ -335,7 +418,8 @@ private fun PreferenceSwitch(title: String, subtitle: String, checked: Boolean, 
         verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f).padding(end = 12.dp)) {
             Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, Modifier.padding(top = 3.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(subtitle, Modifier.padding(top = 3.dp), style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked, onCheckedChange = null)
     }

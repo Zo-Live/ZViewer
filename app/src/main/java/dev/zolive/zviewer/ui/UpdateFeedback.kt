@@ -19,6 +19,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalAccessibilityManager
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.dismiss
 import androidx.compose.ui.semantics.liveRegion
@@ -30,6 +31,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import dev.zolive.zviewer.LibraryState
 import dev.zolive.zviewer.LibraryViewModel
+import dev.zolive.zviewer.R
 import dev.zolive.zviewer.data.UpdateDownload
 import dev.zolive.zviewer.data.UpdateDownloader
 import kotlinx.coroutines.delay
@@ -54,11 +56,11 @@ fun UpdateFeedback(state: LibraryState, model: LibraryViewModel) {
     }
     if (prompt != null) {
         AlertDialog(onDismissRequest = model::dismissUpdate,
-            text = { Text("检测到新版本：${prompt.version}\n是否立即更新？") },
-            dismissButton = { TextButton(onClick = model::dismissUpdate) { Text("稍后更新") } },
-            confirmButton = { TextButton(onClick = model::startUpdateDownload) { Text("立即更新") } })
+            text = { Text(stringResource(R.string.update_prompt, prompt.version)) },
+            dismissButton = { TextButton(onClick = model::dismissUpdate) { Text(stringResource(R.string.update_later)) } },
+            confirmButton = { TextButton(onClick = model::startUpdateDownload) { Text(stringResource(R.string.update_now)) } })
     }
-    val notice = state.updateNotice.takeIf { prompt == null }
+    val notice = state.updateNotice?.takeIf { prompt == null }?.let { stringResource(it) }
     var lastNotice by remember { mutableStateOf("") }
     if (notice != null) SideEffect { lastNotice = notice }
     val visible = remember { MutableTransitionState(false) }

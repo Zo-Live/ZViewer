@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -21,6 +22,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import dev.zolive.zviewer.R
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
 import dev.zolive.zviewer.data.DiagnosticLog
@@ -400,7 +402,7 @@ internal fun VideoPage(
                     view.onLayoutReady = {}
                 }
             })
-        if (state?.failed == true) Text("视频无法播放，文件可能无法读取或设备不支持此编码。", Modifier.padding(28.dp), color = foreground)
+        if (state?.failed == true) Text(stringResource(R.string.video_error), Modifier.padding(28.dp), color = foreground)
         // 只在停靠页且首帧尚未渲染时显示进度圈；预载、拖动中的页面只显示封面，避免切换时闪现进度圈。
         else if (state != null && active && !state.firstFrameReady &&
             (state.playbackState == Player.STATE_BUFFERING || state.playbackState == Player.STATE_IDLE)) {
@@ -419,14 +421,15 @@ internal fun VideoProgressControls(state: VideoPlaybackState) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = state::togglePlayback, enabled = !state.failed && state.index >= 0) {
                 Icon(if (state.playRequested) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
-                    if (state.playRequested) "暂停视频" else "播放视频")
+                    stringResource(if (state.playRequested) R.string.pause_video else R.string.play_video))
             }
+            val progressDescription = stringResource(R.string.video_playback_progress)
             Slider(value = displayedPosition.toFloat().coerceIn(0f, state.duration.coerceAtLeast(1L).toFloat()),
                 onValueChange = { dragPosition = it.toLong() },
                 onValueChangeFinished = { dragPosition?.let(state::seek); dragPosition = null },
                 valueRange = 0f..state.duration.coerceAtLeast(1L).toFloat(),
                 enabled = state.seekable && state.duration > 0L && !state.failed,
-                modifier = Modifier.weight(1f).semantics { contentDescription = "视频播放进度" })
+                modifier = Modifier.weight(1f).semantics { contentDescription = progressDescription })
         }
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
     }

@@ -9,6 +9,7 @@ import androidx.core.content.edit
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import dev.zolive.zviewer.BuildConfig
+import dev.zolive.zviewer.R
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -48,7 +49,7 @@ class UpdateDownloader(private val context: Context) {
             val fileName = "ZViewer-$version-${UUID.randomUUID()}.apk"
             val id = manager.enqueue(DownloadManager.Request(url.toUri())
                 .setTitle("ZViewer $version")
-                .setDescription("下载完成后将在 ZViewer 中继续安装")
+                .setDescription(PreferenceStore(context).language.localizedContext(context).getString(R.string.update_download_description))
                 .setMimeType(APK_MIME_TYPE)
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE)
                 .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, "updates/$fileName"))

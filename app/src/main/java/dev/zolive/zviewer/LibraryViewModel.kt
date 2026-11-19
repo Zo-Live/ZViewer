@@ -3,6 +3,7 @@ package dev.zolive.zviewer
 import android.app.Application
 import android.content.Intent
 import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.zolive.zviewer.data.Book
@@ -44,7 +45,7 @@ data class LibraryState(
     val downloadingUpdate: Boolean = false,
     val updateDownload: UpdateDownload? = null,
     val updatePrompt: UpdateInfo? = null,
-    val updateNotice: String? = null,
+    @StringRes val updateNotice: Int? = null,
 )
 
 class LibraryViewModel(
@@ -90,10 +91,10 @@ class LibraryViewModel(
                 val info = updateChecker.latest(manual, refresh = manual && download is UpdateDownload.Failed)
                 val newer = info.isNewerThanInstalled
                 mutable.update { it.copy(updatePrompt = info.takeIf { newer },
-                    updateNotice = if (!newer && manualUpdateRequested) "当前为最新版本" else null) }
+                    updateNotice = if (!newer && manualUpdateRequested) R.string.update_latest else null) }
             } catch (error: CancellationException) { throw error }
             catch (_: Exception) {
-                if (manualUpdateRequested) mutable.update { it.copy(updateNotice = "检查更新失败，请检查网络或稍后重试") }
+                if (manualUpdateRequested) mutable.update { it.copy(updateNotice = R.string.update_check_failed) }
             } finally {
                 manualUpdateRequested = false
                 mutable.update { it.copy(checkingUpdate = false) }
@@ -113,11 +114,11 @@ class LibraryViewModel(
                 // 已选中的正式安装包可直接下载。缺少资源时才重新查询发布信息。
                 val info = if (offered.downloadUrl != null) offered else updateChecker.latest(manual = true, refresh = true)
                 downloadUpdate(info)
-                mutable.update { it.copy(updateNotice = "更新将在后台下载") }
+                mutable.update { it.copy(updateNotice = R.string.update_background) }
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) {
                 DiagnosticLog.error("Update", "启动更新下载失败", error)
-                mutable.update { it.copy(updateNotice = "无法下载更新，请稍后重试") }
+                mutable.update { it.copy(updateNotice = R.string.update_cannot_download) }
             } finally { mutable.update { it.copy(downloadingUpdate = false) } }
         }
     }
@@ -139,7 +140,7 @@ class LibraryViewModel(
         mutable.update {
             it.copy(updateDownload = download,
                 updatePrompt = if (download is UpdateDownload.Pending || download is UpdateDownload.Ready) null else it.updatePrompt,
-                updateNotice = if (failed) "更新下载失败，可在设置中重试" else it.updateNotice)
+                updateNotice = if (failed) R.string.update_download_failed else it.updateNotice)
         }
     }
 
@@ -154,7 +155,7 @@ class LibraryViewModel(
 
     fun showUpdateInstallerError(error: Exception) {
         DiagnosticLog.error("Update", "无法打开系统安装器", error)
-        mutable.update { it.copy(updateNotice = "无法打开系统安装器，可在设置中重试") }
+        mutable.update { it.copy(updateNotice = R.string.update_installer_failed) }
     }
 
     fun selectLibrary(uri: Uri) {
@@ -196,7 +197,7 @@ class LibraryViewModel(
     fun open(book: Book) {
         openJob?.cancel()
         openJob = viewModelScope.launch {
-            mutable.update { it.copy(opening = "正在打开《${book.title}》…", error = null) }
+            mutable.update { it.copy(opening = message(R.string.opening_book, book.title), error = null) }
             val started = android.os.SystemClock.elapsedRealtime()
             try {
                 DiagnosticLog.log("Library", "打开 book=${book.id.take(8)} kind=${book.kind} bytes=${book.size}")
@@ -272,7 +273,7 @@ class LibraryViewModel(
             DiagnosticLog.log("Permission", "选择日志目录 authority=${uri.authority}")
             settings(mutable.value.settings.copy(diagnosticLog = true, logDirectory = uri.toString()))
         } catch (error: Exception) {
-            val message = "选择的目录不允许写入，请换一个目录再试。"
+            val message = message(R.string.log_directory_error)
             DiagnosticLog.error("Log", message, error)
             mutable.update { it.copy(error = message) }
         }
@@ -299,12 +300,15 @@ class LibraryViewModel(
 
     fun dismissError() { mutable.update { it.copy(error = null) } }
 
+    private fun message(@StringRes id: Int, vararg args: Any): String =
+        store.language.localizedContext(getApplication<Application>()).getString(id, *args)
+
     private fun showError(error: Exception) {
         val message = when (error) {
             is ReaderException -> error.message!!
-            is SecurityException -> "没有读取权限，或文件使用了密码保护。请重新选择书库；密码保护文件请先解密。"
-            is me.zhanghai.android.libarchive.ArchiveException -> "压缩包无法读取，可能已损坏、使用了密码或属于分卷文件。请先解压到图片文件夹后再阅读。"
-            else -> "文件读取失败，请检查文件是否完整、存储空间是否充足，然后重试。"
+            is SecurityException -> message(R.string.permission_error)
+            is me.zhanghai.android.libarchive.ArchiveException -> message(R.string.archive_error)
+            else -> message(R.string.file_read_error)
         }
         android.util.Log.w("ZViewer", message, error)
         DiagnosticLog.error("Library", message, error)

@@ -1,17 +1,21 @@
 package dev.zolive.zviewer
 
+import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import dev.zolive.zviewer.data.AppLanguage
 import dev.zolive.zviewer.data.DiagnosticLog
+import dev.zolive.zviewer.data.PreferenceStore
 import dev.zolive.zviewer.ui.ZViewerApp
 import dev.zolive.zviewer.ui.ZViewerTheme
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -20,15 +24,25 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val model: LibraryViewModel by viewModels()
+    private lateinit var appliedLanguage: AppLanguage
+
+    override fun attachBaseContext(newBase: Context) {
+        appliedLanguage = PreferenceStore(newBase).language
+        super.attachBaseContext(appliedLanguage.localizedContext(newBase))
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        dev.zolive.zviewer.data.DiagnosticLog.installCrashHandler()
+        DiagnosticLog.installCrashHandler()
         enableEdgeToEdge()
         val taskPreparation = TaskRemovalCleanup.track(application, taskId)
         lifecycleScope.launch {
             taskPreparation.join()
             setContent {
                 val state by model.state.collectAsStateWithLifecycle()
+                LaunchedEffect(state.settings.language) {
+                    if (state.settings.language != appliedLanguage) recreate()
+                }
                 ZViewerTheme(state.settings) { ZViewerApp(model, state) }
             }
             repeatOnLifecycle(Lifecycle.State.RESUMED) {

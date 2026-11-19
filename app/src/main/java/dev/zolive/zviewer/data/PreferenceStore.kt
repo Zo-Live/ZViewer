@@ -10,6 +10,9 @@ class PreferenceStore(context: Context) {
         get() = preferences.getString("library_uri", null)
         set(value) { preferences.edit().putString("library_uri", value).apply() }
 
+    val language: AppLanguage
+        get() = AppLanguage.fromTag(preferences.getString("language", null))
+
     fun settings() = ReaderSettings(
         theme = preferences.getString("theme", "system") ?: "system",
         accent = preferences.getLong("accent", 0xFF49684D),
@@ -30,6 +33,7 @@ class PreferenceStore(context: Context) {
         cacheLimitMiB = CacheLimits.normalize(preferences.getInt("cache_limit_mib", CacheLimits.DEFAULT_MIB)),
         clearCacheOnTaskRemoval = preferences.getBoolean("clear_cache_on_task_removal", false),
         clearProgressOnTaskRemoval = preferences.getBoolean("clear_progress_on_task_removal", false),
+        language = language,
     )
 
     fun saveSettings(settings: ReaderSettings) {
@@ -48,6 +52,7 @@ class PreferenceStore(context: Context) {
             .putBoolean("clear_covers", settings.clearCovers)
             .putBoolean("clear_cache_on_task_removal", settings.clearCacheOnTaskRemoval)
             .putBoolean("clear_progress_on_task_removal", settings.clearProgressOnTaskRemoval)
+            .putString("language", settings.language.tag)
             .putInt("cache_limit_mib", CacheLimits.normalize(settings.cacheLimitMiB)).apply()
     }
 

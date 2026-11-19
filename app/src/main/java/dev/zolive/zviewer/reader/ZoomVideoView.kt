@@ -92,7 +92,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         offsetX = 0f
         offsetY = 0f
         updateTransform()
-        contentDescription = "第 ${index + 1} 个视频，轻点显示阅读控制，双击缩放"
+        contentDescription = context.getString(R.string.video_accessibility, index + 1)
     }
 
     /** 设置或清除首帧封面；同一 Bitmap 重复设置时不做无谓刷新。 */

@@ -63,6 +63,8 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -72,6 +74,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.zolive.zviewer.LibraryState
 import dev.zolive.zviewer.LibraryViewModel
+import dev.zolive.zviewer.R
 import dev.zolive.zviewer.data.Book
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.NaturalOrder
@@ -80,6 +83,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import androidx.core.view.WindowCompat
+import java.util.Locale
 import kotlin.math.roundToInt
 
 @Composable
@@ -211,21 +215,21 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     }
     if (state.opening != null) {
         AlertDialog(onDismissRequest = model::cancelOpen, icon = { CircularProgressIndicator(Modifier.size(36.dp)) },
-            title = { Text("准备阅读") }, text = { Text(state.opening) },
-            confirmButton = { TextButton(onClick = model::cancelOpen) { Text("取消") } })
+            title = { Text(stringResource(R.string.opening_reader)) }, text = { Text(state.opening) },
+            confirmButton = { TextButton(onClick = model::cancelOpen) { Text(stringResource(R.string.cancel)) } })
     }
     if (state.error != null) {
         AlertDialog(onDismissRequest = model::dismissError, icon = { Icon(Icons.Outlined.Info, null) },
-            title = { Text("暂时无法读取") }, text = { Text(state.error) },
-            confirmButton = { TextButton(onClick = model::dismissError) { Text("知道了") } },
-            dismissButton = { TextButton(onClick = { model.dismissError(); chooseLibrary() }) { Text("选择书库") } })
+            title = { Text(stringResource(R.string.read_error_title)) }, text = { Text(state.error) },
+            confirmButton = { TextButton(onClick = model::dismissError) { Text(stringResource(R.string.ok)) } },
+            dismissButton = { TextButton(onClick = { model.dismissError(); chooseLibrary() }) { Text(stringResource(R.string.choose_library)) } })
     }
 }
 
 @Composable
 private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: Boolean,
     onSettings: () -> Unit, onChooseLibrary: () -> Unit) {
-    val titles = listOf("书库", "收藏", "最近阅读")
+    val titles = listOf(stringResource(R.string.library), stringResource(R.string.favorites), stringResource(R.string.recent_reads))
     val pagerState = rememberPagerState { titles.size }
     val gridStates = titles.map { rememberLazyGridState() }
     val currentGrid = gridStates[pagerState.currentPage]
@@ -247,8 +251,8 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
             TopAppBar(modifier = Modifier.padding(start = contentInset - 16.dp, end = actionInset - 4.dp), title = {
                 Text("ZViewer", fontWeight = FontWeight.Bold, fontSize = 21.sp)
             }, actions = {
-                IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(Icons.Outlined.Search, "搜索漫画") }
-                IconButton(onClick = { managingFavorites = false; onSettings() }) { Icon(Icons.Outlined.Settings, "设置") }
+                IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(Icons.Outlined.Search, stringResource(R.string.search_comics)) }
+                IconButton(onClick = { managingFavorites = false; onSettings() }) { Icon(Icons.Outlined.Settings, stringResource(R.string.settings)) }
             })
         },
         bottomBar = {
@@ -278,17 +282,17 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                     fadeOut(tween(150))
             ) {
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = contentInset, vertical = 8.dp),
-                    placeholder = { Text("搜索书名") }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
-                    trailingIcon = { IconButton(onClick = { query = ""; searching = false }) { Icon(Icons.Outlined.Close, "关闭搜索") } },
+                    placeholder = { Text(stringResource(R.string.search_title)) }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                    trailingIcon = { IconButton(onClick = { query = ""; searching = false }) { Icon(Icons.Outlined.Close, stringResource(R.string.close_search)) } },
                     shape = RoundedCornerShape(28.dp), singleLine = true)
             }
             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize().testTag("library-pager"),
                 key = { it }) { tab ->
                 var sortMenu by remember { mutableStateOf(false) }
                 val filterOptions = if (tab == 2) {
-                    listOf(0 to "全部", 1 to "在读", 3 to "已读")
+                    listOf(0 to stringResource(R.string.filter_all), 1 to stringResource(R.string.filter_in_progress), 3 to stringResource(R.string.filter_read))
                 } else {
-                    listOf(0 to "全部", 1 to "在读", 2 to "未读", 3 to "已读")
+                    listOf(0 to stringResource(R.string.filter_all), 1 to stringResource(R.string.filter_in_progress), 2 to stringResource(R.string.filter_unread), 3 to stringResource(R.string.filter_read))
                 }
                 val selectedFilter = if (tab == 2 && filter == 2) 0 else filter
                 val books = remember(state.books, state.favorites, state.progress, tab, query, selectedFilter, sort) {
@@ -320,17 +324,22 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                             verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(titles[tab], style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                                Text("${books.size} 本漫画", Modifier.padding(top = 5.dp),
+                                Text(pluralStringResource(R.plurals.comic_count, books.size, books.size), Modifier.padding(top = 5.dp),
                                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
-                            IconButton(onClick = { managingFavorites = false; model.refresh() }, enabled = !state.scanning) { Icon(Icons.Outlined.Refresh, "刷新书库") }
-                            Box {
-                                IconButton(onClick = { sortMenu = true }) { Icon(Icons.AutoMirrored.Outlined.Sort, "排序") }
-                                DropdownMenu(expanded = sortMenu, onDismissRequest = { sortMenu = false }) {
-                                    listOf("按名称", "最近修改", "最近阅读").forEachIndexed { index, label ->
-                                        DropdownMenuItem(text = { Text(label) }, onClick = { sort = index; sortMenu = false },
-                                            trailingIcon = { if (sort == index) Icon(Icons.Outlined.Check, null) })
+                            IconButton(onClick = { managingFavorites = false; model.refresh() }, enabled = !state.scanning) { Icon(Icons.Outlined.Refresh, stringResource(R.string.refresh_library)) }
+                            EndAlignedDropdownMenu(
+                                expanded = sortMenu,
+                                onDismissRequest = { sortMenu = false },
+                                anchor = {
+                                    IconButton(onClick = { sortMenu = true }) {
+                                        Icon(Icons.AutoMirrored.Outlined.Sort, stringResource(R.string.sort))
                                     }
+                                },
+                            ) {
+                                listOf(stringResource(R.string.sort_by_name), stringResource(R.string.sort_modified), stringResource(R.string.recent_reads)).forEachIndexed { index, label ->
+                                    DropdownMenuItem(text = { Text(label) }, onClick = { sort = index; sortMenu = false },
+                                        trailingIcon = { if (sort == index) Icon(Icons.Outlined.Check, null) })
                                 }
                             }
                         }
@@ -365,13 +374,13 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                                     directoryEmpty = state.books.isEmpty(),
                                     onChooseLibrary = onChooseLibrary,
                                     emptyTitle = when {
-                                        tab == 1 && !hasFavorites -> "暂无收藏的漫画"
-                                        tab == 2 && !hasRecent -> "暂无最近阅读的漫画"
+                                        tab == 1 && !hasFavorites -> stringResource(R.string.no_favorites)
+                                        tab == 2 && !hasRecent -> stringResource(R.string.no_recent_reads)
                                         else -> null
                                     },
                                     emptyDescription = when {
-                                        tab == 1 && !hasFavorites -> "长按漫画封面以批量管理收藏"
-                                        tab == 2 && !hasRecent -> "点击漫画封面以开始阅读"
+                                        tab == 1 && !hasFavorites -> stringResource(R.string.favorite_management_hint)
+                                        tab == 2 && !hasRecent -> stringResource(R.string.start_reading_hint)
                                         else -> null
                                     }
                                 )
@@ -427,7 +436,7 @@ private fun LibraryActions(gridState: LazyGridState, managingFavorites: Boolean,
                     IntOffset(-distance.roundToInt(), 0)
                 },
                 shape = CircleShape, containerColor = MaterialTheme.colorScheme.secondaryContainer) {
-                Icon(Icons.Outlined.Close, "退出收藏管理")
+                Icon(Icons.Outlined.Close, stringResource(R.string.exit_favorite_management))
             }
         }
         val arrowVisible by remember(gridState) { derivedStateOf { buttonProgress > 0f } }
@@ -444,7 +453,7 @@ private fun LibraryActions(gridState: LazyGridState, managingFavorites: Boolean,
                     translationY = size.height * (1f - alpha)
                 },
                 shape = CircleShape, containerColor = MaterialTheme.colorScheme.secondaryContainer) {
-                Icon(Icons.Outlined.KeyboardArrowUp, "回到顶部")
+                Icon(Icons.Outlined.KeyboardArrowUp, stringResource(R.string.scroll_to_top))
             }
         }
     }
@@ -469,7 +478,7 @@ private fun WelcomeScreen(onChooseLibrary: () -> Unit) {
         }
         Spacer(Modifier.height(30.dp))
         Button(onClick = onChooseLibrary, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            Icon(Icons.Outlined.CreateNewFolder, null); Spacer(Modifier.width(10.dp)); Text("选择书库目录", fontSize = 16.sp)
+            Icon(Icons.Outlined.CreateNewFolder, null); Spacer(Modifier.width(10.dp)); Text(stringResource(R.string.choose_library_directory), fontSize = 16.sp)
         }
     }
 }
@@ -485,14 +494,14 @@ private fun EmptyLibrary(
     Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Icon(Icons.AutoMirrored.Outlined.MenuBook, null, Modifier.size(52.dp), tint = MaterialTheme.colorScheme.primary)
         Text(when {
-            scanning -> "正在整理你的书库…"
-            directoryEmpty -> "此目录无漫画"
-            else -> emptyTitle ?: "没有符合条件的漫画"
+            scanning -> stringResource(R.string.scanning_library)
+            directoryEmpty -> stringResource(R.string.empty_directory)
+            else -> emptyTitle ?: stringResource(R.string.no_matching_comics)
         }, Modifier.padding(top = 20.dp), style = MaterialTheme.typography.titleMedium)
-        if (!directoryEmpty) Text(emptyDescription ?: "尝试其他筛选条件", Modifier.fillMaxWidth().padding(top = 12.dp),
+        if (!directoryEmpty) Text(emptyDescription ?: stringResource(R.string.try_other_filters), Modifier.fillMaxWidth().padding(top = 12.dp),
             style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
         if (directoryEmpty && !scanning) {
-            TextButton(onClick = onChooseLibrary, Modifier.padding(top = 12.dp)) { Text("选择其他目录") }
+            TextButton(onClick = onChooseLibrary, Modifier.padding(top = 12.dp)) { Text(stringResource(R.string.choose_other_directory)) }
         }
     }
 }
@@ -504,11 +513,11 @@ private fun ContinueCard(book: Book, progress: ReadingProgress, onClick: () -> U
         Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.AutoMirrored.Outlined.MenuBook, null, Modifier.size(30.dp))
             Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
-                Text("继续阅读", style = MaterialTheme.typography.labelMedium)
+                Text(stringResource(R.string.continue_reading), style = MaterialTheme.typography.labelMedium)
                 Text(book.title, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("第 ${progress.page + 1} / ${progress.total} 页", Modifier.padding(top = 3.dp), style = MaterialTheme.typography.bodySmall)
+                Text(stringResource(R.string.page_progress, progress.page + 1, progress.total), Modifier.padding(top = 3.dp), style = MaterialTheme.typography.bodySmall)
             }
-            Icon(Icons.Outlined.PlayArrow, "继续阅读")
+            Icon(Icons.Outlined.PlayArrow, stringResource(R.string.continue_reading))
         }
     }
 }
@@ -518,20 +527,26 @@ private fun BookCard(book: Book, progress: ReadingProgress, favorite: Boolean, r
     revision: Int, showFileType: Boolean, showFavoriteIcon: Boolean, onClick: () -> Unit,
     onLongClick: () -> Unit, onFavorite: () -> Unit) {
     Column(Modifier.clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onClick,
-        onLongClickLabel = "管理收藏", onLongClick = onLongClick)) {
+        onLongClickLabel = stringResource(R.string.manage_favorites), onLongClick = onLongClick)) {
         Box(Modifier.fillMaxWidth().aspectRatio(.69f).clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
             BookCover(book, repository, revision)
             if (showFileType) {
                 Surface(Modifier.align(Alignment.TopStart).padding(7.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = .92f),
                     shape = RoundedCornerShape(6.dp)) {
-                    Text(book.formatLabel, Modifier.padding(horizontal = 6.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall)
+                    val formatLabel = when (book.kind) {
+                        "folder" -> stringResource(R.string.image_folder)
+                        "video-folder" -> stringResource(R.string.video_folder)
+                        "mixed-folder" -> stringResource(R.string.mixed_folder)
+                        else -> book.kind.uppercase(Locale.ROOT)
+                    }
+                    Text(formatLabel, Modifier.padding(horizontal = 6.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall)
                 }
             }
             if (showFavoriteIcon) IconButton(onClick = onFavorite, modifier = Modifier.align(Alignment.BottomEnd).size(48.dp)) {
                 Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = .92f)) {
                     Icon(if (favorite) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
-                        if (favorite) "取消收藏 ${book.title}" else "收藏 ${book.title}", Modifier.padding(6.dp).size(18.dp),
+                        stringResource(if (favorite) R.string.remove_favorite else R.string.add_favorite, book.title), Modifier.padding(6.dp).size(18.dp),
                         tint = MaterialTheme.colorScheme.primary)
                 }
             }
@@ -540,7 +555,7 @@ private fun BookCard(book: Book, progress: ReadingProgress, favorite: Boolean, r
         }
         Text(book.title, Modifier.padding(top = 9.dp, start = 1.dp, end = 1.dp), style = MaterialTheme.typography.titleSmall,
             maxLines = 2, overflow = TextOverflow.Ellipsis, lineHeight = 20.sp)
-        Text(when { progress.total == 0 -> "未开始"; progress.fraction >= 1f -> "已读完 · ${progress.total} 页"; else -> "${progress.page + 1} / ${progress.total} 页" },
+        Text(when { progress.total == 0 -> stringResource(R.string.not_started); progress.fraction >= 1f -> stringResource(R.string.finished_pages, progress.total); else -> stringResource(R.string.card_page_progress, progress.page + 1, progress.total) },
             Modifier.padding(top = 3.dp, start = 1.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
@@ -564,6 +579,6 @@ private fun BookCover(book: Book, repository: BookRepository, revision: Int) {
         verticalArrangement = Arrangement.Center) {
         Icon(if (failed) Icons.Outlined.ImageNotSupported else Icons.AutoMirrored.Outlined.MenuBook, null,
             Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        if (failed) Text("轻点尝试阅读", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelSmall)
+        if (failed) Text(stringResource(R.string.tap_to_read), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelSmall)
     }
 }

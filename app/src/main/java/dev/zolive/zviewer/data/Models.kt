@@ -29,12 +29,6 @@ data class Book(
 ) {
     val cacheKey: String by lazy { ("$id-$modified-$size" +
         if (contentSignature.isEmpty()) "" else "-$contentSignature").stableId() }
-    val formatLabel: String get() = when (kind) {
-        "folder" -> "图片集"
-        "video-folder" -> "视频集"
-        "mixed-folder" -> "混合内容"
-        else -> kind.uppercase(Locale.ROOT)
-    }
 }
 
 data class ReadingProgress(val page: Int = 0, val total: Int = 0, val updated: Long = 0L) {
@@ -61,6 +55,7 @@ data class ReaderSettings(
     val cacheLimitMiB: Int = CacheLimits.DEFAULT_MIB,
     val clearCacheOnTaskRemoval: Boolean = false,
     val clearProgressOnTaskRemoval: Boolean = false,
+    val language: AppLanguage = AppLanguage.SIMPLIFIED_CHINESE,
 )
 
 data class PageSource(

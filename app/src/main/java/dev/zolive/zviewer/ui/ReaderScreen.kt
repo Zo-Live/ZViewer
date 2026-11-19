@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -46,6 +47,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.zolive.zviewer.R
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
 import dev.zolive.zviewer.data.DiagnosticLog
@@ -94,11 +96,6 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     val mixedBook = remember(session) { videoBook && session.pages.any { !it.isVideo } }
     val verticalReading = settings.vertical
     val pagerReading = videoBook || !verticalReading
-    val pageUnit = when {
-        mixedBook -> "项"
-        videoBook -> "个视频"
-        else -> "页"
-    }
     val videoPool = remember(session.book.cacheKey, videoBook) { if (videoBook) VideoPlaybackPool(context) else null }
     // 会话级封面缓存：同一真实页在循环模式下可能被多个虚拟项复用，
     // 重建视图时直接取已解码的封面，避免异步解码造成一帧空档。
@@ -229,7 +226,15 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 Surface(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(12.dp),
                     color = background.copy(alpha = OverlayBackgroundAlpha),
                     contentColor = foreground.copy(alpha = .65f), shape = RoundedCornerShape(12.dp)) {
-                    Text("${currentPage + 1} / ${session.pages.size} $pageUnit", Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    Text(stringResource(
+                        when {
+                            mixedBook -> R.string.compact_item_progress
+                            videoBook -> R.string.compact_video_progress
+                            else -> R.string.card_page_progress
+                        },
+                        currentPage + 1,
+                        session.pages.size,
+                    ), Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelSmall)
                 }
             }
@@ -237,8 +242,8 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 TopAppBar(title = {
                     Text(session.book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 }, navigationIcon = {
-                    IconButton(onClick = { onProgress(currentPage); onBack() }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, "返回书库") }
-                }, actions = { IconButton(onClick = { preferences = true }) { Icon(Icons.Outlined.Settings, "阅读设置") } },
+                    IconButton(onClick = { onProgress(currentPage); onBack() }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back_to_library)) }
+                }, actions = { IconButton(onClick = { preferences = true }) { Icon(Icons.Outlined.Settings, stringResource(R.string.reader_settings)) } },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = .97f)))
             }
             AnimatedVisibility(visible = controls, modifier = Modifier.align(Alignment.BottomCenter),
@@ -253,7 +258,15 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         var dragging by remember { mutableStateOf(false) }
                         LaunchedEffect(currentPage) { if (!dragging) slider = currentPage.toFloat() }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = { jumpDialog = true }) { Text("第 ${if (dragging) slider.roundToInt() + 1 else currentPage + 1} / ${session.pages.size} $pageUnit") }
+                            TextButton(onClick = { jumpDialog = true }) { Text(stringResource(
+                                when {
+                                    mixedBook -> R.string.item_progress
+                                    videoBook -> R.string.video_progress
+                                    else -> R.string.page_progress
+                                },
+                                if (dragging) slider.roundToInt() + 1 else currentPage + 1,
+                                session.pages.size,
+                            )) }
                             Spacer(Modifier.weight(1f))
                             Text("${((currentPage + 1f) / session.pages.size * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium)
                         }
@@ -263,11 +276,11 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                             valueRange = 0f..maxOf(1, session.pages.lastIndex).toFloat(), enabled = session.pages.size > 1,
                             modifier = Modifier.fillMaxWidth())
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { jump(currentPage - 1) }, enabled = settings.loopMode || currentPage > 0) { Icon(Icons.AutoMirrored.Outlined.NavigateBefore, "上一页") }
-                            IconButton(onClick = { zoomPage = currentPage; zoomAction = -1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomOut, if (currentPageIsVideo) "缩小视频" else "缩小图片") }
-                            TextButton(onClick = { zoomPage = currentPage; zoomAction = 0; zoomSequence++ }) { Text("适合屏幕") }
-                            IconButton(onClick = { zoomPage = currentPage; zoomAction = 1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomIn, if (currentPageIsVideo) "放大视频" else "放大图片") }
-                            IconButton(onClick = { jump(currentPage + 1) }, enabled = settings.loopMode || currentPage < session.pages.lastIndex) { Icon(Icons.AutoMirrored.Outlined.NavigateNext, "下一页") }
+                            IconButton(onClick = { jump(currentPage - 1) }, enabled = settings.loopMode || currentPage > 0) { Icon(Icons.AutoMirrored.Outlined.NavigateBefore, stringResource(R.string.previous_page)) }
+                            IconButton(onClick = { zoomPage = currentPage; zoomAction = -1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomOut, stringResource(if (currentPageIsVideo) R.string.zoom_out_video else R.string.zoom_out_image)) }
+                            TextButton(onClick = { zoomPage = currentPage; zoomAction = 0; zoomSequence++ }) { Text(stringResource(R.string.fit_screen)) }
+                            IconButton(onClick = { zoomPage = currentPage; zoomAction = 1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomIn, stringResource(if (currentPageIsVideo) R.string.zoom_in_video else R.string.zoom_in_image)) }
+                            IconButton(onClick = { jump(currentPage + 1) }, enabled = settings.loopMode || currentPage < session.pages.lastIndex) { Icon(Icons.AutoMirrored.Outlined.NavigateNext, stringResource(R.string.next_page)) }
                         }
                     }
                 }
@@ -276,7 +289,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     }
     if (preferences) ModalBottomSheet(onDismissRequest = { preferences = false }) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
-            Text("阅读设置", style = MaterialTheme.typography.headlineSmall)
+            Text(stringResource(R.string.reader_settings), style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(24.dp))
             ReaderPreferences(settings, onSettings)
             Spacer(Modifier.height(20.dp))
@@ -285,12 +298,23 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     if (jumpDialog) {
         var text by remember { mutableStateOf((currentPage + 1).toString()) }
         val page = text.toIntOrNull()
-        AlertDialog(onDismissRequest = { jumpDialog = false }, title = { Text("跳转到指定$pageUnit") }, text = {
-            OutlinedTextField(text, { text = it.filter(Char::isDigit).take(6) }, label = { Text("${when { mixedBook -> "内容序号"; videoBook -> "视频序号"; else -> "页码" }}（1–${session.pages.size}）") },
+        val title = when {
+            mixedBook -> R.string.jump_to_item
+            videoBook -> R.string.jump_to_video
+            else -> R.string.jump_to_page
+        }
+        val label = when {
+            mixedBook -> R.string.item_number_range
+            videoBook -> R.string.video_number_range
+            else -> R.string.page_number_range
+        }
+        AlertDialog(onDismissRequest = { jumpDialog = false }, title = { Text(stringResource(title)) }, text = {
+            OutlinedTextField(text, { text = it.filter(Char::isDigit).take(6) },
+                label = { Text(stringResource(label, session.pages.size)) },
                 singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
         }, confirmButton = { TextButton(enabled = page != null && page in 1..session.pages.size,
-            onClick = { jump(page!! - 1); jumpDialog = false }) { Text("跳转") } },
-            dismissButton = { TextButton(onClick = { jumpDialog = false }) { Text("取消") } })
+            onClick = { jump(page!! - 1); jumpDialog = false }) { Text(stringResource(R.string.jump)) } },
+            dismissButton = { TextButton(onClick = { jumpDialog = false }) { Text(stringResource(R.string.cancel)) } })
     }
 }
 
@@ -336,26 +360,27 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
     foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float? = null,
     onRatio: (Float) -> Unit = {}, loadEnabled: Boolean = true, onLoaded: () -> Unit = {}, onTap: () -> Unit) {
     val viewportWidth = LocalWindowInfo.current.containerSize.width
+    val imageDescription = stringResource(R.string.image_accessibility, index + 1)
     val width = (viewportWidth * 2).coerceIn(480, 3200)
     val animationWidth = viewportWidth.coerceIn(480, 3200)
     var retry by remember { mutableIntStateOf(0) }
-    var failure by remember(session.book.cacheKey, index) { mutableStateOf<String?>(null) }
+    var failure by remember(session.book.cacheKey, index) { mutableStateOf(false) }
     val drawable by produceState<Drawable?>(null, width, animationWidth, retry, loadEnabled) {
         if (!loadEnabled) return@produceState
-        failure = null
+        failure = false
         try {
             val file = repository.pageFile(session, index, width)
             value = withContext(imageDecodeDispatcher) { ImageLoader.load(file, width, animationWidth) }
         } catch (error: CancellationException) { throw error }
         catch (error: Exception) {
             DiagnosticLog.error("Image", "页面解码失败 book=${session.book.id.take(8)} page=${index + 1} format=${session.pages[index].name.substringAfterLast('.')} targetWidth=$width", error)
-            failure = "这一页暂时无法解码。请确认图片完整，且设备支持此编码。"
+            failure = true
         }
     }
     val ratio = drawable?.let { it.intrinsicWidth.toFloat() / it.intrinsicHeight.coerceAtLeast(1) } ?: initialRatio ?: .70f
     LaunchedEffect(drawable, failure) {
         if (drawable != null) onRatio(ratio)
-        if (drawable != null || failure != null) onLoaded()
+        if (drawable != null || failure) onLoaded()
     }
     val layout = if (vertical) Modifier.fillMaxWidth().aspectRatio(ratio.coerceAtLeast(.03f)) else Modifier.fillMaxSize()
     Box(layout, contentAlignment = Alignment.Center) {
@@ -365,16 +390,16 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
                 onRelease = ZoomImageView::clearImage,
                 update = { view ->
                     view.onTap = onTap
-                    view.bind(image, "第 ${index + 1} 页，轻点显示阅读控制，双击缩放", active)
+                    view.bind(image, imageDescription, active)
                     if (zoomSequence > 0) view.command(zoomSequence, zoomAction)
                 })
-        } else if (failure != null) {
+        } else if (failure) {
             Column(Modifier.padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(Icons.Outlined.BrokenImage, null, tint = foreground)
-                Text(failure!!, Modifier.padding(vertical = 16.dp), color = foreground)
+                Text(stringResource(R.string.image_error), Modifier.padding(vertical = 16.dp), color = foreground)
                 Row {
-                    TextButton(onClick = { retry++ }) { Text("重试") }
-                    TextButton(onClick = onTap) { Text("显示阅读控制") }
+                    TextButton(onClick = { retry++ }) { Text(stringResource(R.string.retry)) }
+                    TextButton(onClick = onTap) { Text(stringResource(R.string.show_reader_controls)) }
                 }
             }
         } else CircularProgressIndicator(Modifier.size(28.dp), color = foreground)

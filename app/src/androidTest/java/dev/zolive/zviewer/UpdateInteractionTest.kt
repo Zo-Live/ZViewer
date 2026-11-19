@@ -58,12 +58,12 @@ class UpdateInteractionTest {
     }
 
     private fun settings() {
-        rule.onNodeWithContentDescription("设置").performClick()
-        rule.onNodeWithText("关于 ZViewer").performScrollTo()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.settings)).performClick()
+        rule.onNodeWithText(rule.activity.getString(R.string.about)).performScrollTo()
     }
 
     private fun checkUpdate() {
-        rule.onNodeWithText("检查更新").performScrollTo().performClick()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_check)).performScrollTo().performClick()
     }
 
     private fun waitForCheck() {
@@ -85,14 +85,14 @@ class UpdateInteractionTest {
     @Test fun applicationSectionDefaultsAndAboutAreAccessible() {
         launch()
         settings()
-        rule.onNodeWithText("应用").assertIsDisplayed()
-        rule.onNodeWithText("启动时检查更新").assertIsOff().performClick().assertIsOn()
+        rule.onNodeWithText(rule.activity.getString(R.string.app)).assertIsDisplayed()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_check_on_start)).assertIsOff().performClick().assertIsOn()
         assertTrue(PreferenceStore(context).settings().checkUpdatesOnStartup)
-        rule.onNodeWithText("启动时检查更新").performClick().assertIsOff()
-        rule.onNodeWithText("当前版本：${BuildConfig.VERSION_NAME}").assertExists()
-        rule.onNodeWithText("关于 ZViewer").performClick()
-        rule.onNodeWithText("ZViewer · 本地漫画阅读器").assertIsDisplayed()
-        rule.onNodeWithText("知道了").performClick()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_check_on_start)).performClick().assertIsOff()
+        rule.onNodeWithText(rule.activity.getString(R.string.current_version, BuildConfig.VERSION_NAME)).assertExists()
+        rule.onNodeWithText(rule.activity.getString(R.string.about)).performClick()
+        rule.onNodeWithText(rule.activity.getString(R.string.about_title)).assertIsDisplayed()
+        rule.onNodeWithText(rule.activity.getString(R.string.ok)).performClick()
         assertEquals(0, calls.get())
     }
 
@@ -101,15 +101,15 @@ class UpdateInteractionTest {
         settings()
         checkUpdate()
         waitForCheck()
-        rule.onNodeWithText("当前为最新版本").assertIsDisplayed()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertIsDisplayed()
         rule.onRoot().performTouchInput { click(Offset(width * .8f, height * .3f)) }
-        rule.onNodeWithText("当前为最新版本").assertDoesNotExist()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertDoesNotExist()
         checkUpdate()
         waitForCheck()
-        rule.onNodeWithText("当前为最新版本").assertExists()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertExists()
         assertEquals(2, calls.get())
         rule.mainClock.advanceTimeBy(4_000)
-        rule.onNodeWithText("当前为最新版本").assertDoesNotExist()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertDoesNotExist()
     }
 
     @Test fun latestNoticeStaysAtSameHeightWhenSystemBackClosesSettings() {
@@ -117,7 +117,7 @@ class UpdateInteractionTest {
         settings()
         checkUpdate()
         waitForCheck()
-        val notice = rule.onNodeWithText("当前为最新版本")
+        val notice = rule.onNodeWithText(rule.activity.getString(R.string.update_latest))
         val bounds = notice.assertIsDisplayed().fetchSemanticsNode().boundsInRoot
         rule.mainClock.autoAdvance = false
         try {
@@ -137,15 +137,15 @@ class UpdateInteractionTest {
         launch(gate = gate)
         settings()
         checkUpdate()
-        rule.onNodeWithContentDescription("正在检查更新").assertExists()
-        rule.onNodeWithText("立即更新").assertDoesNotExist()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.update_checking)).assertExists()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_now)).assertDoesNotExist()
         rule.runOnIdle { repeat(5) { model.checkForUpdates() } }
         gate.countDown()
         waitForCheck()
         assertEquals(1, calls.get())
-        rule.onNodeWithText("检测到新版本：9.0.0\n是否立即更新？").assertIsDisplayed()
-        rule.onNodeWithText("稍后更新").performClick()
-        rule.onNodeWithText("立即更新").assertDoesNotExist()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_prompt, "9.0.0")).assertIsDisplayed()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_later)).performClick()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_now)).assertDoesNotExist()
         assertEquals(0, downloads.get())
     }
 
@@ -154,9 +154,9 @@ class UpdateInteractionTest {
         settings()
         checkUpdate()
         waitForCheck()
-        rule.onNodeWithText("立即更新").performClick()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_now)).performClick()
         rule.waitUntil(10_000) { !model.state.value.downloadingUpdate }
-        rule.onNodeWithText("更新将在后台下载").assertIsDisplayed()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_background)).assertIsDisplayed()
         assertEquals(1, calls.get())
         assertEquals(1, downloads.get())
     }
@@ -168,8 +168,8 @@ class UpdateInteractionTest {
         settings()
         checkUpdate()
         waitForCheck()
-        rule.onNodeWithText("检查更新失败，请检查网络或稍后重试").assertIsDisplayed()
-        rule.onNodeWithText("当前为最新版本").assertDoesNotExist()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_check_failed)).assertIsDisplayed()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertDoesNotExist()
         assertEquals(2, calls.get())
     }
 
@@ -178,10 +178,10 @@ class UpdateInteractionTest {
         settings()
         checkUpdate()
         waitForCheck()
-        rule.onNodeWithText("立即更新").performClick()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_now)).performClick()
         rule.waitUntil(10_000) { !model.state.value.downloadingUpdate }
-        rule.onNodeWithText("无法下载更新，请稍后重试").assertIsDisplayed()
-        rule.onNodeWithContentDescription("返回书库").assertIsDisplayed()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_cannot_download)).assertIsDisplayed()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.back_to_library)).assertIsDisplayed()
     }
 
     @Test fun startupDialogWaitsUntilTheBookIsClosed() {
@@ -191,12 +191,12 @@ class UpdateInteractionTest {
         gate.countDown()
         waitForCheck()
         assertNotNull(model.state.value.updatePrompt)
-        rule.onNodeWithText("立即更新").assertDoesNotExist()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_now)).assertDoesNotExist()
         rule.mainClock.advanceTimeBy(5_000)
         rule.runOnIdle { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitUntil(5_000) { model.state.value.session == null }
-        rule.onNodeWithText("检测到新版本：9.0.0\n是否立即更新？").assertIsDisplayed()
-        rule.onNodeWithText("稍后更新").performClick()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_prompt, "9.0.0")).assertIsDisplayed()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_later)).performClick()
     }
 
     @Test fun latestNoticeDoesNotExpireWhileReading() {
@@ -206,14 +206,14 @@ class UpdateInteractionTest {
         openBook()
         gate.countDown()
         waitForCheck()
-        rule.onNodeWithText("当前为最新版本").assertDoesNotExist()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertDoesNotExist()
         rule.mainClock.advanceTimeBy(8_000)
-        assertEquals("当前为最新版本", model.state.value.updateNotice)
+        assertEquals(R.string.update_latest, model.state.value.updateNotice)
         rule.runOnIdle { rule.activity.onBackPressedDispatcher.onBackPressed() }
         rule.waitUntil(5_000) { model.state.value.session == null }
-        rule.onNodeWithText("当前为最新版本").assertIsDisplayed()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertIsDisplayed()
         rule.mainClock.advanceTimeBy(4_000)
-        rule.onNodeWithText("当前为最新版本").assertDoesNotExist()
+        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertDoesNotExist()
     }
 
     @Test fun startupUpToDateIsSilent() {
