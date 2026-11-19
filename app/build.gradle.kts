@@ -55,6 +55,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.16.0")
     implementation("androidx.vectordrawable:vectordrawable-animated:1.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
+    // 仅使用 JAR 内的拼音字典。
+    runtimeOnly("com.github.houbb:pinyin:0.4.0") { isTransitive = false }
     implementation("androidx.media3:media3-exoplayer:1.6.1")
     implementation("androidx.media3:media3-ui:1.6.1")
     implementation("me.zhanghai.android.libarchive:library:1.1.6")

@@ -1,7 +1,9 @@
 package dev.zolive.zviewer
 
+import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.drawable.Animatable
+import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -15,6 +17,8 @@ import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 @RunWith(AndroidJUnit4::class)
 class FormatIntegrationTest {
@@ -51,6 +55,50 @@ class FormatIntegrationTest {
             assertEquals(book.title, 1000, cover.width)
             cover.recycle()
             assertEquals(3, repository.open(book).pages.size)
+        }
+    }
+
+    @Test fun cachedArchiveUsesPinyinAndKeepsExistingProgressOnTheSameFile() = runBlocking {
+        val archive = File.createTempFile("pinyin", ".cbz", context.cacheDir)
+        val book = Book(archive.name, Uri.fromFile(archive).toString(), "排序验收", "cbz", 0, 0)
+        val image = fixture("static.png").readBytes()
+        val oldOrder = listOf("2.png", "10.png", "Alpha.png", "あ10.png", "ア2.png", "中文.mp4", "大连.png",
+            "重庆2.png", "重庆10.png")
+        val expected = listOf("2.png", "10.png", "Alpha.png", "重庆2.png", "重庆10.png", "大连.png", "中文.mp4",
+            "ア2.png", "あ10.png")
+        val store = PreferenceStore(context)
+        val legacy = context.getSharedPreferences("zviewer", Context.MODE_PRIVATE)
+        val id = book.id
+        try {
+            ZipOutputStream(archive.outputStream()).use { zip ->
+                for (name in oldOrder) {
+                    zip.putNextEntry(ZipEntry(name))
+                    zip.write(image)
+                    zip.closeEntry()
+                }
+            }
+            repository.open(book).let { session ->
+                assertEquals(expected, session.pages.map(PageSource::name))
+                repository.close(session)
+            }
+            legacy.edit().putInt("page_$id", 5).putInt("total_$id", expected.size)
+                .putLong("video_${id}_5", 3210L).apply()
+            // 删除源文件，验证新版直接用旧格式的 media.json 和已解压文件。
+            assertTrue(archive.delete())
+            repeat(2) {
+                val session = repository.open(book)
+                try {
+                    assertEquals(expected, session.pages.map(PageSource::name))
+                    assertEquals("中文.mp4", session.pages[store.progress(id).page].name)
+                    assertEquals(3210L, store.videoPosition(id, 6))
+                    assertEquals(0L, store.videoPosition(id, 5))
+                } finally { repository.close(session) }
+            }
+        } finally {
+            archive.delete()
+            File(context.cacheDir, "books/${book.cacheKey}").deleteRecursively()
+            legacy.edit().remove("page_$id").remove("total_$id").remove("video_${id}_5")
+                .remove("video_${id}_6").remove("page_order_$id").apply()
         }
     }
 

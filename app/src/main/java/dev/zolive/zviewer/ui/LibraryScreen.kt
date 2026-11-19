@@ -295,7 +295,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                         when {
                             tab == 2 || sort == 2 -> filtered.sortedByDescending { state.progress[it.id]?.updated ?: 0 }
                             sort == 1 -> filtered.sortedByDescending { it.modified }
-                            else -> filtered.sortedWith { first, second -> NaturalOrder.compare(first.title, second.title) }
+                            else -> NaturalOrder.sorted(filtered, Book::title)
                         }
                     }
                 }

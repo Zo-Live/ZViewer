@@ -138,7 +138,7 @@ class BookRepository(private val context: Context) : Closeable {
                 previous.cacheKey to current.cacheKey else null
         }.toMap()
         readingCache.reconcile(previousBooks.map { it.cacheKey }.toSet(), books.map { it.cacheKey }.toSet(), upgradedKeys)
-        books.sortedWith { first, second -> NaturalOrder.compare(first.title, second.title) }
+        NaturalOrder.sorted(books, Book::title)
     }
 
     suspend fun open(book: Book, status: (String) -> Unit = {}): BookSession {
@@ -160,12 +160,11 @@ class BookRepository(private val context: Context) : Closeable {
             when (book.kind) {
                 "folder", "video-folder", "mixed-folder" -> {
                     val entries = children(Uri.parse(book.uri)).filter { !it.directory && (isImage(it.name) || isVideo(it.name)) }
-                    val pages = entries.sortedWith { first, second -> NaturalOrder.compare(first.name, second.name) }
-                        .map { entry ->
-                            PageSource(entry.name, uri = entry.uri.toString(), mediaType = if (isVideo(entry.name)) "video" else "image")
-                        }
+                    val pages = entries.map { entry ->
+                        PageSource(entry.name, uri = entry.uri.toString(), mediaType = if (isVideo(entry.name)) "video" else "image")
+                    }
                     if (pages.isEmpty()) throw ReaderException("这个文件夹中没有可阅读的图片或视频。")
-                    BookSession(book, pages)
+                    orderedSession(book, pages)
                 }
                 "pdf" -> {
                     status("正在准备 PDF…")
@@ -185,21 +184,12 @@ class BookRepository(private val context: Context) : Closeable {
                             }
                         }.getOrDefault(emptyList())
                         if (files.isNotEmpty() && files.all { File(folder, it.second).isFile }) {
-                            return@withLock BookSession(book, files.map { (name, path, type) ->
+                            return@withLock orderedSession(book, files.map { (name, path, type) ->
                                 PageSource(name, File(folder, path).absolutePath, mediaType = type)
                             })
                         }
                     }
-                    val legacyManifest = File(folder, "pages.json")
-                    if (legacyManifest.exists()) {
-                        val files = runCatching {
-                            val array = JSONArray(legacyManifest.readText())
-                            (0 until array.length()).map { array.getString(it) }
-                        }.getOrDefault(emptyList())
-                        if (files.isNotEmpty() && files.all { File(folder, it).isFile }) {
-                            return@withLock BookSession(book, files.map { PageSource(it, File(folder, it).absolutePath) })
-                        }
-                    }
+                    // 最早的 pages.json 只记录解压后的编号，重新解压才能取得原始文件名。
                     folder.deleteRecursively()
                     folder.mkdirs()
                     try {
@@ -229,11 +219,12 @@ class BookRepository(private val context: Context) : Closeable {
                         }
                         if (foundPdf) throw ReaderException("压缩包本身可以读取，但其中的 PDF 暂不支持直接阅读，请先解压到书库目录后再打开。")
                         if (extracted.isEmpty()) throw ReaderException("压缩包中没有支持的图片或视频。")
-                        val sorted = extracted.sortedWith { first, second -> NaturalOrder.compare(first.first, second.first) }
-                        manifest.writeText(JSONArray(sorted.map { (name, file, type) ->
+                        manifest.writeText(JSONArray(extracted.map { (name, file, type) ->
                             org.json.JSONObject().put("name", name).put("path", file.name).put("type", type)
                         }).toString())
-                        BookSession(book, sorted.map { (name, file, type) -> PageSource(name, file.absolutePath, mediaType = type) })
+                        orderedSession(book, extracted.map { (name, file, type) ->
+                            PageSource(name, file.absolutePath, mediaType = type)
+                        })
                     } catch (error: Exception) {
                         folder.deleteRecursively()
                         throw error
@@ -243,8 +234,18 @@ class BookRepository(private val context: Context) : Closeable {
         }
     }
 
+    private fun orderedSession(book: Book, pages: List<PageSource>): BookSession {
+        val sorted = NaturalOrder.sorted(pages, PageSource::name)
+        val migrated = preferences.migratePageOrder(book.id, pages.size) {
+            val newIndices = sorted.withIndex().associate { it.value to it.index }
+            pages.sortedWith(compareBy(PreviousPageOrder, PageSource::name)).map { newIndices.getValue(it) }
+        }
+        if (migrated) for (index in pages.indices) File(frames, "${book.cacheKey}-$index.jpg").delete()
+        return BookSession(book, sorted)
+    }
+
     suspend fun cover(book: Book): File = withBookCache(book) {
-        val cover = File(covers, "${book.cacheKey}.jpg")
+        val cover = File(covers, if (book.kind == "pdf") "${book.cacheKey}.jpg" else "${book.cacheKey}-pinyin.jpg")
         if (cover.isFile) return@withBookCache cover
         coverLocks.getOrPut(book.cacheKey) { Mutex() }.withLock {
             coverSlots.withPermit {
@@ -333,6 +334,7 @@ class BookRepository(private val context: Context) : Closeable {
                     try {
                         temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 93, it) }
                         if (!temporary.renameTo(cover)) throw ReaderException("封面缓存写入失败。")
+                        if (book.kind != "pdf") File(covers, "${book.cacheKey}.jpg").delete()
                     } finally { bitmap.recycle(); temporary.delete() }
                     cover
                 } finally { scratch.delete() }
@@ -355,9 +357,10 @@ class BookRepository(private val context: Context) : Closeable {
         val page = session.pages.getOrNull(index) ?: return@withBookCache null
         if (!page.isVideo) return@withBookCache null
         frames.mkdirs()
-        val output = File(frames, "${session.book.cacheKey}-$index.jpg")
+        val pageKey = (page.uri ?: File(page.filePath!!).name).stableId()
+        val output = File(frames, "${session.book.cacheKey}-$pageKey.jpg")
         if (output.isFile) return@withBookCache output
-        locks.getOrPut("frame-${session.book.cacheKey}-$index") { Mutex() }.withLock {
+        locks.getOrPut("frame-${session.book.cacheKey}-$pageKey") { Mutex() }.withLock {
             if (output.isFile) return@withLock output
             DiagnosticLog.log("Cover", "开始抽帧 book=${session.book.id.take(8)} index=$index")
             val started = android.os.SystemClock.elapsedRealtime()
@@ -386,11 +389,13 @@ class BookRepository(private val context: Context) : Closeable {
         val page = session.pages[index]
         page.filePath?.let { return@withBookCache File(it) }
         val renderWidth = width.coerceIn(480, 2560)
-        val lockKey = "${session.book.cacheKey}-page-$index-${if (page.pdfPage != null) renderWidth else 0}"
+        val fileName = if (page.pdfPage != null) "pdf-${page.pdfPage}-$renderWidth.png"
+            else "image-${page.uri!!.stableId()}.${page.name.extensionLower()}"
+        val lockKey = "${session.book.cacheKey}-$fileName"
         locks.getOrPut(lockKey) { Mutex() }.withLock {
             val folder = File(cache, session.book.cacheKey).apply { mkdirs() }
             if (page.pdfPage != null) {
-                val output = File(folder, "pdf-${page.pdfPage}-$renderWidth.png")
+                val output = File(folder, fileName)
                 if (!output.isFile) {
                     val bitmap = renderPdf(File(session.pdfPath!!), page.pdfPage, renderWidth)
                     val temporary = File(folder, "${output.name}.part")
@@ -401,7 +406,7 @@ class BookRepository(private val context: Context) : Closeable {
                 }
                 return@withLock output
             }
-            val output = File(folder, "image-$index.${page.name.extensionLower()}")
+            val output = File(folder, fileName)
             if (!output.isFile) copyUri(Uri.parse(page.uri!!), output,
                 if (page.isVideo) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024)
             output

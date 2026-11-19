@@ -54,7 +54,26 @@ class PreferenceStore(context: Context) {
 
     fun saveProgress(bookId: String, page: Int, total: Int) {
         preferences.edit().putInt("page_$bookId", page).putInt("total_$bookId", total)
-            .putLong("read_$bookId", System.currentTimeMillis()).apply()
+            .putLong("read_$bookId", System.currentTimeMillis()).putBoolean("page_order_$bookId", true).apply()
+    }
+
+    internal fun migratePageOrder(bookId: String, pageCount: Int, newIndices: () -> List<Int>): Boolean {
+        if (preferences.getBoolean("page_order_$bookId", false) || !preferences.contains("page_$bookId")) return false
+        val editor = preferences.edit().putBoolean("page_order_$bookId", true)
+        val previous = progress(bookId)
+        if (previous.total == pageCount) {
+            val indices = newIndices()
+            indices.getOrNull(previous.page)?.let { editor.putInt("page_$bookId", it) }
+            val positions = indices.mapIndexedNotNull { oldIndex, newIndex ->
+                val key = "video_${bookId}_$oldIndex"
+                if (!preferences.contains(key)) return@mapIndexedNotNull null
+                editor.remove(key)
+                newIndex to preferences.getLong(key, 0L)
+            }
+            positions.forEach { (index, position) -> editor.putLong("video_${bookId}_$index", position) }
+        }
+        editor.apply()
+        return true
     }
 
     fun videoPosition(bookId: String, page: Int): Long = preferences.getLong("video_${bookId}_$page", 0L)

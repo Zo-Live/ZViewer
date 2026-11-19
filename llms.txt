@@ -31,7 +31,8 @@ Source root: `app/src/main/java/dev/zolive/zviewer/`.
 
 - `MainActivity.kt`: the single Activity; edge-to-edge Compose host.
 - `LibraryViewModel.kt`: app state, SAF folder selection, scan/open jobs, error mapping, settings, and progress.
-- `data/Models.kt`: `Book`, `BookSession`, media-aware `PageSource`, `ReadingProgress`, `ReaderSettings`, `NaturalOrder`, `ReaderException`.
+- `data/Models.kt`: `Book`, `BookSession`, media-aware `PageSource`, `ReadingProgress`, `ReaderSettings`, `ReaderException`.
+- `data/NaturalOrder.kt`: natural numbers, Latin letters, phrase-aware Chinese pinyin and Japanese collation for names containing kana. The library, pages and covers use the same ordering.
 - `data/UpdateChecker.kt`, `data/UpdateDownloader.kt`, `ui/UpdateFeedback.kt`: stable GitHub release checks with persistent caching (manual 60 seconds / startup 6 hours), ETag revalidation, bounded retries/timeouts, numeric version comparison, and system DownloadManager handoff. Feedback waits until the reader closes and the app resumes. Startup checks are off by default and only announce new releases.
 - `data/PreferenceStore.kt`: SharedPreferences storage for the tree URI, the book index JSON, page/video progress, favorites, settings, and log options.
 - `data/BookRepository.kt`: bulk `DocumentsContract` queries, background extraction, PDF rendering, video preparation, cover and page caches, and safety limits.

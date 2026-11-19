@@ -28,7 +28,7 @@ Android usually does not allow granting access to the internal storage root, the
 | Static images   | JPG, JPEG, PNG, WebP, BMP, HEIF, HEIC, AVIF                                                              |
 | Animated images | APNG, Animated WebP, GIF, Animated AVIF                                                                  |
 | Video           | MP4, M4V, MKV, WebM, AVI, MOV, 3GP, MPG, MPEG, TS, MTS, M2TS, FLV, WMV, OGV, and more                    |
-| Library         | Recursive scan, natural sorting, search, reading-status filter, recently read, favorites                 |
+| Library         | Recursive scan, search, reading-status filter, recently read, favorites                                  |
 | Reading         | Continuous vertical / horizontal / right-to-left paging, mixed images and videos, looping, auto-saved progress |
 
 - Long-press any comic cover to manage favorites in bulk.
@@ -36,8 +36,7 @@ Android usually does not allow granting access to the internal storage root, the
 
 ## Format Support and Limitations
 
-- Files are sorted naturally by file name, so `2.jpg` comes before `10.jpg`.
-- Images or videos directly contained in a folder form one book; each subdirectory is scanned separately. Mixed image/video content is combined into one book in natural order.
+- Images or videos directly contained in a folder form one book. Each subdirectory is scanned separately. The same book can contain both images and videos.
 - Video codec support depends on the device's Media3 / system decoders; HEIF / HEIC display also depends on the device, and animated HEIF is not supported.
 - PDFs are supported only at the library root or in uncompressed subdirectories; PDFs inside archives must be extracted first.
 - 7Z solid archives need their whole content prepared on first open, so larger books take longer to open.

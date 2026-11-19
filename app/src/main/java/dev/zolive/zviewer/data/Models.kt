@@ -18,26 +18,6 @@ fun isVideo(name: String): Boolean = name.extensionLower() in videoExtensions &&
 fun isPdf(name: String): Boolean = name.extensionLower() == "pdf" &&
     name.replace('\\', '/').split('/').none { it.startsWith('.') || it == "__MACOSX" }
 
-object NaturalOrder : Comparator<String> {
-    private val parts = Regex("[0-9]+|[^0-9]+")
-    override fun compare(first: String, second: String): Int {
-        val left = parts.findAll(first.lowercase(Locale.ROOT)).map { it.value }.toList()
-        val right = parts.findAll(second.lowercase(Locale.ROOT)).map { it.value }.toList()
-        for (index in 0 until minOf(left.size, right.size)) {
-            val leftPart = left[index]
-            val rightPart = right[index]
-            val result = if (leftPart.first().isDigit() && rightPart.first().isDigit()) {
-                val leftNumber = leftPart.trimStart('0').ifEmpty { "0" }
-                val rightNumber = rightPart.trimStart('0').ifEmpty { "0" }
-                leftNumber.length.compareTo(rightNumber.length).takeIf { it != 0 }
-                    ?: leftNumber.compareTo(rightNumber)
-            } else leftPart.compareTo(rightPart)
-            if (result != 0) return result
-        }
-        return left.size.compareTo(right.size).takeIf { it != 0 } ?: first.compareTo(second)
-    }
-}
-
 data class Book(
     val id: String,
     val uri: String,

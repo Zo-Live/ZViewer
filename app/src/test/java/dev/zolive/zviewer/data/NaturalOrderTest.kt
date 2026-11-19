@@ -16,6 +16,17 @@ class NaturalOrderTest {
         assertTrue(NaturalOrder.compare("a00002.png", "a10.png") < 0)
     }
 
+    @Test fun sortsNumbersLatinAndChineseUsingPhrasePronunciation() {
+        val expected = listOf("２.jpg", "10.jpg", "Alpha.jpg", "beta.jpg",
+            "长沙.jpg", "重庆2.jpg", "重庆10.jpg", "大连.jpg", "音乐.jpg", "长大.jpg", "重量.jpg")
+        assertEquals(expected, NaturalOrder.sorted(expected.reversed()) { it })
+    }
+
+    @Test fun japaneseKanaUseGojuonOrderAndNaturalNumbers() {
+        val expected = listOf("ア2.png", "あ10.png", "ｶ.png", "さ.png")
+        assertEquals(expected, NaturalOrder.sorted(expected.reversed()) { it })
+    }
+
     @Test fun metadataAndUnsupportedFilesAreNotPages() {
         assertFalse(isImage("__MACOSX/cover.jpg"))
         assertFalse(isImage("chapter/.hidden.png"))
