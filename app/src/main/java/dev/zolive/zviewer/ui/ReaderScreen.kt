@@ -83,14 +83,16 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     val pagerState = rememberPagerState(initialPage = paging.anchor(currentPage)) { paging.itemCount }
     var jumpJob by remember { mutableStateOf<Job?>(null) }
     val ratios = remember(session.book.cacheKey) { mutableStateMapOf<Int, Float>() }
+    var initialImageLoaded by remember(session) { mutableStateOf(false) }
+    val onInitialImageLoaded = { initialImageLoaded = true }
     val background = if (settings.readerDark) DarkReaderBackground else LightReaderBackground
     val foreground = if (settings.readerDark) Color(0xFFE6E5E1) else Color(0xFF262724)
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
     val active = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
     val activity = LocalActivity.current ?: return
     val context = LocalContext.current
-    val videoBook = session.pages.any(PageSource::isVideo)
-    val mixedBook = videoBook && session.pages.any { !it.isVideo }
+    val videoBook = remember(session) { session.pages.any(PageSource::isVideo) }
+    val mixedBook = remember(session) { videoBook && session.pages.any { !it.isVideo } }
     val verticalReading = settings.vertical
     val pagerReading = videoBook || !verticalReading
     val pageUnit = when {
@@ -210,6 +212,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         ReaderPage(session, index, repository, vertical = true, active = active && visible,
                             foreground = foreground, zoomSequence = if (current && index == zoomPage) zoomSequence else 0,
                             zoomAction = zoomAction, initialRatio = ratios[index], onRatio = { ratios[index] = it },
+                            loadEnabled = initialImageLoaded || current, onLoaded = onInitialImageLoaded,
                             onTap = { controls = !controls })
                     }
                 }
@@ -219,7 +222,8 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                     val index = paging.pageAt(item)
                     ReaderPage(session, index, repository, vertical = false, active = active && pagerState.currentPage == item,
                         foreground = foreground, zoomSequence = if (item == pagerState.currentPage && index == zoomPage) zoomSequence else 0,
-                        zoomAction = zoomAction, onTap = { controls = !controls })
+                        zoomAction = zoomAction, loadEnabled = initialImageLoaded || pagerState.currentPage == item,
+                        onLoaded = onInitialImageLoaded, onTap = { controls = !controls })
                 }
             }
             if (!controls) {
@@ -326,20 +330,23 @@ private fun VideoPagerPage(
     }
 }
 
+private val imageDecodeDispatcher = Dispatchers.IO.limitedParallelism(2)
+
 @Composable
 private fun ReaderPage(session: BookSession, index: Int, repository: BookRepository, vertical: Boolean, active: Boolean,
     foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float? = null,
-    onRatio: (Float) -> Unit = {}, onTap: () -> Unit) {
+    onRatio: (Float) -> Unit = {}, loadEnabled: Boolean = true, onLoaded: () -> Unit = {}, onTap: () -> Unit) {
     val viewportWidth = LocalWindowInfo.current.containerSize.width
     val width = (viewportWidth * 2).coerceIn(480, 3200)
     val animationWidth = viewportWidth.coerceIn(480, 3200)
     var retry by remember { mutableIntStateOf(0) }
     var failure by remember(session.book.cacheKey, index) { mutableStateOf<String?>(null) }
-    val drawable by produceState<Drawable?>(null, session.book.cacheKey, index, width, animationWidth, retry) {
+    val drawable by produceState<Drawable?>(null, width, animationWidth, retry, loadEnabled) {
+        if (!loadEnabled) return@produceState
         failure = null
         try {
             val file = repository.pageFile(session, index, width)
-            value = withContext(Dispatchers.IO) { ImageLoader.load(file, width, animationWidth) }
+            value = withContext(imageDecodeDispatcher) { ImageLoader.load(file, width, animationWidth) }
         } catch (error: CancellationException) { throw error }
         catch (error: Exception) {
             DiagnosticLog.error("Image", "页面解码失败 book=${session.book.id.take(8)} page=${index + 1} format=${session.pages[index].name.substringAfterLast('.')} targetWidth=$width", error)
@@ -348,7 +355,10 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
     }
     DisposableEffect(drawable) { onDispose { (drawable as? Animatable)?.stop() } }
     val ratio = drawable?.let { it.intrinsicWidth.toFloat() / it.intrinsicHeight.coerceAtLeast(1) } ?: initialRatio ?: .70f
-    LaunchedEffect(drawable) { if (drawable != null) onRatio(ratio) }
+    LaunchedEffect(drawable, failure) {
+        if (drawable != null) onRatio(ratio)
+        if (drawable != null || failure != null) onLoaded()
+    }
     val layout = if (vertical) Modifier.fillMaxWidth().aspectRatio(ratio.coerceAtLeast(.03f)) else Modifier.fillMaxSize()
     Box(layout, contentAlignment = Alignment.Center) {
         val image = drawable
