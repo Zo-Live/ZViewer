@@ -17,7 +17,7 @@ SOURCES = {
     "zlib": "https://raw.githubusercontent.com/madler/zlib/develop/LICENSE",
 }
 
-sections = ["ZViewer 开源组件许可\n\n以下为所使用组件及其原生依赖的许可文本。许可原文保留其原始语言。\n"]
+sections = []
 for name, url in SOURCES.items():
     print(f"读取许可：{name}", flush=True)
     with urlopen(url, timeout=30) as response:
@@ -26,8 +26,8 @@ for name, url in SOURCES.items():
             license_text = data.decode("utf-8")
         except UnicodeDecodeError:
             license_text = data.decode("cp1252")
-    sections.append(f"\n{'=' * 72}\n{name}\n{url}\n{'=' * 72}\n\n{license_text}\n")
+    sections.append(f"{'=' * 72}\n{name}\n{url}\n{'=' * 72}\n\n{license_text}\n")
 destination = ROOT / "app/src/main/assets/open_source_notices.txt"
 destination.parent.mkdir(parents=True, exist_ok=True)
-destination.write_text("".join(sections), encoding="utf-8")
+destination.write_text("\n".join(sections), encoding="utf-8")
 print(f"已收集 {len(SOURCES)} 份许可文本：{destination}")

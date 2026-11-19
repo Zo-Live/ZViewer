@@ -61,6 +61,7 @@
     <string name="about_description">版本 %1$s\n\n支持 ZIP / CBZ、RAR / CBR、7Z、PDF、图片文件夹与常见视频格式。支持 APNG、动态 WebP、GIF、AVIF 及常用静态图片。\n\n全部阅读数据仅保存在本机，仅检查和下载更新时联网，不上传阅读文件。密码保护、分卷压缩包及 DRM 文件请先自行转换。\n\n开源组件：AndroidX / Compose（Apache 2.0）、Media3（Apache 2.0）、APNG4Android（Apache 2.0）、libarchive（BSD）、libavif（BSD）。\n\nHEIF / HEIC 的可解码范围取决于设备系统解码器。</string>
     <string name="ok">知道了</string>
     <string name="open_source_licenses">开源许可</string>
+    <string name="license_notices_intro">ZViewer 开源组件许可\n\n以下为所使用组件及其原生依赖的许可文本。许可原文保留其原始语言。</string>
     <string name="loading_licenses">正在读取许可文本…</string>
     <string name="close">关闭</string>
     <string name="reading_mode">阅读模式</string>

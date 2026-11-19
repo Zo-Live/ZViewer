@@ -61,6 +61,7 @@
     <string name="about_description">Version %1$s\n\nSupports ZIP / CBZ, RAR / CBR, 7Z, PDF, image folders, and common video formats. Supports APNG, animated WebP, GIF, AVIF, and common still images.\n\nAll reading data stays on this device. ZViewer only connects to the internet to check for and download updates. It never uploads your reading files. Convert password-protected files, split archives, and DRM-protected files before opening them.\n\nOpen-source components: AndroidX / Compose (Apache 2.0), Media3 (Apache 2.0), APNG4Android (Apache 2.0), libarchive (BSD), and libavif (BSD).\n\nHEIF / HEIC support depends on the device decoder.</string>
     <string name="ok">OK</string>
     <string name="open_source_licenses">Open-source licenses</string>
+    <string name="license_notices_intro">ZViewer open-source component licenses\n\nBelow are the licenses for the components used by ZViewer and their native dependencies. The license texts appear in their original languages.</string>
     <string name="loading_licenses">Loading licenses…</string>
     <string name="close">Close</string>
     <string name="reading_mode">Reading mode</string>

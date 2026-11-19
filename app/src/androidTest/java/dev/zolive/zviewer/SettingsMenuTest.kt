@@ -93,6 +93,17 @@ class SettingsMenuTest {
         awaitSetting("语言", "简体中文")
     }
 
+    @Test fun licenseIntroductionUsesTheSelectedLanguage() {
+        setting("语言").performScrollTo().performClick()
+        option("日本語").performClick()
+        awaitSetting("言語", "日本語")
+
+        rule.onNodeWithText("ZViewer について").performScrollTo().performClick()
+        rule.onNode(hasText("オープンソースライセンス") and hasClickAction()).performClick()
+        val notice = hasText("ライセンス本文は原文で掲載しています。", substring = true)
+        rule.onNode(notice).assertIsDisplayed()
+    }
+
     private fun awaitSetting(title: String, value: String) {
         rule.waitUntil(10_000) {
             rule.onAllNodes(hasText(title) and hasText(value) and hasClickAction())
