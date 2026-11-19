@@ -27,8 +27,8 @@ data class Book(
     val size: Long,
     val contentSignature: String = "",
 ) {
-    val cacheKey: String get() = ("$id-$modified-$size" +
-        if (contentSignature.isEmpty()) "" else "-$contentSignature").stableId()
+    val cacheKey: String by lazy { ("$id-$modified-$size" +
+        if (contentSignature.isEmpty()) "" else "-$contentSignature").stableId() }
     val formatLabel: String get() = when (kind) {
         "folder" -> "图片集"
         "video-folder" -> "视频集"
