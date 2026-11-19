@@ -18,6 +18,8 @@ class ZoomImageView(context: Context) : ImageView(context) {
     private var lastX = 0f
     private var lastY = 0f
     private var lastCommand = 0
+    private var shouldAnimate = false
+    private var animationStarted = false
     private val transform = Matrix()
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
@@ -46,14 +48,26 @@ class ZoomImageView(context: Context) : ImageView(context) {
     fun bind(image: Drawable, description: String, animate: Boolean) {
         contentDescription = description
         if (drawable !== image) {
-            (drawable as? Animatable)?.stop()
+            setAnimationStarted(false)
             setImageDrawable(image)
             zoom = 1f; offsetX = 0f; offsetY = 0f
             updateMatrix()
         }
-        val animation = image as? Animatable
-        if (animate && animation?.isRunning == false) animation.start()
-        if (!animate && animation?.isRunning == true) animation.stop()
+        shouldAnimate = animate
+        setAnimationStarted(shouldAnimate && isAttachedToWindow)
+    }
+
+    fun clearImage() {
+        shouldAnimate = false
+        setAnimationStarted(false)
+        setImageDrawable(null)
+    }
+
+    private fun setAnimationStarted(start: Boolean) {
+        val animation = drawable as? Animatable ?: return
+        if (animationStarted == start) return
+        animationStarted = start
+        if (start) animation.start() else animation.stop()
     }
 
     fun command(sequence: Int, action: Int) {
@@ -107,5 +121,13 @@ class ZoomImageView(context: Context) : ImageView(context) {
     }
 
     override fun performClick(): Boolean { super.performClick(); onTap(); return true }
-    override fun onDetachedFromWindow() { (drawable as? Animatable)?.stop(); super.onDetachedFromWindow() }
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        setAnimationStarted(shouldAnimate)
+    }
+
+    override fun onDetachedFromWindow() {
+        setAnimationStarted(false)
+        super.onDetachedFromWindow()
+    }
 }

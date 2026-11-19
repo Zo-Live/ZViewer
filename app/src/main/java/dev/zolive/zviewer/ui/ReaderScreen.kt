@@ -2,7 +2,6 @@
 
 package dev.zolive.zviewer.ui
 
-import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import android.view.WindowManager
 import androidx.activity.compose.PredictiveBackHandler
@@ -353,7 +352,6 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
             failure = "这一页暂时无法解码。请确认图片完整，且设备支持此编码。"
         }
     }
-    DisposableEffect(drawable) { onDispose { (drawable as? Animatable)?.stop() } }
     val ratio = drawable?.let { it.intrinsicWidth.toFloat() / it.intrinsicHeight.coerceAtLeast(1) } ?: initialRatio ?: .70f
     LaunchedEffect(drawable, failure) {
         if (drawable != null) onRatio(ratio)
@@ -364,7 +362,7 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
         val image = drawable
         if (image != null) {
             AndroidView(factory = { context -> ZoomImageView(context) }, modifier = Modifier.fillMaxSize(),
-                onRelease = { view -> (view.drawable as? Animatable)?.stop(); view.setImageDrawable(null) },
+                onRelease = ZoomImageView::clearImage,
                 update = { view ->
                     view.onTap = onTap
                     view.bind(image, "第 ${index + 1} 页，轻点显示阅读控制，双击缩放", active)
