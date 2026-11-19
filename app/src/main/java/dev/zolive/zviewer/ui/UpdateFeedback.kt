@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.dismiss
@@ -55,8 +56,9 @@ fun UpdateFeedback(state: LibraryState, model: LibraryViewModel, settingsOpen: B
         AnimatedVisibility(visibleState = visible,
             enter = fadeIn(tween(180)) + slideInVertically(tween(180)) { it / 2 },
             exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { it / 2 }) {
-            Surface(shape = RoundedCornerShape(16.dp), color = MaterialTheme.colorScheme.inverseSurface,
-                contentColor = MaterialTheme.colorScheme.inverseOnSurface, shadowElevation = 4.dp,
+            val background = if (MaterialTheme.colorScheme.surface.luminance() > .5f) DarkReaderBackground else LightReaderBackground
+            Surface(shape = RoundedCornerShape(16.dp), color = background.copy(alpha = OverlayBackgroundAlpha),
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
                 modifier = Modifier.widthIn(max = 360.dp).semantics {
                     liveRegion = LiveRegionMode.Polite
                     dismiss { model.dismissUpdateNotice(); true }

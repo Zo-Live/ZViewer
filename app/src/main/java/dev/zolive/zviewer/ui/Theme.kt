@@ -10,6 +10,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.core.graphics.ColorUtils
 import dev.zolive.zviewer.data.ReaderSettings
 
+internal val DarkReaderBackground = Color(0xFF101110)
+internal val LightReaderBackground = Color(0xFFFAF9F6)
+internal const val OverlayBackgroundAlpha = .72f
+
 private fun tone(seed: Long, lightness: Float, saturation: Float = 1f): Color {
     val hsl = FloatArray(3)
     ColorUtils.colorToHSL(seed.toInt(), hsl)

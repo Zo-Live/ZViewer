@@ -83,7 +83,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     val pagerState = rememberPagerState(initialPage = paging.anchor(currentPage)) { paging.itemCount }
     var jumpJob by remember { mutableStateOf<Job?>(null) }
     val ratios = remember(session.book.cacheKey) { mutableStateMapOf<Int, Float>() }
-    val background = if (settings.readerDark) Color(0xFF101110) else Color(0xFFFAF9F6)
+    val background = if (settings.readerDark) DarkReaderBackground else LightReaderBackground
     val foreground = if (settings.readerDark) Color(0xFFE6E5E1) else Color(0xFF262724)
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsStateWithLifecycle()
     val active = lifecycle.isAtLeast(Lifecycle.State.RESUMED)
@@ -224,7 +224,8 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             }
             if (!controls) {
                 Surface(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(12.dp),
-                    color = background.copy(alpha = .72f), contentColor = foreground.copy(alpha = .65f), shape = RoundedCornerShape(12.dp)) {
+                    color = background.copy(alpha = OverlayBackgroundAlpha),
+                    contentColor = foreground.copy(alpha = .65f), shape = RoundedCornerShape(12.dp)) {
                     Text("${currentPage + 1} / ${session.pages.size} $pageUnit", Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         style = MaterialTheme.typography.labelSmall)
                 }
