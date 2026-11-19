@@ -151,7 +151,7 @@ fun SettingsScreen(
                     modifier = Modifier.toggleable(value = settings.clearCovers, role = Role.Switch) {
                         model.settings(settings.copy(clearCovers = it))
                     })
-                SettingsListItem(headlineContent = { Text("清理阈值") },
+                SettingsListItem(headlineContent = { Text("自动清理阈值") },
                     trailingContent = { Text(if (cacheLimitMiB < 1024) "$cacheLimitMiB MiB"
                         else "${(cacheLimitMiB / 1024f).toString().removeSuffix(".0")} GiB") })
                 Slider(value = cacheLimitMiB.toFloat(),
@@ -159,7 +159,7 @@ fun SettingsScreen(
                     onValueChangeFinished = { model.settings(settings.copy(cacheLimitMiB = cacheLimitMiB)) },
                     valueRange = CacheLimits.MIN_MIB.toFloat()..CacheLimits.MAX_MIB.toFloat(),
                     steps = (CacheLimits.MAX_MIB - CacheLimits.MIN_MIB) / CacheLimits.STEP_MIB - 1,
-                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "清理阈值" })
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "自动清理阈值" })
                 SettingsListItem(headlineContent = { Text("清除阅读记录") }, supportingContent = {
                     Text("双击清除所有漫画的页码和视频播放进度")
                 },

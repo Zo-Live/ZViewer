@@ -48,7 +48,7 @@ class CacheSettingsTest {
     }
 
     private fun setThreshold(mib: Int) {
-        rule.onNodeWithContentDescription("清理阈值").performScrollTo()
+        rule.onNodeWithContentDescription("自动清理阈值").performScrollTo()
             .performSemanticsAction(SemanticsActions.SetProgress) { it(mib.toFloat()) }
         rule.waitUntil(5_000) { store.settings().cacheLimitMiB == mib }
     }
@@ -116,7 +116,8 @@ class CacheSettingsTest {
 
     @Test fun draggingThresholdSliderDoesNotTriggerSettingsBackGesture() {
         launchSettings()
-        rule.onNodeWithContentDescription("清理阈值").performScrollTo().performTouchInput {
+        rule.onNodeWithText("自动清理阈值").performScrollTo().assertIsDisplayed()
+        rule.onNodeWithContentDescription("自动清理阈值").performScrollTo().performTouchInput {
             swipe(Offset(width * .2f, centerY), Offset(width * .85f, centerY), durationMillis = 600)
         }
         rule.waitForIdle()
