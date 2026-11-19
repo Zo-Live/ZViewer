@@ -21,6 +21,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -57,6 +59,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -117,10 +120,16 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     val chooseLibrary = { picker.launch(state.treeUri?.let(Uri::parse)) }
     Surface(Modifier.fillMaxSize().pointerInput(state.updateNotice, state.session, state.opening) {
         if (state.updateNotice != null && state.session == null && state.opening == null) {
-            awaitPointerEventScope {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                 while (true) {
                     val event = awaitPointerEvent(PointerEventPass.Initial)
-                    if (event.changes.any { it.pressed && !it.previousPressed }) model.dismissUpdateNotice()
+                    val change = event.changes.singleOrNull() ?: break
+                    if (change.id != down.id || (change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+                    if (!change.pressed) {
+                        if (change.changedToUp()) model.dismissUpdateNotice()
+                        break
+                    }
                 }
             }
         }
@@ -198,7 +207,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                 BackHandler(enabled = settingsOpen) { navigateSettings(false) }
             }
         }
-        UpdateFeedback(state, model, settingsOpen)
+        UpdateFeedback(state, model)
     }
     if (state.opening != null) {
         AlertDialog(onDismissRequest = model::cancelOpen, icon = { CircularProgressIndicator(Modifier.size(36.dp)) },

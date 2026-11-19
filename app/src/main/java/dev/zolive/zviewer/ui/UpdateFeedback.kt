@@ -29,7 +29,7 @@ import kotlinx.coroutines.delay
 
 /** 在应用层显示反馈；阅读、准备阅读和后台期间保留结果，恢复可交互页面后才计时。 */
 @Composable
-fun UpdateFeedback(state: LibraryState, model: LibraryViewModel, settingsOpen: Boolean) {
+fun UpdateFeedback(state: LibraryState, model: LibraryViewModel) {
     val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
     if (state.session != null || state.opening != null || state.error != null || lifecycle != Lifecycle.State.RESUMED) return
     val prompt = state.updatePrompt
@@ -51,8 +51,8 @@ fun UpdateFeedback(state: LibraryState, model: LibraryViewModel, settingsOpen: B
             model.dismissUpdateNotice()
         }
     }
-    Box(Modifier.fillMaxSize().safeDrawingPadding().padding(horizontal = 24.dp,
-        vertical = if (settingsOpen) 24.dp else 88.dp), contentAlignment = Alignment.BottomCenter) {
+    Box(Modifier.fillMaxSize().safeDrawingPadding().padding(start = 24.dp, end = 24.dp, bottom = 144.dp),
+        contentAlignment = Alignment.BottomCenter) {
         AnimatedVisibility(visibleState = visible,
             enter = fadeIn(tween(180)) + slideInVertically(tween(180)) { it / 2 },
             exit = fadeOut(tween(150)) + slideOutVertically(tween(150)) { it / 2 }) {

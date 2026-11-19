@@ -112,6 +112,26 @@ class UpdateInteractionTest {
         rule.onNodeWithText("当前为最新版本").assertDoesNotExist()
     }
 
+    @Test fun latestNoticeStaysAtSameHeightWhenSystemBackClosesSettings() {
+        launch(version = BuildConfig.VERSION_NAME)
+        settings()
+        checkUpdate()
+        waitForCheck()
+        val notice = rule.onNodeWithText("当前为最新版本")
+        val bounds = notice.assertIsDisplayed().fetchSemanticsNode().boundsInRoot
+        rule.mainClock.autoAdvance = false
+        try {
+            rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+            rule.mainClock.advanceTimeBy(160)
+            assertEquals(bounds, notice.fetchSemanticsNode().boundsInRoot)
+            rule.mainClock.advanceTimeBy(400)
+            rule.onNodeWithTag("settings-screen").assertDoesNotExist()
+            assertEquals(bounds, notice.fetchSemanticsNode().boundsInRoot)
+        } finally {
+            rule.mainClock.autoAdvance = true
+        }
+    }
+
     @Test fun checkingIsNonModalAndRepeatedClicksDoNotDuplicateRequests() {
         val gate = CountDownLatch(1)
         launch(gate = gate)
