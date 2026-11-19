@@ -26,8 +26,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -56,11 +58,13 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.zolive.zviewer.LibraryState
@@ -70,8 +74,10 @@ import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.NaturalOrder
 import dev.zolive.zviewer.data.ReadingProgress
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import androidx.core.view.WindowCompat
+import kotlin.math.roundToInt
 
 @Composable
 fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
@@ -212,6 +218,8 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     onSettings: () -> Unit, onChooseLibrary: () -> Unit) {
     val titles = listOf("书库", "收藏", "最近阅读")
     val pagerState = rememberPagerState { titles.size }
+    val gridStates = titles.map { rememberLazyGridState() }
+    val currentGrid = gridStates[pagerState.currentPage]
     val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
@@ -245,14 +253,8 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
             }
         },
         floatingActionButton = {
-            if (state.treeUri != null) Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                if (managingFavorites) SmallFloatingActionButton(onClick = { managingFavorites = false },
-                    shape = CircleShape, containerColor = MaterialTheme.colorScheme.secondaryContainer) {
-                    Icon(Icons.Outlined.Close, "退出收藏管理")
-                }
-                SmallFloatingActionButton(onClick = { managingFavorites = false; onChooseLibrary() },
-                    containerColor = MaterialTheme.colorScheme.secondaryContainer) { Icon(Icons.Outlined.FolderOpen, "切换书库目录") }
-            }
+            LibraryActions(currentGrid, managingFavorites,
+                onExitManagement = { managingFavorites = false })
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -328,25 +330,10 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                                 FilterChip(selected = selectedFilter == value, onClick = { filter = value }, label = { Text(label) })
                             }
                         }
-                        if (books.isEmpty()) {
-                            EmptyLibrary(
-                                scanning = state.scanning,
-                                directoryEmpty = state.books.isEmpty(),
-                                onChooseLibrary = onChooseLibrary,
-                                emptyTitle = when {
-                                    tab == 1 && !hasFavorites -> "暂无收藏的漫画"
-                                    tab == 2 && !hasRecent -> "暂无最近阅读的漫画"
-                                    else -> null
-                                },
-                                emptyDescription = when {
-                                    tab == 1 && !hasFavorites -> "长按漫画封面以批量管理收藏"
-                                    tab == 2 && !hasRecent -> "点击漫画封面以开始阅读"
-                                    else -> null
-                                }
-                            )
-                        } else {
+                        Box(Modifier.fillMaxSize()) {
                             LazyVerticalGrid(columns = GridCells.Fixed(state.settings.gridColumns),
-                                modifier = Modifier.fillMaxSize().testTag("library-grid-$tab"), contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 88.dp),
+                                state = gridStates[tab], modifier = Modifier.fillMaxSize().testTag("library-grid-$tab"),
+                                contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 88.dp),
                                 horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
                                 val recent = if (tab == 0 && query.isEmpty() && selectedFilter == 0) books
                                     .filter { (state.progress[it.id]?.updated ?: 0) > 0 && (state.progress[it.id]?.fraction ?: 0f) < 1f }
@@ -363,9 +350,92 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                                         onFavorite = { model.toggleFavorite(book) })
                                 }
                             }
+                            if (books.isEmpty()) {
+                                EmptyLibrary(
+                                    scanning = state.scanning,
+                                    directoryEmpty = state.books.isEmpty(),
+                                    onChooseLibrary = onChooseLibrary,
+                                    emptyTitle = when {
+                                        tab == 1 && !hasFavorites -> "暂无收藏的漫画"
+                                        tab == 2 && !hasRecent -> "暂无最近阅读的漫画"
+                                        else -> null
+                                    },
+                                    emptyDescription = when {
+                                        tab == 1 && !hasFavorites -> "长按漫画封面以批量管理收藏"
+                                        tab == 2 && !hasRecent -> "点击漫画封面以开始阅读"
+                                        else -> null
+                                    }
+                                )
+                            }
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryActions(gridState: LazyGridState, managingFavorites: Boolean, onExitManagement: () -> Unit) {
+    var returnAnimationDistance by remember(gridState) { mutableStateOf<Float?>(null) }
+    val returningToTop = returnAnimationDistance != null
+    val showScrollToTop = !returningToTop && gridState.canScrollBackward
+    val visibility = remember { Animatable(0f) }
+    val animationDistancePx = with(LocalDensity.current) { 112.dp.toPx() }
+    // 用剩余滚动距离同步两个按钮，列表到顶时动画也结束。
+    val buttonProgress by remember(gridState) {
+        derivedStateOf {
+            val distance = returnAnimationDistance
+            if (distance == null || gridState.firstVisibleItemIndex != 0) {
+                visibility.value
+            } else {
+                val fraction = (gridState.firstVisibleItemScrollOffset / distance).coerceIn(0f, 1f)
+                visibility.value * FastOutSlowInEasing.transform(fraction)
+            }
+        }
+    }
+    LaunchedEffect(gridState, showScrollToTop, returningToTop) {
+        if (!returningToTop) {
+            visibility.animateTo(if (showScrollToTop) 1f else 0f, tween(240, easing = FastOutSlowInEasing))
+            return@LaunchedEffect
+        }
+        coroutineScope {
+            // 手势中断滚动时，保留当前按钮位置继续过渡。
+            launch { gridState.animateScrollToItem(0) }.join()
+        }
+        visibility.snapTo(buttonProgress)
+        returnAnimationDistance = null
+    }
+
+    val buttonSize = 48.dp
+    val spacing = 12.dp
+    Box(Modifier.size(width = buttonSize * 2 + spacing, height = buttonSize),
+        contentAlignment = Alignment.BottomEnd) {
+        if (managingFavorites) {
+            SmallFloatingActionButton(onClick = onExitManagement,
+                modifier = Modifier.offset {
+                    val distance = (buttonSize + spacing).toPx() * buttonProgress
+                    IntOffset(-distance.roundToInt(), 0)
+                },
+                shape = CircleShape, containerColor = MaterialTheme.colorScheme.secondaryContainer) {
+                Icon(Icons.Outlined.Close, "退出收藏管理")
+            }
+        }
+        val arrowVisible by remember(gridState) { derivedStateOf { buttonProgress > 0f } }
+        if (arrowVisible) {
+            SmallFloatingActionButton(onClick = {
+                if (!returningToTop && gridState.canScrollBackward) {
+                    returnAnimationDistance = if (gridState.firstVisibleItemIndex == 0) {
+                        gridState.firstVisibleItemScrollOffset.toFloat().coerceIn(1f, animationDistancePx)
+                    } else animationDistancePx
+                }
+            },
+                modifier = Modifier.graphicsLayer {
+                    alpha = buttonProgress
+                    translationY = size.height * (1f - alpha)
+                },
+                shape = CircleShape, containerColor = MaterialTheme.colorScheme.secondaryContainer) {
+                Icon(Icons.Outlined.KeyboardArrowUp, "回到顶部")
             }
         }
     }

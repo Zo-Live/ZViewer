@@ -3,6 +3,8 @@ package dev.zolive.zviewer
 import android.content.Context
 import android.provider.DocumentsContract
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
@@ -238,6 +240,58 @@ class NavigationInteractionTest {
         tab("书库").assertIsSelected()
         assertEquals(scroll, rule.onNodeWithTag("library-grid-0").fetchSemanticsNode()
             .config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange].value(), .01f)
+    }
+
+    @Test fun returnToTopFollowsEachTabAndMovesTheManagementButton() {
+        store.readLibrary().forEach { store.saveProgress(it.id, 0, 3) }
+        store.saveFavorites(store.readLibrary().mapTo(mutableSetOf()) { it.id })
+        launch()
+        val arrow = rule.onNodeWithContentDescription("回到顶部")
+        val close = rule.onNodeWithContentDescription("退出收藏管理")
+        rule.onNodeWithContentDescription("切换书库目录").assertDoesNotExist()
+        arrow.assertDoesNotExist()
+        rule.onNode(hasText(book.title) and SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick))
+            .performScrollTo().performTouchInput {
+                longClick(Offset(centerX, height * .3f))
+            }
+        val trailingPosition = close.fetchSemanticsNode().boundsInRoot.center.x
+        val grid = rule.onNodeWithTag("library-grid-0")
+        grid.performTouchInput { swipeUp(durationMillis = 700) }
+        arrow.assertIsDisplayed()
+        assertEquals(trailingPosition, arrow.fetchSemanticsNode().boundsInRoot.center.x, 1f)
+        assertTrue(close.fetchSemanticsNode().boundsInRoot.center.x < trailingPosition)
+        tab("收藏").performClick()
+        arrow.assertDoesNotExist()
+        assertEquals(trailingPosition, close.fetchSemanticsNode().boundsInRoot.center.x, 1f)
+        rule.onNodeWithTag("library-grid-1").performTouchInput { swipeUp() }
+        arrow.assertIsDisplayed().performClick().assertDoesNotExist()
+        tab("最近阅读").performClick()
+        arrow.assertDoesNotExist()
+        rule.onNodeWithTag("library-grid-2").performTouchInput { swipeUp() }
+        arrow.assertIsDisplayed().performClick().assertDoesNotExist()
+        tab("书库").performClick()
+        arrow.assertIsDisplayed()
+        rule.mainClock.autoAdvance = false
+        try {
+            val leadingPosition = close.fetchSemanticsNode().boundsInRoot.center.x
+            arrow.performClick()
+            val scroll = grid.fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange]
+            var movedBeforeTop = false
+            for (frame in 1..120) {
+                rule.mainClock.advanceTimeByFrame()
+                if (scroll.value() == 0f) break
+                val position = close.fetchSemanticsNode().boundsInRoot.center.x
+                movedBeforeTop = movedBeforeTop || position > leadingPosition + 1f
+            }
+            assertTrue(movedBeforeTop)
+            assertEquals(0f, scroll.value(), .001f)
+            arrow.assertDoesNotExist()
+            assertEquals(trailingPosition, close.fetchSemanticsNode().boundsInRoot.center.x, 1f)
+        } finally {
+            rule.mainClock.autoAdvance = true
+        }
+        close.performClick()
+        close.assertDoesNotExist()
     }
 
     @Test fun settingsAnimationMovesAndScalesBothDirections() {
