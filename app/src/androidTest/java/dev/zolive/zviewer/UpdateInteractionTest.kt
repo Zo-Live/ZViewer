@@ -149,15 +149,15 @@ class UpdateInteractionTest {
         assertEquals(0, downloads.get())
     }
 
-    @Test fun confirmationRefreshesReleaseAndStartsExactlyOneDownload() {
+    @Test fun confirmationUsesSelectedAssetAndStartsExactlyOneDownload() {
         launch()
         settings()
         checkUpdate()
         waitForCheck()
         rule.onNodeWithText("立即更新").performClick()
         rule.waitUntil(10_000) { !model.state.value.downloadingUpdate }
-        rule.onNodeWithText("已提交下载，请在系统下载通知中查看").assertIsDisplayed()
-        assertEquals(2, calls.get())
+        rule.onNodeWithText("更新将在后台下载").assertIsDisplayed()
+        assertEquals(1, calls.get())
         assertEquals(1, downloads.get())
     }
 

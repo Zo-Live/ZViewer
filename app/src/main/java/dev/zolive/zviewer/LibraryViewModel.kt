@@ -13,14 +13,18 @@ import dev.zolive.zviewer.data.PreferenceStore
 import dev.zolive.zviewer.data.ReaderException
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.ReadingProgress
-import dev.zolive.zviewer.data.AppVersion
 import dev.zolive.zviewer.data.UpdateChecker
+import dev.zolive.zviewer.data.UpdateDownload
 import dev.zolive.zviewer.data.UpdateDownloader
 import dev.zolive.zviewer.data.UpdateInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -38,6 +42,7 @@ data class LibraryState(
     val cacheRevision: Int = 0,
     val checkingUpdate: Boolean = false,
     val downloadingUpdate: Boolean = false,
+    val updateDownload: UpdateDownload? = null,
     val updatePrompt: UpdateInfo? = null,
     val updateNotice: String? = null,
 )
@@ -51,6 +56,7 @@ class LibraryViewModel(
     constructor(application: Application) : this(application, UpdateChecker(application), UpdateDownloader(application)::enqueue)
     val repository = BookRepository(application)
     private val store = PreferenceStore(application)
+    private val updateDownloader = UpdateDownloader(application)
     private val mutable = MutableStateFlow(LibraryState(books = store.readLibrary(), treeUri = store.treeUri,
         settings = store.settings(), favorites = store.favorites()))
     val state = mutable.asStateFlow()
@@ -76,7 +82,12 @@ class LibraryViewModel(
         mutable.update { it.copy(checkingUpdate = true, updateNotice = null) }
         viewModelScope.launch {
             try {
-                val info = updateChecker.latest(manual)
+                val download = updateDownloader.current()
+                if (download is UpdateDownload.Pending || download is UpdateDownload.Ready) {
+                    showUpdateDownload(download)
+                    return@launch
+                }
+                val info = updateChecker.latest(manual, refresh = manual && download is UpdateDownload.Failed)
                 val newer = info.isNewerThanInstalled
                 mutable.update { it.copy(updatePrompt = info.takeIf { newer },
                     updateNotice = if (!newer && manualUpdateRequested) "当前为最新版本" else null) }
@@ -93,26 +104,57 @@ class LibraryViewModel(
     fun dismissUpdate() { mutable.update { it.copy(updatePrompt = null) } }
     fun dismissUpdateNotice() { mutable.update { it.copy(updateNotice = null) } }
 
-    fun installUpdate() {
+    fun startUpdateDownload() {
         val offered = mutable.value.updatePrompt ?: return
         if (mutable.value.downloadingUpdate) return
         mutable.update { it.copy(updatePrompt = null, downloadingUpdate = true) }
         viewModelScope.launch {
             try {
-                // 确认时后台重新验证发布信息，避免使用已被替换或撤回的安装包地址。
-                val latest = updateChecker.latest(manual = true, refresh = true)
-                if (AppVersion.parse(latest.version)!! < AppVersion.parse(offered.version)!! ||
-                    !latest.isNewerThanInstalled) {
-                    throw IllegalStateException("发布版本已变更")
-                }
-                downloadUpdate(latest)
-                mutable.update { it.copy(updateNotice = "已提交下载，请在系统下载通知中查看") }
+                // 已选中的正式安装包可直接下载。缺少资源时才重新查询发布信息。
+                val info = if (offered.downloadUrl != null) offered else updateChecker.latest(manual = true, refresh = true)
+                downloadUpdate(info)
+                mutable.update { it.copy(updateNotice = "更新将在后台下载") }
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) {
                 DiagnosticLog.error("Update", "启动更新下载失败", error)
                 mutable.update { it.copy(updateNotice = "无法下载更新，请稍后重试") }
             } finally { mutable.update { it.copy(downloadingUpdate = false) } }
         }
+    }
+
+    suspend fun monitorUpdateDownload() {
+        state.map { it.downloadingUpdate }.distinctUntilChanged().collectLatest { submitting ->
+            if (submitting) return@collectLatest
+            do {
+                val download = updateDownloader.current()
+                showUpdateDownload(download)
+                if (download is UpdateDownload.Pending) delay(1_000)
+            } while (download is UpdateDownload.Pending)
+        }
+    }
+
+    private fun showUpdateDownload(download: UpdateDownload?) {
+        val failed = download is UpdateDownload.Failed && download != mutable.value.updateDownload
+        if (failed) DiagnosticLog.log("Update", "下载失败：$download")
+        mutable.update {
+            it.copy(updateDownload = download,
+                updatePrompt = if (download is UpdateDownload.Pending || download is UpdateDownload.Ready) null else it.updatePrompt,
+                updateNotice = if (failed) "更新下载失败，可在设置中重试" else it.updateNotice)
+        }
+    }
+
+    fun prepareUpdateInstallation(download: UpdateDownload.Ready): Boolean {
+        val current = mutable.value
+        if (current.updateDownload != download || current.session != null || current.opening != null ||
+            current.error != null) return false
+        updateDownloader.markInstallationOffered(download.id)
+        mutable.update { it.copy(updateDownload = download.copy(launchAutomatically = false), updateNotice = null) }
+        return true
+    }
+
+    fun showUpdateInstallerError(error: Exception) {
+        DiagnosticLog.error("Update", "无法打开系统安装器", error)
+        mutable.update { it.copy(updateNotice = "无法打开系统安装器，可在设置中重试") }
     }
 
     fun selectLibrary(uri: Uri) {

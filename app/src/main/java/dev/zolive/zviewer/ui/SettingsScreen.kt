@@ -5,6 +5,7 @@ package dev.zolive.zviewer.ui
 import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.text.format.Formatter
+import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -40,6 +41,7 @@ import dev.zolive.zviewer.LibraryState
 import dev.zolive.zviewer.LibraryViewModel
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.CacheLimits
+import dev.zolive.zviewer.data.UpdateDownload
 import kotlin.math.roundToInt
 
 private val SettingsContentInset = 24.dp
@@ -62,6 +64,7 @@ fun SettingsScreen(
     var licenses by remember { mutableStateOf(false) }
     var cacheLimitMiB by remember(settings.cacheLimitMiB) { mutableIntStateOf(settings.cacheLimitMiB) }
     val context = LocalContext.current
+    val activity = LocalActivity.current
     val latestSwipeStart by rememberUpdatedState(onSwipeStart)
     val latestSwipe by rememberUpdatedState(onSwipe)
     val latestSwipeEnd by rememberUpdatedState(onSwipeEnd)
@@ -204,15 +207,28 @@ fun SettingsScreen(
             }
             SettingsSectionTitle("应用", Icons.Outlined.Info)
             SettingsCard {
-                SettingsListItem(headlineContent = { Text("检查更新") },
-                    supportingContent = { Text("当前版本：${BuildConfig.VERSION_NAME}") },
+                val download = state.updateDownload
+                val updateLabel = when (download) {
+                    is UpdateDownload.Pending -> if (download.waiting) "等待下载更新" else "正在下载更新"
+                    is UpdateDownload.Ready -> "安装更新"
+                    is UpdateDownload.Failed -> "重试下载更新"
+                    null -> "检查更新"
+                }
+                SettingsListItem(headlineContent = { Text(updateLabel) },
+                    supportingContent = { Text(download?.let { "ZViewer ${it.version}" } ?: "当前版本：${BuildConfig.VERSION_NAME}") },
                     trailingContent = {
                         if (state.checkingUpdate || state.downloadingUpdate) CircularProgressIndicator(
                             Modifier.size(24.dp).semantics { contentDescription = if (state.downloadingUpdate) "正在准备下载" else "正在检查更新" },
                             strokeWidth = 2.dp)
                     },
-                    modifier = Modifier.clickable(enabled = !state.checkingUpdate && !state.downloadingUpdate,
-                        role = Role.Button) { model.checkForUpdates() })
+                    modifier = Modifier.clickable(
+                        enabled = !state.checkingUpdate && !state.downloadingUpdate && download !is UpdateDownload.Pending,
+                        role = Role.Button
+                    ) {
+                        if (download is UpdateDownload.Ready) {
+                            if (activity != null) openUpdateInstaller(activity, model, download)
+                        } else model.checkForUpdates()
+                    })
                 SettingsListItem(headlineContent = { Text("启动时检查更新") },
                     trailingContent = { Switch(checked = settings.checkUpdatesOnStartup, onCheckedChange = null) },
                     modifier = Modifier.toggleable(value = settings.checkUpdatesOnStartup, role = Role.Switch) {

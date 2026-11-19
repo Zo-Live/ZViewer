@@ -1,5 +1,9 @@
 package dev.zolive.zviewer.ui
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
@@ -23,21 +27,36 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import dev.zolive.zviewer.LibraryState
 import dev.zolive.zviewer.LibraryViewModel
+import dev.zolive.zviewer.data.UpdateDownload
+import dev.zolive.zviewer.data.UpdateDownloader
 import kotlinx.coroutines.delay
 
 /** 在应用层显示反馈；阅读、准备阅读和后台期间保留结果，恢复可交互页面后才计时。 */
 @Composable
 fun UpdateFeedback(state: LibraryState, model: LibraryViewModel) {
-    val lifecycle by LocalLifecycleOwner.current.lifecycle.currentStateFlow.collectAsState()
-    if (state.session != null || state.opening != null || state.error != null || lifecycle != Lifecycle.State.RESUMED) return
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val lifecycleState by lifecycle.currentStateFlow.collectAsState()
+    LaunchedEffect(model, lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) { model.monitorUpdateDownload() }
+    }
+    if (state.session != null || state.opening != null || state.error != null || lifecycleState != Lifecycle.State.RESUMED) return
     val prompt = state.updatePrompt
+    val activity = LocalActivity.current
+    val ready = state.updateDownload as? UpdateDownload.Ready
+    LaunchedEffect(activity, ready, prompt) {
+        if (lifecycle.currentState == Lifecycle.State.RESUMED &&
+            activity != null && ready?.launchAutomatically == true && prompt == null) {
+            openUpdateInstaller(activity, model, ready)
+        }
+    }
     if (prompt != null) {
         AlertDialog(onDismissRequest = model::dismissUpdate,
             text = { Text("检测到新版本：${prompt.version}\n是否立即更新？") },
             dismissButton = { TextButton(onClick = model::dismissUpdate) { Text("稍后更新") } },
-            confirmButton = { TextButton(onClick = model::installUpdate) { Text("立即更新") } })
+            confirmButton = { TextButton(onClick = model::startUpdateDownload) { Text("立即更新") } })
     }
     val notice = state.updateNotice.takeIf { prompt == null }
     var lastNotice by remember { mutableStateOf("") }
@@ -67,5 +86,18 @@ fun UpdateFeedback(state: LibraryState, model: LibraryViewModel) {
                     style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
             }
         }
+    }
+}
+
+internal fun openUpdateInstaller(activity: Activity, model: LibraryViewModel, download: UpdateDownload.Ready) {
+    if (!model.prepareUpdateInstallation(download)) return
+    try {
+        activity.startActivity(Intent(Intent.ACTION_VIEW)
+            .setDataAndType(download.uri, UpdateDownloader.APK_MIME_TYPE)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+    } catch (error: ActivityNotFoundException) {
+        model.showUpdateInstallerError(error)
+    } catch (error: SecurityException) {
+        model.showUpdateInstallerError(error)
     }
 }
