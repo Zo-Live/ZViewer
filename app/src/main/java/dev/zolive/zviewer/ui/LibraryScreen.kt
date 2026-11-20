@@ -23,8 +23,6 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -64,7 +62,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -201,22 +198,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
         if (uri != null) model.selectLibrary(uri)
     }
     val chooseLibrary = { picker.launch(state.treeUri?.let(Uri::parse)) }
-    Surface(Modifier.fillMaxSize().pointerInput(state.updateNotice, state.session, state.opening) {
-        if (state.updateNotice != null && state.session == null && state.opening == null) {
-            awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                while (true) {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                    val change = event.changes.singleOrNull() ?: break
-                    if (change.id != down.id || (change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
-                    if (!change.pressed) {
-                        if (change.changedToUp()) model.dismissUpdateNotice()
-                        break
-                    }
-                }
-            }
-        }
-    }) {
+    Surface(Modifier.fillMaxSize()) {
         when {
             state.session != null -> ReaderScreen(state.session, state.initialPage, state.settings,
                 model.repository, model::settings, { page -> model.saveProgress(state.session, page) },

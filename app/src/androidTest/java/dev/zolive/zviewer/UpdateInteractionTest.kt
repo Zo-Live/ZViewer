@@ -2,9 +2,9 @@ package dev.zolive.zviewer
 
 import android.content.Context
 import android.provider.DocumentsContract
+import android.os.ParcelFileDescriptor
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -71,6 +71,23 @@ class UpdateInteractionTest {
         rule.waitForIdle()
     }
 
+    private fun expectToast(message: Int, action: () -> Unit) {
+        val text = rule.activity.getString(message)
+        val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+        fun records(): List<String> {
+            val output = automation.executeShellCommand("dumpsys notification --noredact")
+            ParcelFileDescriptor.AutoCloseInputStream(output).bufferedReader().useLines { lines ->
+                return lines.filter { "TextToastRecord" in it && ":${context.packageName}/" in it && "text=$text duration=" in it }.toList()
+            }
+        }
+        val previous = records()
+        action()
+        rule.waitUntil(8_000) { records().any { it !in previous } }
+        rule.waitForIdle()
+        assertNull(model.state.value.updateNotice)
+        rule.onNodeWithText(text).assertDoesNotExist()
+    }
+
     private fun openBook() {
         val tree = DocumentsContract.buildTreeDocumentUri("dev.zolive.zviewer.test.documents", "root/书库")
         // 测试目录中的图片文件夹可直接提供真实阅读会话。
@@ -96,40 +113,16 @@ class UpdateInteractionTest {
         assertEquals(0, calls.get())
     }
 
-    @Test fun latestNoticeDismissesOnAnyTapAndExpires() {
+    @Test fun manualChecksShowSystemToastsInSettingsAndLibrary() {
         launch(version = BuildConfig.VERSION_NAME)
         settings()
-        checkUpdate()
-        waitForCheck()
-        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertIsDisplayed()
-        rule.onRoot().performTouchInput { click(Offset(width * .8f, height * .3f)) }
-        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertDoesNotExist()
-        checkUpdate()
-        waitForCheck()
-        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertExists()
+        expectToast(R.string.update_latest) { checkUpdate() }
+        expectToast(R.string.update_latest) { checkUpdate() }
         assertEquals(2, calls.get())
-        rule.mainClock.advanceTimeBy(4_000)
-        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertDoesNotExist()
-    }
-
-    @Test fun latestNoticeStaysAtSameHeightWhenSystemBackClosesSettings() {
-        launch(version = BuildConfig.VERSION_NAME)
-        settings()
-        checkUpdate()
-        waitForCheck()
-        val notice = rule.onNodeWithText(rule.activity.getString(R.string.update_latest))
-        val bounds = notice.assertIsDisplayed().fetchSemanticsNode().boundsInRoot
-        rule.mainClock.autoAdvance = false
-        try {
-            rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
-            rule.mainClock.advanceTimeBy(160)
-            assertEquals(bounds, notice.fetchSemanticsNode().boundsInRoot)
-            rule.mainClock.advanceTimeBy(400)
-            rule.onNodeWithTag("settings-screen").assertDoesNotExist()
-            assertEquals(bounds, notice.fetchSemanticsNode().boundsInRoot)
-        } finally {
-            rule.mainClock.autoAdvance = true
-        }
+        rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        rule.onNodeWithTag("settings-screen").assertDoesNotExist()
+        expectToast(R.string.update_latest) { rule.runOnIdle { model.checkForUpdates() } }
+        assertEquals(3, calls.get())
     }
 
     @Test fun checkingIsNonModalAndRepeatedClicksDoNotDuplicateRequests() {
@@ -154,9 +147,9 @@ class UpdateInteractionTest {
         settings()
         checkUpdate()
         waitForCheck()
-        rule.onNodeWithText(rule.activity.getString(R.string.update_now)).performClick()
-        rule.waitUntil(10_000) { !model.state.value.downloadingUpdate }
-        rule.onNodeWithText(rule.activity.getString(R.string.update_background)).assertIsDisplayed()
+        expectToast(R.string.update_background) {
+            rule.onNodeWithText(rule.activity.getString(R.string.update_now)).performClick()
+        }
         assertEquals(1, calls.get())
         assertEquals(1, downloads.get())
     }
@@ -166,21 +159,19 @@ class UpdateInteractionTest {
         waitForCheck()
         assertNull(model.state.value.updateNotice)
         settings()
-        checkUpdate()
-        waitForCheck()
-        rule.onNodeWithText(rule.activity.getString(R.string.update_check_failed)).assertIsDisplayed()
+        expectToast(R.string.update_check_failed) { checkUpdate() }
         rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertDoesNotExist()
         assertEquals(2, calls.get())
     }
 
-    @Test fun failedDownloadCanBeDismissedWithoutLeavingSettings() {
+    @Test fun failedDownloadShowsSystemToastInSettings() {
         launch(downloadFailure = true)
         settings()
         checkUpdate()
         waitForCheck()
-        rule.onNodeWithText(rule.activity.getString(R.string.update_now)).performClick()
-        rule.waitUntil(10_000) { !model.state.value.downloadingUpdate }
-        rule.onNodeWithText(rule.activity.getString(R.string.update_cannot_download)).assertIsDisplayed()
+        expectToast(R.string.update_cannot_download) {
+            rule.onNodeWithText(rule.activity.getString(R.string.update_now)).performClick()
+        }
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.back_to_library)).assertIsDisplayed()
     }
 
@@ -209,11 +200,10 @@ class UpdateInteractionTest {
         rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertDoesNotExist()
         rule.mainClock.advanceTimeBy(8_000)
         assertEquals(R.string.update_latest, model.state.value.updateNotice)
-        rule.runOnIdle { rule.activity.onBackPressedDispatcher.onBackPressed() }
-        rule.waitUntil(5_000) { model.state.value.session == null }
-        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertIsDisplayed()
-        rule.mainClock.advanceTimeBy(4_000)
-        rule.onNodeWithText(rule.activity.getString(R.string.update_latest)).assertDoesNotExist()
+        expectToast(R.string.update_latest) {
+            rule.runOnIdle { rule.activity.onBackPressedDispatcher.onBackPressed() }
+            rule.waitUntil(5_000) { model.state.value.session == null }
+        }
     }
 
     @Test fun startupUpToDateIsSilent() {

@@ -43,11 +43,27 @@ def checked(label):
     return any(n.attrib.get('checked') == 'true' and any(c.attrib.get('text') == label for c in n.iter()) for n in root.iter())
 
 
+def check_latest():
+    def records():
+        output = d.shell('dumpsys notification --noredact').output
+        return {line for line in output.splitlines()
+                if 'TextToastRecord' in line and ':dev.zolive.zviewer/' in line and 'text=当前为最新版本 duration=' in line}
+
+    previous = records()
+    d(text='检查更新').click()
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline:
+        if records() - previous:
+            return True
+        time.sleep(.1)
+    return False
+
+
 d.app_start('dev.zolive.zviewer', stop=True)
 record('覆盖安装保留书库', d(description='刷新书库').wait(timeout=20))
 d(description='设置').click()
 scroll_to('关于 ZViewer')
-record('应用分区在诊断后且包含三个项目', all(d(text=t).exists for t in ('应用', '检查更新', '启动时检查更新', '关于 ZViewer')))
+record('应用分区显示检查更新、启动检查和关于入口', all(d(text=t).exists for t in ('应用', '检查更新', '启动时检查更新', '关于 ZViewer')))
 record('当前版本显示正确', d(text=f'当前版本：{args.version}').exists)
 record('启动检查默认关闭', not checked('启动时检查更新'))
 record('旧关于入口已移除', not d(text=f'关于 ZViewer {args.version}').exists)
@@ -62,16 +78,9 @@ scroll_to('关于 ZViewer')
 record('重启保留启动检查状态', checked('启动时检查更新'))
 d(text='启动时检查更新').click()
 record('再次点击文字可关闭启动检查', not checked('启动时检查更新'))
-d(text='检查更新').click()
-record('真实 GitHub 检查返回最新版本', d(text='当前为最新版本').wait(timeout=20))
+record('真实 GitHub 检查通过系统 Toast 显示最新版本', check_latest())
 capture('最新版本-提示')
-d.click(.8, .2)
-time.sleep(.4)
-record('点击任意位置关闭提示', not d(text='当前为最新版本').exists)
-d(text='检查更新').click()
-record('短期重复检查仍返回最新版本', d(text='当前为最新版本').wait(timeout=20))
-time.sleep(4)
-record('提示数秒后自动消失', not d(text='当前为最新版本').exists)
+record('短期重复检查仍返回最新版本', check_latest())
 d(text='关于 ZViewer').click()
 record('关于入口打开原有弹窗', d(text='ZViewer · 本地漫画阅读器').wait(timeout=3))
 record('关于隐私说明与联网更新一致', d(textContains='仅检查和下载更新时联网').exists)
@@ -85,10 +94,8 @@ for theme in ('深色', '浅色'):
     d(text='应用主题').click()
     d(text=theme).click()
     scroll_to('关于 ZViewer')
-    d(text='检查更新').click()
-    record(f'{theme}主题最新提示可见', d(text='当前为最新版本').wait(timeout=20))
+    record(f'{theme}主题显示系统 Toast', check_latest())
     capture(f'应用-{theme}')
-    d.click(.8, .2)
 scroll_to('应用主题', down=False)
 d(text='应用主题').click()
 d(text='跟随系统').click()
