@@ -52,6 +52,12 @@
     <string name="back_to_logs">ログ一覧に戻る</string>
     <string name="share_log">共有</string>
     <string name="copy_log">コピー</string>
+    <string name="select_all_log">すべて選択</string>
+    <string name="search_log_selection">検索</string>
+    <string name="translate_log_selection">翻訳</string>
+    <string name="log_selection_search_failed">検索アプリを開けませんでした</string>
+    <string name="log_selection_translate_failed">翻訳アプリを開けませんでした</string>
+    <string name="log_selection_too_long">選択したテキストが長すぎます。選択範囲を狭めてください。</string>
     <string name="export_logs">すべてのログをエクスポート</string>
     <string name="log_exported">ログをエクスポートしました</string>
     <string name="log_export_failed">ログをエクスポートできませんでした</string>

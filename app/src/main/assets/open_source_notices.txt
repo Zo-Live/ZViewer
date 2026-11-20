@@ -1,5 +1,5 @@
 ========================================================================
-AndroidX / Jetpack Compose / Media3 / Android Open Source Project / Kotlin / APNG4Android / libarchive-android / Mbed TLS / Houbb Pinyin 词典 (Apache 2.0)
+AndroidX / Jetpack Compose / Media3 / Android Open Source Project / Material Symbols / Kotlin / APNG4Android / libarchive-android / Mbed TLS / Houbb Pinyin 词典 (Apache 2.0)
 https://www.apache.org/licenses/LICENSE-2.0.txt
 ========================================================================
 

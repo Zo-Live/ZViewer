@@ -52,6 +52,12 @@
     <string name="back_to_logs">返回日志列表</string>
     <string name="share_log">分享</string>
     <string name="copy_log">复制</string>
+    <string name="select_all_log">全选</string>
+    <string name="search_log_selection">搜索</string>
+    <string name="translate_log_selection">翻译</string>
+    <string name="log_selection_search_failed">无法打开搜索应用</string>
+    <string name="log_selection_translate_failed">无法打开翻译应用</string>
+    <string name="log_selection_too_long">所选文字过长，请缩小选择范围</string>
     <string name="export_logs">导出所有日志</string>
     <string name="log_exported">日志已导出</string>
     <string name="log_export_failed">无法导出日志</string>

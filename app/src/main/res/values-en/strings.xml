@@ -52,6 +52,12 @@
     <string name="back_to_logs">Back to logs</string>
     <string name="share_log">Share</string>
     <string name="copy_log">Copy</string>
+    <string name="select_all_log">Select all</string>
+    <string name="search_log_selection">Search</string>
+    <string name="translate_log_selection">Translate</string>
+    <string name="log_selection_search_failed">Could not open a search app</string>
+    <string name="log_selection_translate_failed">Could not open a translation app</string>
+    <string name="log_selection_too_long">Selected text is too long. Select less text.</string>
     <string name="export_logs">Export all logs</string>
     <string name="log_exported">Logs exported</string>
     <string name="log_export_failed">Could not export logs</string>

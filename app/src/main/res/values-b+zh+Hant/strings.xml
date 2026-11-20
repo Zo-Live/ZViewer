@@ -52,6 +52,12 @@
     <string name="back_to_logs">返回記錄列表</string>
     <string name="share_log">分享</string>
     <string name="copy_log">複製</string>
+    <string name="select_all_log">全選</string>
+    <string name="search_log_selection">搜尋</string>
+    <string name="translate_log_selection">翻譯</string>
+    <string name="log_selection_search_failed">無法開啟搜尋應用程式</string>
+    <string name="log_selection_translate_failed">無法開啟翻譯應用程式</string>
+    <string name="log_selection_too_long">所選文字過長，請縮小選取範圍</string>
     <string name="export_logs">匯出所有記錄</string>
     <string name="log_exported">已匯出記錄</string>
     <string name="log_export_failed">無法匯出記錄</string>
