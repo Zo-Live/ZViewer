@@ -50,6 +50,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val MAX_INLINE_LOG_CHARS = 400_000
+// Android 分享面板会在 Intent 和 ClipData 中重复写入所选文字。
+private const val MAX_INLINE_SHARE_CHARS = 100_000
 
 @Composable
 fun LogListScreen(active: Boolean, onBack: () -> Unit, onOpen: (DiagnosticLog.LogFile) -> Unit) {
@@ -121,7 +123,7 @@ fun LogDetailScreen(file: DiagnosticLog.LogFile, onBack: () -> Unit) {
     fun shareLog(selection: String? = null) {
         runAction(R.string.log_share_failed) {
             val intent = Intent(Intent.ACTION_SEND).apply { type = "text/plain" }
-            if (selection != null && selection.length <= MAX_INLINE_LOG_CHARS) {
+            if (selection != null && selection.length <= MAX_INLINE_SHARE_CHARS) {
                 intent.putExtra(Intent.EXTRA_TEXT, selection)
             } else {
                 val uri = withContext(Dispatchers.IO) {
