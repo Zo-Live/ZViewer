@@ -74,6 +74,21 @@ class CacheIntegrationTest {
         assertTrue(repository.cacheSize() < limit)
     }
 
+    @Test fun taskCleanupFromAnotherRepositoryWaitsForTheReadingSession() = runBlocking {
+        val book = repository.scan(tree).first { it.kind == "cbz" }
+        val session = repository.open(book).also { sessions += it }
+        val cover = repository.cover(book)
+        val page = repository.pageFile(session, 0)
+        BookRepository(context).use { cleanup ->
+            cleanup.clearCache(includeCovers = true, afterUse = true)
+            assertTrue(page.isFile)
+            assertTrue(cover.isFile)
+        }
+        repository.close(session)
+        assertFalse(page.exists())
+        assertFalse(cover.exists())
+    }
+
     @Test fun coverAndVideoFrameBytesTriggerReclamationButAreNeverEvicted() = runBlocking {
         val book = repository.scan(tree).first { it.kind == "folder" }
         val cover = sparse("covers/old.jpg", limit / 2)

@@ -80,7 +80,7 @@ internal object TaskRemovalCleanup {
         if (settings.clearProgressOnTaskRemoval) store.clearProgress()
         if (settings.clearCacheOnTaskRemoval) {
             try {
-                BookRepository(application).use { it.clearCache(settings.clearCovers) }
+                BookRepository(application).use { it.clearCache(settings.clearCovers, afterUse = true) }
             } catch (error: Exception) {
                 DiagnosticLog.error("Cache", "移除后台时清理阅读缓存失败", error)
             }

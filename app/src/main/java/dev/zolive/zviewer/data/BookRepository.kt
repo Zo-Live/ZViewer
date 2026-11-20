@@ -26,7 +26,6 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
@@ -43,15 +42,19 @@ import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
 
 class BookRepository(private val context: Context) : Closeable {
+    private companion object {
+        val readingCaches = ConcurrentHashMap<Pair<File, File>, ReadingCache>()
+    }
+
     private val resolver = context.contentResolver
     private val preferences = PreferenceStore(context)
-    private val readingCache = ReadingCache(context.cacheDir, context.filesDir)
+    private val readingCache = readingCaches.computeIfAbsent(context.cacheDir to context.filesDir) { (cacheDir, filesDir) ->
+        ReadingCache(cacheDir, filesDir)
+    }
     private val cache = readingCache.books
     private val covers = readingCache.covers
     private val frames = File(covers, "frames").apply { mkdirs() }
-    private val locks = ConcurrentHashMap<String, Mutex>()
     private val coverSlots = Semaphore(2)
-    private val coverLocks = ConcurrentHashMap<String, Mutex>()
     private data class ThumbnailKey(val bookKey: String, val size: Size, val revision: Int)
     private val thumbnailSlots = Semaphore(2)
     private val thumbnails = object : LruCache<ThumbnailKey, Bitmap>(24 * 1024 * 1024) {
@@ -176,7 +179,7 @@ class BookRepository(private val context: Context) : Closeable {
         try {
             return withContext(Dispatchers.IO) {
                 lease = readingCache.acquire(book.cacheKey)
-                prepare(book, status).copy(cacheLease = lease).also { prepared = it; requestTrim() }
+                prepare(book, status, lease).also { prepared = it; requestTrim() }
             }
         } catch (error: Throwable) {
             withContext(NonCancellable + Dispatchers.IO) {
@@ -186,8 +189,8 @@ class BookRepository(private val context: Context) : Closeable {
         }
     }
 
-    private suspend fun prepare(book: Book, status: (String) -> Unit): BookSession =
-        locks.getOrPut(book.cacheKey) { Mutex() }.withLock {
+    private suspend fun prepare(book: Book, status: (String) -> Unit, lease: Closeable): BookSession =
+        readingCache.fileLock(book.cacheKey).withLock {
             val resources = preferences.language.localizedContext(context).resources
             val folder = File(cache, book.cacheKey).apply { mkdirs(); setLastModified(System.currentTimeMillis()) }
             when (book.kind) {
@@ -197,7 +200,7 @@ class BookRepository(private val context: Context) : Closeable {
                         PageSource(entry.name, uri = entry.uri.toString(), mediaType = if (isVideo(entry.name)) "video" else "image")
                     }
                     if (pages.isEmpty()) throw readerError(R.string.no_folder_media)
-                    orderedSession(book, pages)
+                    orderedSession(book, pages, lease)
                 }
                 "pdf" -> {
                     status(resources.getString(R.string.preparing_pdf))
@@ -210,7 +213,7 @@ class BookRepository(private val context: Context) : Closeable {
                         val pages = List(pdf.pageCount) { index ->
                             PageSource(resources.getString(R.string.pdf_page_name, index + 1))
                         }
-                        BookSession(book, pages, pdf)
+                        BookSession(book, pages, pdf, lease)
                     } catch (error: Throwable) {
                         renderer.close()
                         throw error
@@ -229,7 +232,7 @@ class BookRepository(private val context: Context) : Closeable {
                         if (files.isNotEmpty() && files.all { File(folder, it.second).isFile }) {
                             return@withLock orderedSession(book, files.map { (name, path, type) ->
                                 PageSource(name, File(folder, path).absolutePath, mediaType = type)
-                            })
+                            }, lease)
                         }
                     }
                     // 最早的 pages.json 只记录解压后的编号，重新解压才能取得原始文件名。
@@ -270,7 +273,7 @@ class BookRepository(private val context: Context) : Closeable {
                         }).toString())
                         orderedSession(book, extracted.map { (name, file, type) ->
                             PageSource(name, file.absolutePath, mediaType = type)
-                        })
+                        }, lease)
                     } catch (error: Exception) {
                         folder.deleteRecursively()
                         throw error
@@ -279,14 +282,14 @@ class BookRepository(private val context: Context) : Closeable {
             }
         }
 
-    private fun orderedSession(book: Book, pages: List<PageSource>): BookSession {
+    private fun orderedSession(book: Book, pages: List<PageSource>, lease: Closeable): BookSession {
         val sorted = NaturalOrder.sorted(pages, PageSource::name)
         val migrated = preferences.migratePageOrder(book.id, pages.size) {
             val newIndices = sorted.withIndex().associate { it.value to it.index }
             pages.sortedWith(compareBy(PreviousPageOrder, PageSource::name)).map { newIndices.getValue(it) }
         }
         if (migrated) for (index in pages.indices) File(frames, "${book.cacheKey}-$index.jpg").delete()
-        return BookSession(book, sorted).also { session ->
+        return BookSession(book, sorted, cacheLease = lease).also { session ->
             if (sorted.any(PageSource::isVideo)) preferences.migrateVideoPositions(session)
         }
     }
@@ -336,9 +339,10 @@ class BookRepository(private val context: Context) : Closeable {
     suspend fun cover(book: Book): File = withBookCache(book) {
         val cover = coverFile(book)
         if (cover.isFile) return@withBookCache cover
-        coverLocks.getOrPut(book.cacheKey) { Mutex() }.withLock {
+        readingCache.fileLock("cover-${book.cacheKey}").withLock {
             coverSlots.withPermit {
                 if (cover.isFile) return@withPermit cover
+                readingCache.temporaryCovers.mkdirs()
                 val scratch = File(readingCache.temporaryCovers, "${book.cacheKey}.source")
                 try {
                     val bitmap = when (book.kind) {
@@ -444,7 +448,7 @@ class BookRepository(private val context: Context) : Closeable {
         val pageKey = (page.uri ?: File(page.filePath!!).name).stableId()
         val output = File(frames, "${session.book.cacheKey}-$pageKey.jpg")
         if (output.isFile) return@withBookCache output
-        locks.getOrPut("frame-${session.book.cacheKey}-$pageKey") { Mutex() }.withLock {
+        readingCache.fileLock("frame-${session.book.cacheKey}-$pageKey").withLock {
             if (output.isFile) return@withLock output
             DiagnosticLog.log("Cover", "开始抽帧 book=${session.book.id.take(8)} index=$index")
             val started = android.os.SystemClock.elapsedRealtime()
@@ -475,7 +479,7 @@ class BookRepository(private val context: Context) : Closeable {
         val uri = checkNotNull(page.uri)
         val fileName = "image-${uri.stableId()}.${page.name.extensionLower()}"
         val lockKey = "${session.book.cacheKey}-$fileName"
-        locks.getOrPut(lockKey) { Mutex() }.withLock {
+        readingCache.fileLock(lockKey).withLock {
             val folder = File(cache, session.book.cacheKey).apply { mkdirs() }
             val output = File(folder, fileName)
             if (!output.isFile) copyUri(Uri.parse(uri), output,
@@ -588,9 +592,10 @@ class BookRepository(private val context: Context) : Closeable {
         readingCache.size()
     }
 
-    suspend fun clearCache(includeCovers: Boolean = false) = withContext(Dispatchers.IO) {
+    suspend fun clearCache(includeCovers: Boolean = false, afterUse: Boolean = false) = withContext(Dispatchers.IO) {
         val before = readingCache.size()
-        readingCache.clear(includeCovers)
+        readingCache.clear(includeCovers, afterUse)
+        if (includeCovers) thumbnails.evictAll()
         DiagnosticLog.log("Cache", "手动清理 includeCovers=$includeCovers beforeBytes=$before afterBytes=${readingCache.size()}")
     }
 
