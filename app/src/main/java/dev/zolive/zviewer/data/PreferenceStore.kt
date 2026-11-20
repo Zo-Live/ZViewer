@@ -159,13 +159,17 @@ class PreferenceStore(context: Context) {
         }
     }.getOrDefault(emptyList())
 
-    fun saveLibrary(books: List<Book>) {
+    internal fun encodeLibrary(books: List<Book>): String {
         val entries = JSONArray()
         books.forEach { book ->
             entries.put(JSONObject().put("id", book.id).put("uri", book.uri).put("title", book.title)
                 .put("kind", book.kind).put("modified", book.modified).put("size", book.size)
                 .put("contentSignature", book.contentSignature))
         }
-        preferences.edit().putString("books", entries.toString()).apply()
+        return entries.toString()
     }
+
+    internal fun saveEncodedLibrary(books: String) { preferences.edit().putString("books", books).apply() }
+
+    fun saveLibrary(books: List<Book>) = saveEncodedLibrary(encodeLibrary(books))
 }

@@ -10,6 +10,7 @@ import dev.zolive.zviewer.data.Book
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
 import dev.zolive.zviewer.data.DiagnosticLog
+import dev.zolive.zviewer.data.NaturalOrder
 import dev.zolive.zviewer.data.PreferenceStore
 import dev.zolive.zviewer.data.ReaderException
 import dev.zolive.zviewer.data.ReaderSettings
@@ -20,6 +21,7 @@ import dev.zolive.zviewer.data.UpdateDownloader
 import dev.zolive.zviewer.data.UpdateInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
@@ -67,17 +69,17 @@ class LibraryViewModel(
     val repository = BookRepository(application)
     private val store = PreferenceStore(application)
     private val updateDownloader = UpdateDownloader(application)
-    private val mutable = MutableStateFlow(LibraryState(books = store.readLibrary(), treeUri = store.treeUri,
+    private val mutable = MutableStateFlow(LibraryState(treeUri = store.treeUri,
         settings = store.settings(), favorites = store.favorites()))
     val state = mutable.asStateFlow()
     private val scanMutex = Mutex()
     private val coverRebuildMutex = Mutex()
     private var scanJob: Job? = null
+    private var indexLoaded = false
     private var openJob: Job? = null
     private var manualUpdateRequested = false
 
     init {
-        refreshProgress()
         val settings = store.settings()
         DiagnosticLog.configure(application, settings.diagnosticLog, settings.logDirectory)
         DiagnosticLog.log("App", "应用启动，书库=${store.treeUri != null}")
@@ -190,6 +192,7 @@ class LibraryViewModel(
                 scanJob?.cancel()
                 cancelOpen()
                 store.selectLibrary(newUri)
+                indexLoaded = true
                 mutable.update { it.copy(treeUri = newUri, books = emptyList(), progress = emptyMap(), error = null) }
                 if (oldUri != null) {
                     runCatching { resolver.releasePersistableUriPermission(Uri.parse(oldUri), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
@@ -203,6 +206,7 @@ class LibraryViewModel(
     fun refresh() {
         val current = mutable.value
         val uri = current.treeUri ?: return
+        val loadIndex = !indexLoaded
         scanJob?.cancel()
         mutable.update { it.copy(scanning = true) }
         scanJob = viewModelScope.launch {
@@ -210,10 +214,16 @@ class LibraryViewModel(
             try {
                 DiagnosticLog.log("Library", "开始扫描书库")
                 scanMutex.withLock {
+                    if (loadIndex && !indexLoaded) {
+                        val cached = withContext(Dispatchers.IO) { NaturalOrder.sorted(store.readLibrary(), Book::title) }
+                        indexLoaded = true
+                        publishBooks(cached)
+                    }
                     val previous = mutable.value.books
                     val books = repository.scanBooks(Uri.parse(uri))
+                    val encoded = withContext(Dispatchers.IO) { store.encodeLibrary(books) }
                     val keepOnlyCurrent = mutable.value.settings.currentLibraryCacheOnly
-                    store.saveLibrary(books)
+                    store.saveEncodedLibrary(encoded)
                     publishBooks(books)
                     withContext(NonCancellable) {
                         repository.reconcileBooks(previous, books, keepOnlyCurrent)

@@ -84,7 +84,6 @@ import dev.zolive.zviewer.LibraryViewModel
 import dev.zolive.zviewer.R
 import dev.zolive.zviewer.data.Book
 import dev.zolive.zviewer.data.BookRepository
-import dev.zolive.zviewer.data.NaturalOrder
 import dev.zolive.zviewer.data.ReadingProgress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
@@ -327,7 +326,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                         when {
                             tab == 2 || sort == 2 -> filtered.sortedByDescending { state.progress[it.id]?.updated ?: 0 }
                             sort == 1 -> filtered.sortedByDescending { it.modified }
-                            else -> NaturalOrder.sorted(filtered, Book::title)
+                            else -> filtered
                         }
                     }
                 }
