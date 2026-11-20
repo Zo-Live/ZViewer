@@ -136,7 +136,7 @@ fun SettingsScreen(
                     title = stringResource(R.string.language),
                     selectedValue = settings.language,
                     options = AppLanguage.entries.map { it to it.endonym },
-                    valueIcon = Icons.Outlined.Language,
+                    titleIcon = Icons.Outlined.Language,
                 ) { model.settings(settings.copy(language = it)) }
                 PreferenceMenu(
                     title = stringResource(R.string.grid_columns),
@@ -342,7 +342,7 @@ private fun <T> PreferenceMenu(
     title: String,
     selectedValue: T,
     options: List<Pair<T, String>>,
-    valueIcon: ImageVector? = null,
+    titleIcon: ImageVector? = null,
     onSelect: (T) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -365,14 +365,17 @@ private fun <T> PreferenceMenu(
                         .padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(spacing),
                     verticalAlignment = Alignment.CenterVertically) {
-                    Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text(title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyLarge)
+                        if (titleIcon != null) Icon(titleIcon, null, Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     Row(
                         Modifier.widthIn(max = valueMaxWidth),
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         val tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        if (valueIcon != null) Icon(valueIcon, null, Modifier.size(18.dp), tint)
                         Text(current.second, Modifier.weight(1f, fill = false),
                             style = MaterialTheme.typography.bodyMedium, color = tint)
                         Icon(if (expanded) Icons.Outlined.ArrowDropUp else Icons.Outlined.ArrowDropDown,
