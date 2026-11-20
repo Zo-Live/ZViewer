@@ -2,6 +2,8 @@
 
 package dev.zolive.zviewer.ui
 
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.view.WindowManager
 import androidx.activity.compose.PredictiveBackHandler
@@ -28,6 +30,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshots.SnapshotStateMap
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -96,6 +99,15 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     val mixedBook = remember(session) { videoBook && session.pages.any { !it.isVideo } }
     val verticalReading = settings.vertical
     val pagerReading = videoBook || !verticalReading
+    val pdfPages = if (session.pdf != null) rememberPdfReaderPages(session, active) {
+        val first = if (verticalReading) listState.firstVisibleItemIndex else pagerState.currentPage
+        val visible = if (verticalReading) listState.layoutInfo.visibleItemsInfo.map { it.index } else emptyList()
+        val last = visible.lastOrNull() ?: first
+        (listOf(first) + visible + listOf(last + 1, first - 1))
+            .filter { it in 0 until paging.itemCount }
+            .map(paging::pageAt)
+            .distinct()
+    } else null
     val videoPool = remember(session.book.cacheKey, videoBook) { if (videoBook) VideoPlaybackPool(context) else null }
     // 会话级封面缓存：同一真实页在循环模式下可能被多个虚拟项复用，
     // 重建视图时直接取已解码的封面，避免异步解码造成一帧空档。
@@ -208,7 +220,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         ReaderPage(session, index, repository, vertical = true, active = active && visible,
                             foreground = foreground, zoomSequence = if (current && index == zoomPage) zoomSequence else 0,
                             zoomAction = zoomAction, initialRatio = ratios[index], onRatio = { ratios[index] = it },
-                            loadEnabled = initialImageLoaded || current, onLoaded = onInitialImageLoaded,
+                            loadEnabled = initialImageLoaded || current, onLoaded = onInitialImageLoaded, pdfPages = pdfPages,
                             onTap = { controls = !controls })
                     }
                 }
@@ -219,7 +231,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                     ReaderPage(session, index, repository, vertical = false, active = active && pagerState.currentPage == item,
                         foreground = foreground, zoomSequence = if (item == pagerState.currentPage && index == zoomPage) zoomSequence else 0,
                         zoomAction = zoomAction, loadEnabled = initialImageLoaded || pagerState.currentPage == item,
-                        onLoaded = onInitialImageLoaded, onTap = { controls = !controls })
+                        onLoaded = onInitialImageLoaded, pdfPages = pdfPages, onTap = { controls = !controls })
                 }
             }
             if (!controls) {
@@ -358,9 +370,17 @@ private val imageDecodeDispatcher = Dispatchers.IO.limitedParallelism(2)
 @Composable
 private fun ReaderPage(session: BookSession, index: Int, repository: BookRepository, vertical: Boolean, active: Boolean,
     foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float? = null,
-    onRatio: (Float) -> Unit = {}, loadEnabled: Boolean = true, onLoaded: () -> Unit = {}, onTap: () -> Unit) {
+    onRatio: (Float) -> Unit = {}, loadEnabled: Boolean = true, onLoaded: () -> Unit = {},
+    pdfPages: SnapshotStateMap<Int, Result<Bitmap>>? = null, onTap: () -> Unit) {
+    if (pdfPages != null) {
+        val bitmap = pdfPages[index]?.getOrNull()
+        val resources = LocalContext.current.resources
+        val image = remember(bitmap, resources) { bitmap?.let { BitmapDrawable(resources, it) } }
+        ReaderPageContent(index, image, pdfPages[index]?.isFailure == true, vertical, active,
+            foreground, zoomSequence, zoomAction, initialRatio, onRatio, onTap, onRetry = { pdfPages.remove(index) })
+        return
+    }
     val viewportWidth = LocalWindowInfo.current.containerSize.width
-    val imageDescription = stringResource(R.string.image_accessibility, index + 1)
     val width = (viewportWidth * 2).coerceIn(480, 3200)
     val animationWidth = viewportWidth.coerceIn(480, 3200)
     var retry by remember { mutableIntStateOf(0) }
@@ -369,7 +389,7 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
         if (!loadEnabled) return@produceState
         failure = false
         try {
-            val file = repository.pageFile(session, index, width)
+            val file = repository.pageFile(session, index)
             value = withContext(imageDecodeDispatcher) { ImageLoader.load(file, width, animationWidth) }
         } catch (error: CancellationException) { throw error }
         catch (error: Exception) {
@@ -377,14 +397,22 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
             failure = true
         }
     }
-    val ratio = drawable?.let { it.intrinsicWidth.toFloat() / it.intrinsicHeight.coerceAtLeast(1) } ?: initialRatio ?: .70f
     LaunchedEffect(drawable, failure) {
-        if (drawable != null) onRatio(ratio)
         if (drawable != null || failure) onLoaded()
     }
+    ReaderPageContent(index, drawable, failure, vertical, active, foreground, zoomSequence, zoomAction,
+        initialRatio, onRatio, onTap, onRetry = { retry++ })
+}
+
+@Composable
+private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, vertical: Boolean, active: Boolean,
+    foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float?, onRatio: (Float) -> Unit,
+    onTap: () -> Unit, onRetry: () -> Unit) {
+    val imageDescription = stringResource(R.string.image_accessibility, index + 1)
+    val ratio = image?.let { it.intrinsicWidth.toFloat() / it.intrinsicHeight.coerceAtLeast(1) } ?: initialRatio ?: .70f
+    LaunchedEffect(image) { if (image != null) onRatio(ratio) }
     val layout = if (vertical) Modifier.fillMaxWidth().aspectRatio(ratio.coerceAtLeast(.03f)) else Modifier.fillMaxSize()
     Box(layout, contentAlignment = Alignment.Center) {
-        val image = drawable
         if (image != null) {
             AndroidView(factory = { context -> ZoomImageView(context) }, modifier = Modifier.fillMaxSize(),
                 onRelease = ZoomImageView::clearImage,
@@ -398,7 +426,7 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
                 Icon(Icons.Outlined.BrokenImage, null, tint = foreground)
                 Text(stringResource(R.string.image_error), Modifier.padding(vertical = 16.dp), color = foreground)
                 Row {
-                    TextButton(onClick = { retry++ }) { Text(stringResource(R.string.retry)) }
+                    TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }
                     TextButton(onClick = onTap) { Text(stringResource(R.string.show_reader_controls)) }
                 }
             }

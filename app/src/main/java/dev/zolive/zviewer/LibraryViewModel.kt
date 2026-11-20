@@ -19,6 +19,7 @@ import dev.zolive.zviewer.data.UpdateDownload
 import dev.zolive.zviewer.data.UpdateDownloader
 import dev.zolive.zviewer.data.UpdateInfo
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -203,7 +204,9 @@ class LibraryViewModel(
                 DiagnosticLog.log("Library", "打开 book=${book.id.take(8)} kind=${book.kind} bytes=${book.size}")
                 val session = repository.open(book) { status -> mutable.update { it.copy(opening = status) } }
                 val page = store.progress(book.id).page.coerceIn(session.pages.indices)
+                val previous = mutable.value.session
                 mutable.update { it.copy(session = session, initialPage = page) }
+                previous?.let(::releaseSession)
                 saveProgress(page)
                 DiagnosticLog.log("Library", "打开完成 book=${book.id.take(8)} pages=${session.pages.size} page=${page + 1} elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
             } catch (error: CancellationException) { throw error }
@@ -219,10 +222,19 @@ class LibraryViewModel(
         DiagnosticLog.log("Reader", "关闭 book=${session?.book?.id?.take(8)}")
         mutable.update { it.copy(session = null) }
         refreshProgress()
-        viewModelScope.launch { if (session != null) repository.close(session) else repository.trimCache() }
+        if (session != null) releaseSession(session)
+        else viewModelScope.launch { repository.trimCache() }
     }
 
-    override fun onCleared() { repository.close(); super.onCleared() }
+    private fun releaseSession(session: BookSession) {
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) { repository.close(session) }
+    }
+
+    override fun onCleared() {
+        mutable.value.session?.let(::releaseSession)
+        repository.close()
+        super.onCleared()
+    }
 
     fun saveProgress(page: Int) {
         val session = mutable.value.session ?: return

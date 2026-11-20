@@ -2,13 +2,15 @@ package dev.zolive.zviewer.data
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.graphics.ImageDecoder
 import android.graphics.pdf.PdfRenderer
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.ParcelFileDescriptor
 import android.provider.DocumentsContract
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import androidx.annotation.StringRes
 import dev.zolive.zviewer.R
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +33,7 @@ import me.zhanghai.android.libarchive.ArchiveEntry
 import org.json.JSONArray
 import java.io.File
 import java.io.Closeable
+import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
@@ -66,8 +69,8 @@ class BookRepository(private val context: Context) : Closeable {
 
     override fun close() { maintenance.cancel(); trimRequests.close() }
 
-    suspend fun close(session: BookSession) = withContext(Dispatchers.IO) {
-        session.cacheLease?.close()
+    suspend fun close(session: BookSession) = withContext(NonCancellable + Dispatchers.IO) {
+        try { session.pdf?.close() } finally { session.cacheLease?.close() }
         trimCache()
     }
 
@@ -148,18 +151,21 @@ class BookRepository(private val context: Context) : Closeable {
 
     suspend fun open(book: Book, status: (String) -> Unit = {}): BookSession {
         var lease: Closeable? = null
+        var prepared: BookSession? = null
         try {
             return withContext(Dispatchers.IO) {
                 lease = readingCache.acquire(book.cacheKey)
-                prepare(book, status).copy(cacheLease = lease).also { requestTrim() }
+                prepare(book, status).copy(cacheLease = lease).also { prepared = it; requestTrim() }
             }
-        } catch (error: Exception) {
-            withContext(NonCancellable + Dispatchers.IO) { lease?.close(); requestTrim() }
+        } catch (error: Throwable) {
+            withContext(NonCancellable + Dispatchers.IO) {
+                try { prepared?.pdf?.close() } finally { lease?.close(); requestTrim() }
+            }
             throw error
         }
     }
 
-    private suspend fun prepare(book: Book, status: (String) -> Unit): BookSession = withContext(Dispatchers.IO) {
+    private suspend fun prepare(book: Book, status: (String) -> Unit): BookSession =
         locks.getOrPut(book.cacheKey) { Mutex() }.withLock {
             val resources = preferences.language.localizedContext(context).resources
             val folder = File(cache, book.cacheKey).apply { mkdirs(); setLastModified(System.currentTimeMillis()) }
@@ -174,10 +180,20 @@ class BookRepository(private val context: Context) : Closeable {
                 }
                 "pdf" -> {
                     status(resources.getString(R.string.preparing_pdf))
-                    val file = localPdf(book, folder)
-                    val count = pdfRenderer(file).use { it.pageCount }
-                    if (count == 0) throw readerError(R.string.empty_pdf)
-                    BookSession(book, List(count) { PageSource(resources.getString(R.string.pdf_page_name, it + 1), pdfPage = it) }, file.absolutePath)
+                    val local = File(folder, "document.pdf")
+                    val renderer = if (local.isFile) pdfRenderer(local)
+                        else openSeekablePdf(Uri.parse(book.uri)) ?: pdfRenderer(localPdf(book, folder))
+                    try {
+                        val pdf = PdfDocument(renderer)
+                        if (pdf.pageCount == 0) throw readerError(R.string.empty_pdf)
+                        val pages = List(pdf.pageCount) { index ->
+                            PageSource(resources.getString(R.string.pdf_page_name, index + 1))
+                        }
+                        BookSession(book, pages, pdf)
+                    } catch (error: Throwable) {
+                        renderer.close()
+                        throw error
+                    }
                 }
                 else -> {
                     val manifest = File(folder, "media.json")
@@ -241,7 +257,6 @@ class BookRepository(private val context: Context) : Closeable {
                 }
             }
         }
-    }
 
     private fun orderedSession(book: Book, pages: List<PageSource>): BookSession {
         val sorted = NaturalOrder.sorted(pages, PageSource::name)
@@ -268,21 +283,14 @@ class BookRepository(private val context: Context) : Closeable {
                                 ?: throw readerError(R.string.empty_image_folder)
                             decodeBitmap(ImageDecoder.createSource(resolver, first.uri), 1000)
                         }
-                        "pdf" -> locks.getOrPut(book.cacheKey) { Mutex() }.withLock {
+                        "pdf" -> {
                             val local = File(cache, "${book.cacheKey}/document.pdf")
-                            if (local.isFile) renderPdf(local, 0, 1000)
-                            else {
-                                val renderer = runCatching {
-                                    val descriptor = resolver.openFileDescriptor(Uri.parse(book.uri), "r")
-                                        ?: throw readerError(R.string.source_unavailable)
-                                    pdfRenderer(descriptor)
-                                }.getOrNull()
-                                if (renderer != null) renderer.use { renderPdf(it, 0, 1000) }
-                                else {
+                            val renderer = if (local.isFile) pdfRenderer(local)
+                                else openSeekablePdf(Uri.parse(book.uri)) ?: run {
                                     copyUri(Uri.parse(book.uri), scratch, 4L * 1024 * 1024 * 1024)
-                                    renderPdf(scratch, 0, 1000)
+                                    pdfRenderer(scratch)
                                 }
-                            }
+                            renderer.use { renderPdfPage(it, 0, 1000) }
                         }
                         "video-folder" -> {
                             val first = children(Uri.parse(book.uri)).filter { !it.directory && isVideo(it.name) }
@@ -394,29 +402,16 @@ class BookRepository(private val context: Context) : Closeable {
         }
     }
 
-    suspend fun pageFile(session: BookSession, index: Int, width: Int): File = withBookCache(session.book) {
+    suspend fun pageFile(session: BookSession, index: Int): File = withBookCache(session.book) {
         val page = session.pages[index]
         page.filePath?.let { return@withBookCache File(it) }
-        val renderWidth = width.coerceIn(480, 2560)
-        val fileName = if (page.pdfPage != null) "pdf-${page.pdfPage}-$renderWidth.png"
-            else "image-${page.uri!!.stableId()}.${page.name.extensionLower()}"
+        val uri = checkNotNull(page.uri)
+        val fileName = "image-${uri.stableId()}.${page.name.extensionLower()}"
         val lockKey = "${session.book.cacheKey}-$fileName"
         locks.getOrPut(lockKey) { Mutex() }.withLock {
             val folder = File(cache, session.book.cacheKey).apply { mkdirs() }
-            if (page.pdfPage != null) {
-                val output = File(folder, fileName)
-                if (!output.isFile) {
-                    val bitmap = renderPdf(File(session.pdfPath!!), page.pdfPage, renderWidth)
-                    val temporary = File(folder, "${output.name}.part")
-                    try {
-                        temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-                        if (!temporary.renameTo(output)) throw readerError(R.string.page_cache_write_error)
-                    } finally { bitmap.recycle(); temporary.delete() }
-                }
-                return@withLock output
-            }
             val output = File(folder, fileName)
-            if (!output.isFile) copyUri(Uri.parse(page.uri!!), output,
+            if (!output.isFile) copyUri(Uri.parse(uri), output,
                 if (page.isVideo) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024)
             output
         }
@@ -496,25 +491,23 @@ class BookRepository(private val context: Context) : Closeable {
     private fun pdfRenderer(file: File): PdfRenderer =
         pdfRenderer(ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY))
 
-    private fun pdfRenderer(descriptor: ParcelFileDescriptor): PdfRenderer {
-        return try { PdfRenderer(descriptor) } catch (error: Exception) { descriptor.close(); throw error }
-    }
+    private fun pdfRenderer(descriptor: ParcelFileDescriptor): PdfRenderer =
+        try { PdfRenderer(descriptor) } catch (error: Throwable) { descriptor.close(); throw error }
 
-    fun renderPdf(file: File, index: Int, width: Int): Bitmap = pdfRenderer(file).use { renderer ->
-        renderPdf(renderer, index, width)
-    }
-
-    private fun renderPdf(renderer: PdfRenderer, index: Int, width: Int): Bitmap =
-        renderer.openPage(index).use { page ->
-            val renderWidth = width.coerceIn(480, 2560)
-            val renderHeight = (renderWidth.toFloat() * page.height / page.width).roundToInt().coerceAtLeast(1)
-            val factor = minOf(1f, kotlin.math.sqrt(12_000_000f / (renderWidth.toFloat() * renderHeight)))
-            val bitmap = Bitmap.createBitmap((renderWidth * factor).toInt().coerceAtLeast(1),
-                (renderHeight * factor).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
-            bitmap.eraseColor(Color.WHITE)
-            page.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-            bitmap
+    private fun openSeekablePdf(uri: Uri): PdfRenderer? {
+        val descriptor = try {
+            resolver.openFileDescriptor(uri, "r") ?: return null
+        } catch (_: FileNotFoundException) {
+            return null
         }
+        try {
+            Os.lseek(descriptor.fileDescriptor, 0, OsConstants.SEEK_SET)
+        } catch (_: ErrnoException) {
+            descriptor.close()
+            return null
+        }
+        return pdfRenderer(descriptor)
+    }
 
     fun decodeBitmap(source: ImageDecoder.Source, maxWidth: Int): Bitmap = ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
         decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE

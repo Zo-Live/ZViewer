@@ -62,12 +62,11 @@ data class PageSource(
     val name: String,
     val filePath: String? = null,
     val uri: String? = null,
-    val pdfPage: Int? = null,
     val mediaType: String = "image",
 ) {
     val isVideo: Boolean get() = mediaType == "video"
 }
-data class BookSession(val book: Book, val pages: List<PageSource>, val pdfPath: String? = null,
+data class BookSession(val book: Book, val pages: List<PageSource>, internal val pdf: PdfDocument? = null,
     internal val cacheLease: Closeable? = null)
 
 class ReaderException(message: String, cause: Throwable? = null) : Exception(message, cause)

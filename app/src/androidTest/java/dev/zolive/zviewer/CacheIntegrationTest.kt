@@ -55,7 +55,7 @@ class CacheIntegrationTest {
         val session = repository.open(book).also { sessions += it }
         withTimeout(10_000) { while (old.exists()) delay(50) }
         for (index in session.pages.indices) {
-            val bitmap = BitmapFactory.decodeFile(repository.pageFile(session, index, 1200).absolutePath)
+            val bitmap = BitmapFactory.decodeFile(repository.pageFile(session, index).absolutePath)
             assertNotNull(bitmap)
             bitmap.recycle()
         }
@@ -186,16 +186,33 @@ class CacheIntegrationTest {
         assertFalse(File(context.cacheDir, "covers/${book.cacheKey}.source").exists())
     }
 
-    @Test fun equivalentPdfWidthsReuseRenderedPage() = runBlocking {
+    @Test fun seekablePdfRendersWithoutWritingDocumentOrPagesToCache() = runBlocking {
         val book = repository.scan(tree).first { it.kind == "pdf" }
         val session = repository.open(book).also { sessions += it }
-        val first = repository.pageFile(session, 0, 3000)
-        assertEquals(first, repository.pageFile(session, 0, 3200))
-        assertEquals(first, repository.pageFile(session, 0, 2560))
-        val bitmap = BitmapFactory.decodeFile(first.absolutePath)
-        assertNotNull(bitmap)
+        val bitmap = checkNotNull(session.pdf).render(0, 3200, 12_000_000)
         assertEquals(2560, bitmap.width)
         bitmap.recycle()
+        assertTrue(File(context.cacheDir, "books/${book.cacheKey}").listFiles().orEmpty().isEmpty())
+    }
+
+    @Test fun nonSeekablePdfRemainsReadableUsingLocalCopy() = runBlocking {
+        val original = repository.scan(tree).first { it.kind == "pdf" }
+        val book = original.copy(uri = Uri.parse(original.uri).buildUpon()
+            .appendQueryParameter("pipe", "true").build().toString())
+        val session = repository.open(book).also { sessions += it }
+        val bitmap = checkNotNull(session.pdf).render(1, 1000, 12_000_000)
+        assertEquals(1000, bitmap.width)
+        bitmap.recycle()
+        val folder = File(context.cacheDir, "books/${book.cacheKey}")
+        assertEquals(setOf("document.pdf"), folder.list().orEmpty().toSet())
+    }
+
+    @Test fun closingPdfCancelsLatePageRequests() = runBlocking {
+        val book = repository.scan(tree).first { it.kind == "pdf" }
+        val session = repository.open(book)
+        repository.close(session)
+        val result = runCatching { checkNotNull(session.pdf).render(0, 1000, 12_000_000) }
+        assertTrue(result.exceptionOrNull() is CancellationException)
     }
 
     @Test fun nonSeekablePdfCoverUsesTemporaryCopyAndDeletesIt() = runBlocking {
@@ -215,10 +232,10 @@ class CacheIntegrationTest {
         val session = repository.open(book).also { sessions += it }
         delay(1000)
         val old = sparse("books/old/large.bin", limit)
-        val page = repository.pageFile(session, 0, 1200)
+        val page = repository.pageFile(session, 0)
         withTimeout(10_000) { while (old.exists()) delay(50) }
         assertTrue(page.isFile)
-        assertEquals(page, repository.pageFile(session, 0, 1200))
+        assertEquals(page, repository.pageFile(session, 0))
     }
 
     @Test fun cancelledOpenReleasesProtectionAndRemovesPartialExtraction() = runBlocking {

@@ -50,7 +50,7 @@ class FormatIntegrationTest {
         for (book in books) {
             val session = repository.open(book)
             assertEquals(book.title, 3, session.pages.size)
-            val first = BitmapFactory.decodeFile(repository.pageFile(session, 0, 1200).absolutePath)
+            val first = BitmapFactory.decodeFile(repository.pageFile(session, 0).absolutePath)
             assertNotNull(book.title, first)
             assertEquals(1000, first.width)
             first.recycle()
@@ -110,22 +110,33 @@ class FormatIntegrationTest {
         val books = repository.scan(tree)
         for (book in books.filter { it.kind == "pdf" || it.title.startsWith("07") }) {
             val session = repository.open(book)
-            assertEquals(3, session.pages.size)
-            for (index in session.pages.indices) {
-                val file = repository.pageFile(session, index, 1440)
-                val drawable = ImageLoader.load(file, 1440)
-                assertTrue(drawable.intrinsicWidth >= 1000)
-                assertTrue(drawable.intrinsicHeight > drawable.intrinsicWidth)
+            try {
+                assertEquals(3, session.pages.size)
+                for (index in session.pages.indices) {
+                    val pdf = session.pdf
+                    if (pdf != null) {
+                        val bitmap = pdf.render(index, 1440, 12_000_000)
+                        assertEquals(1440, bitmap.width)
+                        assertTrue(bitmap.height > bitmap.width)
+                        bitmap.recycle()
+                    } else {
+                        val drawable = ImageLoader.load(repository.pageFile(session, index), 1440)
+                        assertTrue(drawable.intrinsicWidth >= 1000)
+                        assertTrue(drawable.intrinsicHeight > drawable.intrinsicWidth)
+                    }
+                }
+                assertTrue(repository.cover(book).length() > 0)
+            } finally {
+                repository.close(session)
             }
-            assertTrue(repository.cover(book).length() > 0)
         }
     }
 
     @Test fun repeatedLoopPagesShareCompleteFileCache() = runBlocking {
         val book = repository.scan(tree).first { it.title.startsWith("07") }
         val session = repository.open(book)
-        repository.pageFile(session, 0, 1200).delete()
-        val files = List(8) { async { repository.pageFile(session, 0, 1200) } }.awaitAll()
+        repository.pageFile(session, 0).delete()
+        val files = List(8) { async { repository.pageFile(session, 0) } }.awaitAll()
         assertEquals(1, files.toSet().size)
         val bitmap = BitmapFactory.decodeFile(files.first().absolutePath)
         assertNotNull(bitmap)
