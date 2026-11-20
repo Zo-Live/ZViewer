@@ -87,6 +87,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import androidx.core.view.WindowCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -103,6 +107,17 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
         }
     }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
+    if (state.settings.rebuildLibraryCovers && !settingsOpen && state.session == null && state.opening == null &&
+        !state.scanning && !state.clearingCache && state.books.isNotEmpty()
+    ) {
+        val lifecycle = LocalLifecycleOwner.current.lifecycle
+        LaunchedEffect(lifecycle, state.books, state.cacheRevision) {
+            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                delay(500)
+                model.repository.rebuildMissingCovers(state.books)
+            }
+        }
+    }
     var settingsDragging by remember { mutableStateOf(false) }
     var settingsDragProgress by remember { mutableFloatStateOf(if (settingsOpen) 1f else 0f) }
     var viewportWidth by remember { mutableFloatStateOf(1f) }

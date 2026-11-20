@@ -45,6 +45,7 @@ data class LibraryState(
     val progress: Map<String, ReadingProgress> = emptyMap(),
     val error: String? = null,
     val cacheRevision: Int = 0,
+    val clearingCache: Boolean = false,
     val checkingUpdate: Boolean = false,
     val downloadingUpdate: Boolean = false,
     val updateDownload: UpdateDownload? = null,
@@ -310,14 +311,18 @@ class LibraryViewModel(
     }
 
     fun clearCache() {
-        if (mutable.value.session != null || mutable.value.opening != null) return
-        val includeCovers = mutable.value.settings.clearCovers
+        val current = mutable.value
+        if (current.session != null || current.opening != null || current.clearingCache) return
+        val includeCovers = current.settings.clearCovers
+        mutable.update { it.copy(clearingCache = true) }
         viewModelScope.launch {
             try {
                 repository.clearCache(includeCovers)
                 DiagnosticLog.log("Cache", "手动清理完成 includeCovers=$includeCovers")
                 mutable.update { it.copy(cacheRevision = it.cacheRevision + 1) }
-            } catch (error: Exception) { showError(error) }
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) { showError(error) }
+            finally { mutable.update { it.copy(clearingCache = false) } }
         }
     }
 

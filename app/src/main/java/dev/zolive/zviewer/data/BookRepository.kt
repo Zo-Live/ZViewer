@@ -13,6 +13,7 @@ import android.system.Os
 import android.system.OsConstants
 import androidx.annotation.StringRes
 import dev.zolive.zviewer.R
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -273,8 +274,25 @@ class BookRepository(private val context: Context) : Closeable {
         return BookSession(book, sorted)
     }
 
+    private fun coverFile(book: Book) =
+        File(covers, if (book.kind == "pdf") "${book.cacheKey}.jpg" else "${book.cacheKey}-pinyin.jpg")
+
+    suspend fun rebuildMissingCovers(books: List<Book>) = withContext(Dispatchers.IO) {
+        for (book in books) {
+            ensureActive()
+            if (coverFile(book).isFile) continue
+            try {
+                cover(book)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                DiagnosticLog.error("Cover", "补全封面失败 book=${book.id.take(8)} kind=${book.kind}", error)
+            }
+        }
+    }
+
     suspend fun cover(book: Book): File = withBookCache(book) {
-        val cover = File(covers, if (book.kind == "pdf") "${book.cacheKey}.jpg" else "${book.cacheKey}-pinyin.jpg")
+        val cover = coverFile(book)
         if (cover.isFile) return@withBookCache cover
         coverLocks.getOrPut(book.cacheKey) { Mutex() }.withLock {
             coverSlots.withPermit {

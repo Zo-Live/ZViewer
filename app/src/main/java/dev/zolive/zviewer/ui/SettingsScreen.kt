@@ -176,6 +176,12 @@ fun SettingsScreen(
                     modifier = Modifier.toggleable(value = settings.clearCovers, role = Role.Switch) {
                         model.settings(settings.copy(clearCovers = it))
                     })
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.rebuild_library_covers)) },
+                    supportingContent = { Text(stringResource(R.string.rebuild_library_covers_hint)) },
+                    trailingContent = { Switch(checked = settings.rebuildLibraryCovers, onCheckedChange = null) },
+                    modifier = Modifier.toggleable(value = settings.rebuildLibraryCovers, role = Role.Switch) {
+                        model.settings(settings.copy(rebuildLibraryCovers = it))
+                    })
                 SettingsListItem(headlineContent = { Text(stringResource(R.string.cache_limit)) },
                     trailingContent = { Text(if (cacheLimitMiB < 1024) "$cacheLimitMiB MiB"
                         else "${(cacheLimitMiB / 1024f).toString().removeSuffix(".0")} GiB") })

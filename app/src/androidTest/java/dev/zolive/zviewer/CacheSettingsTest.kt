@@ -112,6 +112,20 @@ class CacheSettingsTest {
         progress.performScrollTo().assertIsOn()
     }
 
+    @Test fun libraryCacheAndCoverSwitchesDefaultOffAndPersistIndependently() {
+        launchSettings()
+        val currentLibrary = rule.onNodeWithText("仅保留当前书库缓存")
+        val rebuildCovers = rule.onNodeWithText("自动补全封面")
+        currentLibrary.performScrollTo().assertIsOff()
+        rebuildCovers.performScrollTo().assertIsOff().performClick().assertIsOn()
+        assertTrue(store.settings().rebuildLibraryCovers)
+        assertFalse(store.settings().currentLibraryCacheOnly)
+        currentLibrary.performScrollTo().performClick().assertIsOn()
+        scenario.recreate()
+        currentLibrary.performScrollTo().assertIsOn().performClick().assertIsOff()
+        rebuildCovers.performScrollTo().assertIsOn()
+    }
+
     @Test fun loweringThresholdImmediatelyTrimsAndRaisingItPreservesReadingFiles() = runBlocking {
         launchSettings()
         rule.onNodeWithText("清理封面").performClick()

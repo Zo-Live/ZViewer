@@ -32,6 +32,8 @@
     <string name="clear_covers">Clear covers</string>
     <string name="current_library_cache_only">Keep only current library cache</string>
     <string name="current_library_cache_only_hint">Remove temporary extracted files and covers from other libraries when you switch libraries</string>
+    <string name="rebuild_library_covers">Generate missing covers</string>
+    <string name="rebuild_library_covers_hint">Automatically generate all missing covers when you enter the library</string>
     <string name="cache_limit">Automatic cleanup threshold</string>
     <string name="clear_cache_on_removal">Clear reading cache when removed from Recents</string>
     <string name="clear_reading_history">Clear reading history</string>
