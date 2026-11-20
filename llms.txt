@@ -2,7 +2,7 @@
 
 > ZViewer is an offline native Android comic reader for local archives (ZIP/CBZ, RAR/CBR, 7Z), PDF, image folders, and video folders, built with Kotlin 2.1.21 and Jetpack Compose (Material 3).
 
-Package `dev.zolive.zviewer`, version 1.8.3 (`versionCode 26`), MIT license. The app supports Android 10 and later (minSdk 29, compile and target SDK 36). The universal APK covers `arm64-v8a` and `x86_64`. Reading runs on-device through a persisted Storage Access Framework (SAF) grant. Network access is used only for GitHub update checks and downloads. The interface defaults to Simplified Chinese and also supports Traditional Chinese, English, and Japanese.
+Package `dev.zolive.zviewer`, version 1.8.4 (`versionCode 27`), MIT license. The app supports Android 10 and later (minSdk 29, compile and target SDK 36). The universal APK covers `arm64-v8a` and `x86_64`. Reading runs on-device through a persisted Storage Access Framework (SAF) grant. Network access is used only for GitHub update checks and downloads. The interface defaults to Simplified Chinese and also supports Traditional Chinese, English, and Japanese.
 
 ## Features
 
@@ -10,7 +10,7 @@ Package `dev.zolive.zviewer`, version 1.8.3 (`versionCode 26`), MIT license. The
 - Reader: continuous vertical scrolling or horizontal paging, optional right-to-left paging, loop mode (first and last pages adjoin), pinch / double-tap / button zoom from 1× to 5×, page jump, keep screen on, and saved per-page and per-video progress.
 - Video: folders or archives that contain only videos, or a mix of images and videos, open in one pager that follows the vertical/horizontal setting. The seek slider appears only on video pages. Options: loop a single video, or open in preview mode (paused until tapped). Codec support depends on the device's Media3 / system decoders.
 - Settings includes Appearance (theme and accent color), Preferences (language, 2–5 cover columns, file type labels off by default, and favorite icons on by default), Reading (reading mode, dark reader background, right-to-left paging, keep screen on, single-video loop, video preview, and loop mode), Library & Storage, Diagnostics, and App (check for updates, startup checks off by default, and About). Swipe right or use system back to leave Settings.
-- Library & Storage lets you choose the library folder, see cache size, set a cache limit, and double-tap to clear the reading cache or reading history. Manual cache clearing includes covers and video frames when Clear covers is enabled. Separate switches can clear the cache or reading history when the app is removed from Android Recents. Keep only current library cache removes other libraries' cached reading files, covers, and video frames after a successful scan of the selected library. In the development source after the 1.8.3 release, Generate missing covers can process the whole library from Settings, during reading, or while the app is in the background and the process is alive. These switches are off by default.
+- Library & Storage lets you choose the library folder, see cache size, set a cache limit, and double-tap to clear the reading cache or reading history. Manual cache clearing includes covers and video frames when Clear covers is enabled. Separate switches can clear the cache or reading history when the app is removed from Android Recents. Keep only current library cache removes other libraries' cached reading files, covers, and video frames after a successful scan of the selected library. Generate missing covers can process the whole library from Settings, during reading, or while the app is in the background and the process is alive. These switches are off by default.
 - Diagnostic log (optional): written to the app-specific external `logs/` directory by default, or to a SAF folder the user picks.
 - Extracted pages, copied images, fallback copies of non-seekable PDFs, and temporary cover sources live in the app cache. Complete covers and video frames persist under app files. Their combined size is compared with a configurable limit (256 MiB–8 GiB, default 1.5 GiB). At the limit, idle reading files and incomplete temporary files are trimmed to about two-thirds of the limit. Open books and files still being written are protected. Complete covers and frames are exempt from size-based trimming, so the limit is soft. Cache and reading history cleanup preserve original files and favorites.
 
@@ -103,5 +103,4 @@ Kotlin `2.1.21`, Compose BOM `2025.05.01`, `activity-compose:1.10.1`, `lifecycle
 ## Optional
 
 - [License (MIT)](LICENSE)
-- [Release 1.8.3](https://github.com/Zo-Live/ZViewer/releases/tag/v1.8.3)
-- [Release 1.8.3 checksum](dist/ZViewer-1.8.3-release.apk.sha256)
+- [Release 1.8.4](https://github.com/Zo-Live/ZViewer/releases/tag/v1.8.4)
