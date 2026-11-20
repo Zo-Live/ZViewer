@@ -62,7 +62,7 @@ fun LogListScreen(active: Boolean, onBack: () -> Unit, onOpen: (DiagnosticLog.Lo
     Scaffold(topBar = {
         CenterAlignedTopAppBar(
             title = { Text(stringResource(R.string.log_list)) },
-            navigationIcon = { BackButton(R.string.back_to_settings, onBack) },
+            navigationIcon = { BackButton(R.string.back_to_diagnostics, onBack) },
         )
     }) { padding ->
         val result = listing

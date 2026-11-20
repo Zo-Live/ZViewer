@@ -49,6 +49,7 @@
     <string name="log_list">Logs</string>
     <string name="no_logs">No logs</string>
     <string name="back_to_settings">Back to settings</string>
+    <string name="back_to_diagnostics">Back to diagnostics</string>
     <string name="back_to_logs">Back to logs</string>
     <string name="share_log">Share</string>
     <string name="copy_log">Copy</string>

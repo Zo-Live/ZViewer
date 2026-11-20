@@ -186,6 +186,7 @@ if arguments.verify_source_changes:
 
 before_clear = {path: fingerprint(path) for path in (first, other)}
 device(description="设置").click()
+device(text="书库与存储").click()
 for attempt in range(5):
     if device(text="清理阅读缓存").exists:
         break
@@ -202,7 +203,8 @@ if clear_covers is None or clear_covers.get("value") != "true":
 clear_button = device(text="清理阅读缓存").center()
 device.double_click(*clear_button, duration=.1)
 record("双击清理会删除或重建封面", wait_for(lambda: all(fingerprint(path) != saved for path, saved in before_clear.items())))
-device.press("back")
+device(description="返回设置").click()
+device(description="返回书库").click()
 record("手动清理后书库正常重新生成封面", wait_for(lambda: exists(first) and exists(other)))
 capture("06-手动清理后封面重建")
 print(f"缓存端到端验收完成：{output}", flush=True)

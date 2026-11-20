@@ -39,6 +39,7 @@ class CacheSettingsTest {
     private fun launchSettings() {
         scenario = ActivityScenario.launch(MainActivity::class.java)
         rule.onNodeWithContentDescription("设置").performClick()
+        rule.onNodeWithText("书库与存储").performClick()
         rule.onNodeWithText("清理封面").performScrollTo()
     }
 
@@ -149,7 +150,7 @@ class CacheSettingsTest {
 
         clear.performScrollTo().performTouchInput { doubleClick() }
         rule.waitUntil(15_000) { covers.all { it.length() > 0 && it.lastModified() > 1000 } }
-        rule.onNodeWithContentDescription("返回书库").assertIsDisplayed()
+        rule.onNodeWithContentDescription("返回设置").assertIsDisplayed()
     }
 
     @Test fun loweringThresholdImmediatelyTrimsAndRaisingItPreservesReadingFiles() = runBlocking {
@@ -177,7 +178,7 @@ class CacheSettingsTest {
         }
         rule.waitForIdle()
         rule.onNodeWithText("清理封面").assertExists()
-        rule.onNodeWithContentDescription("返回书库").assertIsDisplayed()
+        rule.onNodeWithContentDescription("返回设置").assertIsDisplayed()
         val limit = store.settings().cacheLimitMiB
         assertTrue(limit > 1536)
         assertEquals(0, limit % CacheLimits.STEP_MIB)

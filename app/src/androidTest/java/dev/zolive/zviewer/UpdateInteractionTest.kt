@@ -59,6 +59,7 @@ class UpdateInteractionTest {
 
     private fun settings() {
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.settings)).performClick()
+        rule.onNodeWithText(rule.activity.getString(R.string.app)).performClick()
         rule.onNodeWithText(rule.activity.getString(R.string.about)).performScrollTo()
     }
 
@@ -120,6 +121,7 @@ class UpdateInteractionTest {
         expectToast(R.string.update_latest) { checkUpdate() }
         assertEquals(2, calls.get())
         rule.runOnUiThread { rule.activity.onBackPressedDispatcher.onBackPressed() }
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.back_to_library)).performClick()
         rule.onNodeWithTag("settings-screen").assertDoesNotExist()
         expectToast(R.string.update_latest) { rule.runOnIdle { model.checkForUpdates() } }
         assertEquals(3, calls.get())
@@ -172,7 +174,7 @@ class UpdateInteractionTest {
         expectToast(R.string.update_cannot_download) {
             rule.onNodeWithText(rule.activity.getString(R.string.update_now)).performClick()
         }
-        rule.onNodeWithContentDescription(rule.activity.getString(R.string.back_to_library)).assertIsDisplayed()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.back_to_settings)).assertIsDisplayed()
     }
 
     @Test fun startupDialogWaitsUntilTheBookIsClosed() {

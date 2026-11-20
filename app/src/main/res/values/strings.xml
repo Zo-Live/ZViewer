@@ -49,6 +49,7 @@
     <string name="log_list">日志列表</string>
     <string name="no_logs">暂无日志</string>
     <string name="back_to_settings">返回设置</string>
+    <string name="back_to_diagnostics">返回诊断</string>
     <string name="back_to_logs">返回日志列表</string>
     <string name="share_log">分享</string>
     <string name="copy_log">复制</string>

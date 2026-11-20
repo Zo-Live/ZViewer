@@ -116,18 +116,22 @@ record("切页及设置返回保留网格滚动位置", bool(before) and before 
 capture("书库滚动位置")
 
 click(description="设置")
+click(text="外观")
 original_theme = next(label for label in ("跟随系统", "浅色", "深色") if device(text=label).exists)
 try:
     for theme in ("深色", "浅色"):
         click(text="应用主题")
         click(text=theme)
+        click(description="返回设置")
         click(description="返回书库")
         click(description="设置")
+        click(text="外观")
         record(f"{theme}主题设置进退后可正常操作", device(text=theme).exists)
         capture(f"设置-{theme}")
 finally:
     click(text="应用主题")
     click(text=original_theme)
+    click(description="返回设置")
     click(description="返回书库")
 
 click(description="搜索漫画")

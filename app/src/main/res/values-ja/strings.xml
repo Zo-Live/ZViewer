@@ -49,6 +49,7 @@
     <string name="log_list">ログ一覧</string>
     <string name="no_logs">ログはありません</string>
     <string name="back_to_settings">設定に戻る</string>
+    <string name="back_to_diagnostics">診断に戻る</string>
     <string name="back_to_logs">ログ一覧に戻る</string>
     <string name="share_log">共有</string>
     <string name="copy_log">コピー</string>

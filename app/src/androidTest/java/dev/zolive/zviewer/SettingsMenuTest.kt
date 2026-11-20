@@ -12,6 +12,7 @@ import dev.zolive.zviewer.data.PreferenceStore
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -39,7 +40,28 @@ class SettingsMenuTest {
         hasText(label) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton),
     )
 
+    @Test fun sectionsOpenInOrderAndReturnToSettings() {
+        val sections = listOf(
+            "外观" to "应用主题",
+            "偏好" to "语言",
+            "阅读" to "阅读模式",
+            "书库与存储" to "清理阅读缓存",
+            "诊断" to "查看日志",
+            "应用" to "关于 ZViewer",
+        )
+        val positions = sections.map { (section, _) -> setting(section).fetchSemanticsNode().boundsInRoot.top }
+        assertTrue(positions.zipWithNext().all { (above, below) -> above < below })
+        sections.forEach { (section, firstControl) ->
+            setting(section).performScrollTo().performClick()
+            rule.onNodeWithText(section).assertIsDisplayed()
+            setting(firstControl).performScrollTo().assertIsDisplayed()
+            rule.onNodeWithContentDescription("返回设置").performClick()
+            setting(section).assertIsDisplayed()
+        }
+    }
+
     @Test fun settingsExposeCurrentValuesAndMenuSelection() {
+        setting("外观").performClick()
         val theme = setting("应用主题").performScrollTo()
         theme.assert(hasText("跟随系统"))
             .assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
@@ -54,12 +76,22 @@ class SettingsMenuTest {
         assertEquals("dark", store.settings().theme)
 
         val columns = setting("每行封面数").performScrollTo()
+        val columnBounds = columns.fetchSemanticsNode().boundsInRoot
+        val colorLabel = rule.onNodeWithText("主题颜色").fetchSemanticsNode().boundsInRoot
+        assertTrue(columnBounds.top >= theme.fetchSemanticsNode().boundsInRoot.bottom)
+        assertTrue(columnBounds.bottom <= colorLabel.top)
         columns.assert(hasText("3")).performClick()
         option("3").assertIsSelected()
         option("5").performClick()
         columns.assert(hasText("5"))
         assertEquals(5, store.settings().gridColumns)
 
+        rule.onNodeWithContentDescription("返回设置").performClick()
+        setting("偏好").performClick()
+        columns.assertDoesNotExist()
+
+        rule.onNodeWithContentDescription("返回设置").performClick()
+        setting("阅读").performClick()
         val reading = setting("阅读模式").performScrollTo()
         reading.assert(hasText("垂直连续")).performClick()
         option("垂直连续").assertIsSelected()
@@ -69,6 +101,7 @@ class SettingsMenuTest {
     }
 
     @Test fun switchingLanguagesKeepsSettingsOpenAndPersists() {
+        setting("偏好").performClick()
         setting("语言").performScrollTo().assert(hasText("简体中文")).performClick()
         option("简体中文").assertIsSelected()
         option("繁體中文").assertIsNotSelected()
@@ -87,6 +120,7 @@ class SettingsMenuTest {
         scenario.close()
         scenario = ActivityScenario.launch(MainActivity::class.java)
         rule.onNodeWithContentDescription("設定").performClick()
+        setting("基本設定").performClick()
         awaitSetting("言語", "日本語")
         setting("言語").performClick()
         option("简体中文").performClick()
@@ -94,10 +128,13 @@ class SettingsMenuTest {
     }
 
     @Test fun licenseIntroductionUsesTheSelectedLanguage() {
+        setting("偏好").performClick()
         setting("语言").performScrollTo().performClick()
         option("日本語").performClick()
         awaitSetting("言語", "日本語")
 
+        rule.onNodeWithContentDescription("設定に戻る").performClick()
+        setting("アプリ").performClick()
         rule.onNodeWithText("ZViewer について").performScrollTo().performClick()
         rule.onNode(hasText("オープンソースライセンス") and hasClickAction()).performClick()
         val notice = hasText("ライセンス本文は原文で掲載しています。", substring = true)

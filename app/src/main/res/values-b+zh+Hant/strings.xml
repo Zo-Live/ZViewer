@@ -49,6 +49,7 @@
     <string name="log_list">記錄列表</string>
     <string name="no_logs">暫無記錄</string>
     <string name="back_to_settings">返回設定</string>
+    <string name="back_to_diagnostics">返回診斷</string>
     <string name="back_to_logs">返回記錄列表</string>
     <string name="share_log">分享</string>
     <string name="copy_log">複製</string>

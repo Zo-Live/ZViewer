@@ -96,12 +96,14 @@ import kotlin.math.roundToInt
 private sealed class AppPage(val tag: String) {
     data object Library : AppPage("library-screen")
     data object Settings : AppPage("settings-screen")
+    data class Section(val section: SettingsSection) : AppPage(section.tag)
     data object Logs : AppPage("log-list-screen")
     data class LogDetail(val file: DiagnosticLog.LogFile) : AppPage("log-detail-screen")
 
     fun parent(): AppPage = when (this) {
         Library, Settings -> Library
-        Logs -> Settings
+        is Section -> Settings
+        Logs -> Section(SettingsSection.Diagnostics)
         is LogDetail -> Logs
     }
 
@@ -116,7 +118,8 @@ private sealed class AppPage(val tag: String) {
                     Settings.tag -> Settings
                     Logs.tag -> Logs
                     "log-detail-screen" -> LogDetail(DiagnosticLog.LogFile(it[1] as Uri, it[2] as String, it[3] as Long))
-                    else -> Library
+                    else -> SettingsSection.entries.firstOrNull { section -> section.tag == it[0] }
+                        ?.let { section -> Section(section) } ?: Library
                 }
             },
         )
@@ -255,7 +258,11 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                                         AppPage.Library -> LibraryScreen(state, model, active,
                                             onSettings = { finishTransition(PageTransition(AppPage.Settings, 0f), true) },
                                             onChooseLibrary = chooseLibrary)
-                                        AppPage.Settings -> SettingsScreen(state, model, active, ::goBack, chooseLibrary,
+                                        AppPage.Settings -> SettingsScreen(::goBack) { section ->
+                                            finishTransition(PageTransition(AppPage.Section(section), 0f), true)
+                                        }
+                                        is AppPage.Section -> SettingsSectionScreen(
+                                            layer.section, state, model, active, ::goBack, chooseLibrary,
                                             onViewLogs = { finishTransition(PageTransition(AppPage.Logs, 0f), true) })
                                         AppPage.Logs -> LogListScreen(active, ::goBack) { file ->
                                             finishTransition(PageTransition(AppPage.LogDetail(file), 0f), true)

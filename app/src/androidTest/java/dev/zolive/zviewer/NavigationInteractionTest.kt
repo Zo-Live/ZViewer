@@ -300,6 +300,37 @@ class NavigationInteractionTest {
         rule.onNodeWithTag("settings-screen").assertDoesNotExist()
     }
 
+    @Test fun diagnosticsUsesTheSameTransitionAndReturnsOnePageAtATime() {
+        launch()
+        rule.onNodeWithContentDescription("设置").performClick()
+        val settings = rule.onNodeWithTag("settings-screen")
+        val diagnostics = rule.onNodeWithTag("settings-diagnostics-screen")
+        val original = settings.fetchSemanticsNode().boundsInRoot
+        rule.mainClock.autoAdvance = false
+        try {
+            rule.onNodeWithText("诊断").performClick()
+            rule.mainClock.advanceTimeBy(160)
+            val outgoing = settings.fetchSemanticsNode().boundsInRoot
+            val incoming = diagnostics.fetchSemanticsNode().boundsInRoot
+            assertTrue(outgoing.height < original.height)
+            assertTrue(outgoing.right < original.right)
+            assertTrue(incoming.left > original.left && incoming.left < original.right)
+            rule.mainClock.advanceTimeBy(400)
+        } finally {
+            rule.mainClock.autoAdvance = true
+        }
+        diagnostics.performTouchInput {
+            swipe(Offset(width * .4f, centerY), Offset(width * .5f, centerY))
+        }.assertIsDisplayed()
+        rule.onNodeWithText("查看日志").performClick()
+        rule.onNodeWithTag("log-list-screen").assertIsDisplayed()
+        scenario.recreate()
+        rule.onNodeWithContentDescription("返回诊断").performClick()
+        diagnostics.assertIsDisplayed().performTouchInput { swipeRight() }
+        settings.assertIsDisplayed()
+        diagnostics.assertDoesNotExist()
+    }
+
     @Test fun gridPositionSurvivesTabSwitchSettingsAndRecreation() {
         launch()
         rule.onNodeWithTag("library-grid-0").performTouchInput { swipeUp() }

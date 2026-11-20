@@ -163,6 +163,7 @@ class FavoriteManagementTest {
         assertIconVisible(true)
         listOf(false, true).forEach { enabled ->
             rule.onNodeWithContentDescription("设置").performClick()
+            rule.onNodeWithText("偏好").performClick()
             rule.onNodeWithText("显示收藏图标").performScrollTo().assertIsDisplayed()
             rule.onNodeWithText("在封面右下角显示收藏按钮").assertIsDisplayed()
             val titleBounds = rule.onNodeWithText("显示收藏图标").fetchSemanticsNode().boundsInRoot
