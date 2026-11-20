@@ -6,4 +6,8 @@
         <item name="android:windowBackground">#F8F9F2</item>
         <item name="android:colorAccent">#46664B</item>
     </style>
+    <style name="SettingsDialogAnimation">
+        <item name="android:windowEnterAnimation">@anim/settings_dialog_enter</item>
+        <item name="android:windowExitAnimation">@anim/settings_dialog_exit</item>
+    </style>
 </resources>

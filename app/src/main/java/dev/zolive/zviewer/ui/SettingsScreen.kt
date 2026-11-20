@@ -426,7 +426,7 @@ private fun ApplicationSettings(state: LibraryState, model: LibraryViewModel) {
                 }
             }
         })
-    if (about) AlertDialog(onDismissRequest = { about = false }, title = { Text(stringResource(R.string.about_title)) },
+    if (about) SettingsAlertDialog(onDismissRequest = { about = false }, title = { Text(stringResource(R.string.about_title)) },
         text = { Text(stringResource(R.string.about_description, BuildConfig.VERSION_NAME), Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) },
         confirmButton = { TextButton(onClick = { about = false }) { Text(stringResource(R.string.ok)) } },
         dismissButton = { TextButton(onClick = { about = false; licenses = true }) { Text(stringResource(R.string.open_source_licenses)) } })
@@ -436,10 +436,10 @@ private fun ApplicationSettings(state: LibraryState, model: LibraryViewModel) {
                 context.assets.open("open_source_notices.txt").bufferedReader().use { it.readText() }
             }
         }
-        AlertDialog(onDismissRequest = { licenses = false }, title = { Text(stringResource(R.string.open_source_licenses)) },
+        SettingsAlertDialog(onDismissRequest = { licenses = false }, title = { Text(stringResource(R.string.open_source_licenses)) },
             text = {
                 Column(
-                    Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState()),
+                    Modifier.height(420.dp).verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Text(stringResource(R.string.license_notices_intro), style = MaterialTheme.typography.bodySmall)
