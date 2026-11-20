@@ -147,8 +147,9 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     }) {
         when {
             state.session != null -> ReaderScreen(state.session, state.initialPage, state.settings,
-                model.repository, model::settings, model::saveProgress, model::videoPosition,
-                { page, position -> model.saveVideoProgress(state.session.book.id, page, position) }, model::closeBook)
+                model.repository, model::settings, { page -> model.saveProgress(state.session, page) },
+                { page -> model.videoPosition(state.session, page) },
+                { page, position -> model.saveVideoProgress(state.session, page, position) }, model::closeBook)
             else -> {
                 val progress = (if (settingsDragging) settingsDragProgress else settingsProgress.value).coerceIn(0f, 1f)
                 val navigationAnimating = !settingsDragging && settingsProgress.isRunning

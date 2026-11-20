@@ -227,11 +227,11 @@ class LibraryViewModel(
             try {
                 DiagnosticLog.log("Library", "打开 book=${book.id.take(8)} kind=${book.kind} bytes=${book.size}")
                 val session = repository.open(book) { status -> mutable.update { it.copy(opening = status) } }
-                val page = store.progress(book.id).page.coerceIn(session.pages.indices)
+                val page = store.resumePage(session)
                 val previous = mutable.value.session
                 mutable.update { it.copy(session = session, initialPage = page) }
                 previous?.let(::releaseSession)
-                saveProgress(page)
+                saveProgress(session, page)
                 DiagnosticLog.log("Library", "打开完成 book=${book.id.take(8)} pages=${session.pages.size} page=${page + 1} elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) { showError(error) }
@@ -260,18 +260,14 @@ class LibraryViewModel(
         super.onCleared()
     }
 
-    fun saveProgress(page: Int) {
-        val session = mutable.value.session ?: return
-        store.saveProgress(session.book.id, page.coerceIn(session.pages.indices), session.pages.size)
+    fun saveProgress(session: BookSession, page: Int) {
+        if (mutable.value.session === session) store.saveProgress(session, page)
     }
 
-    fun videoPosition(page: Int): Long {
-        val session = mutable.value.session ?: return 0L
-        return store.videoPosition(session.book.id, page)
-    }
+    fun videoPosition(session: BookSession, page: Int): Long = store.videoPosition(session, page)
 
-    fun saveVideoProgress(bookId: String, page: Int, position: Long) {
-        store.saveVideoPosition(bookId, page, position)
+    fun saveVideoProgress(session: BookSession, page: Int, position: Long) {
+        store.saveVideoPosition(session, page, position)
     }
 
     fun clearReadingProgress() {

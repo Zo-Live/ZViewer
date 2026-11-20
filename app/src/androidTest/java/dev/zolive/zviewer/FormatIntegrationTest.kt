@@ -94,8 +94,15 @@ class FormatIntegrationTest {
                 try {
                     assertEquals(expected, session.pages.map(PageSource::name))
                     assertEquals("中文.mp4", session.pages[store.progress(id).page].name)
-                    assertEquals(3210L, store.videoPosition(id, 6))
-                    assertEquals(0L, store.videoPosition(id, 5))
+                    assertEquals(3210L, store.videoPosition(session, 6))
+                    assertEquals(0L, store.videoPosition(session, 5))
+                    store.saveProgress(session, 6)
+                    val inserted = session.copy(pages = listOf(PageSource("1.png")) + session.pages)
+                    assertEquals(7, store.resumePage(inserted))
+                    assertEquals(3210L, store.videoPosition(inserted, 7))
+                    assertEquals(0L, store.videoPosition(inserted, 6))
+                    val removed = inserted.copy(pages = inserted.pages.filter { it.name != "中文.mp4" })
+                    assertEquals(6, store.resumePage(removed))
                 } finally { repository.close(session) }
             }
         } finally {

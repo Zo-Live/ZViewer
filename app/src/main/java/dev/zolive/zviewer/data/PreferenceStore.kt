@@ -65,9 +65,24 @@ class PreferenceStore(context: Context) {
         preferences.getLong("read_$bookId", 0),
     )
 
-    fun saveProgress(bookId: String, page: Int, total: Int) {
+    internal fun resumePage(session: BookSession): Int {
+        val bookId = session.book.id
+        val mediaKey = preferences.getString("page_media_$bookId", null)
+        val index = mediaKey?.let { saved -> session.mediaKeys.indexOfFirst { it == saved }.takeIf { it >= 0 } }
+            ?: progress(bookId).page
+        return index.coerceIn(session.pages.indices)
+    }
+
+    internal fun saveProgress(session: BookSession, page: Int) {
+        val index = page.coerceIn(session.pages.indices)
+        saveProgress(session.book.id, index, session.pages.size,
+            if (session.pdf == null) session.mediaKeys[index] else null)
+    }
+
+    fun saveProgress(bookId: String, page: Int, total: Int, mediaKey: String? = null) {
         preferences.edit().putInt("page_$bookId", page).putInt("total_$bookId", total)
-            .putLong("read_$bookId", System.currentTimeMillis()).putBoolean("page_order_$bookId", true).apply()
+            .putLong("read_$bookId", System.currentTimeMillis()).putBoolean("page_order_$bookId", true)
+            .putString("page_media_$bookId", mediaKey).apply()
     }
 
     internal fun migratePageOrder(bookId: String, pageCount: Int, newIndices: () -> List<Int>): Boolean {
@@ -89,16 +104,40 @@ class PreferenceStore(context: Context) {
         return true
     }
 
-    fun videoPosition(bookId: String, page: Int): Long = preferences.getLong("video_${bookId}_$page", 0L)
+    internal fun migrateVideoPositions(session: BookSession) {
+        val bookId = session.book.id
+        val marker = "video_media_migrated_$bookId"
+        if (preferences.getBoolean(marker, false) || !preferences.contains("page_$bookId")) return
+        val prefix = "video_${bookId}_"
+        val samePageCount = progress(bookId).total == session.pages.size
+        val editor = preferences.edit().putBoolean(marker, true)
+        for ((key, value) in preferences.all) {
+            if (!key.startsWith(prefix)) continue
+            val index = key.removePrefix(prefix).toIntOrNull() ?: continue
+            if (samePageCount && session.pages.getOrNull(index)?.isVideo == true && value is Long) {
+                val destination = videoKey(session, index)
+                if (!preferences.contains(destination)) editor.putLong(destination, value)
+            }
+            editor.remove(key)
+        }
+        editor.apply()
+    }
 
-    fun saveVideoPosition(bookId: String, page: Int, position: Long) {
-        preferences.edit().putLong("video_${bookId}_$page", position.coerceAtLeast(0L)).apply()
+    private fun videoKey(session: BookSession, index: Int): String =
+        "video_media_${session.book.id}_${session.mediaKeys[index]}"
+
+    internal fun videoPosition(session: BookSession, index: Int): Long =
+        preferences.getLong(videoKey(session, index), 0L)
+
+    internal fun saveVideoPosition(session: BookSession, index: Int, position: Long) {
+        preferences.edit().putLong(videoKey(session, index), position.coerceAtLeast(0L)).apply()
     }
 
     fun clearProgress() {
         val editor = preferences.edit()
         preferences.all.keys.filter { it.startsWith("page_") || it.startsWith("total_") ||
-            it.startsWith("read_") || (it.startsWith("video_") && it.substringAfterLast('_').toIntOrNull() != null)
+            it.startsWith("read_") || it.startsWith("video_media_") ||
+            (it.startsWith("video_") && it.substringAfterLast('_').toIntOrNull() != null)
         }.forEach(editor::remove)
         editor.apply()
     }

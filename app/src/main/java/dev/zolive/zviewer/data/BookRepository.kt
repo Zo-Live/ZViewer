@@ -278,7 +278,9 @@ class BookRepository(private val context: Context) : Closeable {
             pages.sortedWith(compareBy(PreviousPageOrder, PageSource::name)).map { newIndices.getValue(it) }
         }
         if (migrated) for (index in pages.indices) File(frames, "${book.cacheKey}-$index.jpg").delete()
-        return BookSession(book, sorted)
+        return BookSession(book, sorted).also { session ->
+            if (sorted.any(PageSource::isVideo)) preferences.migrateVideoPositions(session)
+        }
     }
 
     private fun coverFile(book: Book) =

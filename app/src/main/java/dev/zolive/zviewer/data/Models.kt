@@ -9,8 +9,18 @@ val videoExtensions = setOf("mp4", "m4v", "mkv", "webm", "avi", "mov", "3gp", "3
 val archiveExtensions = setOf("zip", "cbz", "rar", "cbr", "7z")
 
 fun String.extensionLower(): String = substringAfterLast('.', "").lowercase(Locale.ROOT)
-fun String.stableId(): String = MessageDigest.getInstance("SHA-256")
-    .digest(toByteArray()).joinToString("") { "%02x".format(it) }.take(32)
+private const val HEX_DIGITS = "0123456789abcdef"
+
+fun String.stableId(): String {
+    val digest = MessageDigest.getInstance("SHA-256").digest(toByteArray())
+    return buildString(32) {
+        for (index in 0 until 16) {
+            val byte = digest[index].toInt() and 0xff
+            append(HEX_DIGITS[byte shr 4])
+            append(HEX_DIGITS[byte and 0x0f])
+        }
+    }
+}
 fun isImage(name: String): Boolean = name.extensionLower() in imageExtensions &&
     name.replace('\\', '/').split('/').none { it.startsWith('.') || it == "__MACOSX" }
 fun isVideo(name: String): Boolean = name.extensionLower() in videoExtensions &&
@@ -69,6 +79,16 @@ data class PageSource(
     val isVideo: Boolean get() = mediaType == "video"
 }
 data class BookSession(val book: Book, val pages: List<PageSource>, internal val pdf: PdfDocument? = null,
-    internal val cacheLease: Closeable? = null)
+    internal val cacheLease: Closeable? = null) {
+    internal val mediaKeys = if (pdf != null) emptyList() else run {
+        val occurrences = mutableMapOf<String, Int>()
+        pages.map { page ->
+            val source = page.uri ?: page.name
+            val occurrence = occurrences.getOrDefault(source, 0)
+            occurrences[source] = occurrence + 1
+            "$occurrence:$source".stableId()
+        }
+    }
+}
 
 class ReaderException(message: String, cause: Throwable? = null) : Exception(message, cause)
