@@ -1,6 +1,7 @@
 package dev.zolive.zviewer
 
 import android.content.Context
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -125,6 +126,47 @@ class SettingsMenuTest {
         setting("言語").performClick()
         option("简体中文").performClick()
         awaitSetting("语言", "简体中文")
+    }
+
+    @Test fun customThemeColorControlsStayInSyncAndOnlyApplySaves() {
+        setting("外观").performClick()
+        setting("应用主题").performClick()
+        option("浅色").performClick()
+        val palette = rule.onNodeWithContentDescription("自定义主题颜色")
+        val wheel = rule.onNodeWithContentDescription("色轮")
+        val hex = rule.onNode(hasSetTextAction())
+        val apply = rule.onNodeWithText("应用")
+        palette.performClick()
+        hex.assertTextContains("49684D")
+        rule.onNodeWithContentDescription("浅色").assertIsDisplayed()
+        rule.onNodeWithContentDescription("深色").assertDoesNotExist()
+
+        hex.assertIsDisplayed().performTextReplacement("#FF0000")
+        wheel.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "FF0000"))
+        wheel.performScrollTo().performTouchInput {
+            swipe(center + Offset(width * .43f, 0f), center + Offset(-width * .43f, 0f))
+        }
+        hex.assertTextContains("00FFFF")
+
+        rule.onNodeWithContentDescription("G").performSemanticsAction(SemanticsActions.SetProgress) { it(128f) }
+        hex.assertTextContains("0080FF")
+        wheel.assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "0080FF"))
+        hex.performTextReplacement("123")
+        apply.assertIsNotEnabled()
+        assertEquals(0xFF49684D, store.settings().accent)
+        rule.onNodeWithText("取消").performClick()
+
+        palette.performClick()
+        hex.assertTextContains("49684D")
+        hex.performTextReplacement("aBcDeF")
+        apply.assertIsEnabled().performClick()
+        assertEquals(0xFFABCDEF, store.settings().accent)
+        setting("应用主题").performClick()
+        option("深色").performClick()
+        palette.performClick()
+        hex.assertTextContains("ABCDEF")
+        rule.onNodeWithContentDescription("浅色").assertDoesNotExist()
+        rule.onNodeWithContentDescription("深色").assertIsDisplayed()
     }
 
     @Test fun licenseIntroductionUsesTheSelectedLanguage() {

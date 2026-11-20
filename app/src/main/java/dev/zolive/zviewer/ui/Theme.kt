@@ -1,6 +1,7 @@
 package dev.zolive.zviewer.ui
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
@@ -30,11 +31,8 @@ private fun tone(seed: Long, lightness: Float, saturation: Float = 1f): Color {
     return Color(ColorUtils.HSLToColor(hsl))
 }
 
-@Composable
-fun ZViewerTheme(settings: ReaderSettings, content: @Composable () -> Unit) {
-    val dark = when (settings.theme) { "light" -> false; "dark" -> true; else -> isSystemInDarkTheme() }
-    val seed = settings.accent
-    val colors = remember(seed, dark) { if (dark) darkColorScheme(
+internal fun themeColorScheme(seed: Long, dark: Boolean): ColorScheme =
+    if (dark) darkColorScheme(
         primary = tone(seed, .77f), onPrimary = tone(seed, .16f),
         primaryContainer = tone(seed, .28f), onPrimaryContainer = tone(seed, .90f),
         secondary = tone(seed, .78f, .45f), onSecondary = tone(seed, .18f, .45f),
@@ -58,6 +56,19 @@ fun ZViewerTheme(settings: ReaderSettings, content: @Composable () -> Unit) {
         surfaceContainer = tone(seed, .935f, .30f), surfaceContainerHigh = tone(seed, .915f, .30f),
         surfaceContainerHighest = tone(seed, .89f, .30f), outline = tone(seed, .47f, .18f),
         outlineVariant = tone(seed, .79f, .20f),
-    ) }
+    )
+
+@Composable
+internal fun isDarkTheme(theme: String): Boolean = when (theme) {
+    "light" -> false
+    "dark" -> true
+    else -> isSystemInDarkTheme()
+}
+
+@Composable
+fun ZViewerTheme(settings: ReaderSettings, content: @Composable () -> Unit) {
+    val dark = isDarkTheme(settings.theme)
+    val seed = settings.accent
+    val colors = remember(seed, dark) { themeColorScheme(seed, dark) }
     MaterialTheme(colorScheme = colors, content = content)
 }

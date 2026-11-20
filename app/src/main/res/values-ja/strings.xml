@@ -82,8 +82,7 @@
     <string name="update_checking">更新を確認中</string>
     <string name="update_check_on_start">起動時に更新を確認</string>
     <string name="about">ZViewer について</string>
-    <string name="color_hex_hint">6桁の16進数カラーコードからライト用とダーク用の配色を生成します</string>
-    <string name="color_value">カラーコード</string>
+    <string name="color_wheel">カラーホイール</string>
     <string name="apply">適用</string>
     <string name="cancel">キャンセル</string>
     <string name="about_title">ZViewer · ローカル漫画ビューア</string>

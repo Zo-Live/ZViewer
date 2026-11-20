@@ -82,8 +82,7 @@
     <string name="update_checking">Checking for updates</string>
     <string name="update_check_on_start">Check for updates on startup</string>
     <string name="about">About ZViewer</string>
-    <string name="color_hex_hint">Enter a six-digit hex color to generate light and dark palettes</string>
-    <string name="color_value">Color value</string>
+    <string name="color_wheel">Color wheel</string>
     <string name="apply">Apply</string>
     <string name="cancel">Cancel</string>
     <string name="about_title">ZViewer · Local comic reader</string>

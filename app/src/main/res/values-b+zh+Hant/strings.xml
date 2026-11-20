@@ -82,8 +82,7 @@
     <string name="update_checking">正在檢查更新</string>
     <string name="update_check_on_start">啟動時檢查更新</string>
     <string name="about">關於 ZViewer</string>
-    <string name="color_hex_hint">輸入六位十六進位色碼，介面會自動產生對應的明暗配色</string>
-    <string name="color_value">色碼</string>
+    <string name="color_wheel">色輪</string>
     <string name="apply">套用</string>
     <string name="cancel">取消</string>
     <string name="about_title">ZViewer · 本機漫畫閱讀器</string>

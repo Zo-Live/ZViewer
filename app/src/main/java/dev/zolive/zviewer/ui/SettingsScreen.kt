@@ -4,7 +4,6 @@ package dev.zolive.zviewer.ui
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.text.format.Formatter
 import android.widget.Toast
@@ -204,17 +203,15 @@ private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSett
         IconButton(onClick = { customColor = true }, Modifier.size(44.dp)) { Icon(Icons.Outlined.Palette, stringResource(R.string.custom_theme_color)) }
     }
     if (customColor) {
-        var value by remember { mutableStateOf("%06X".format(settings.accent and 0xFFFFFF)) }
-        val valid = value.matches(Regex("[0-9a-fA-F]{6}"))
-        AlertDialog(onDismissRequest = { customColor = false }, title = { Text(stringResource(R.string.custom_theme_color)) }, text = {
-            Column {
-                Text(stringResource(R.string.color_hex_hint))
-                OutlinedTextField(value, { value = it.removePrefix("#").take(6) }, Modifier.padding(top = 16.dp),
-                    label = { Text(stringResource(R.string.color_value)) }, prefix = { Text("#") }, singleLine = true, isError = !valid)
-            }
-        }, confirmButton = { TextButton(enabled = valid, onClick = {
-            onSettings(settings.copy(accent = AndroidColor.parseColor("#$value").toLong() and 0xFFFFFFFF)); customColor = false
-        }) { Text(stringResource(R.string.apply)) } }, dismissButton = { TextButton(onClick = { customColor = false }) { Text(stringResource(R.string.cancel)) } })
+        ThemeColorDialog(
+            accent = settings.accent,
+            dark = isDarkTheme(settings.theme),
+            onDismiss = { customColor = false },
+            onApply = {
+                onSettings(settings.copy(accent = it))
+                customColor = false
+            },
+        )
     }
 }
 
