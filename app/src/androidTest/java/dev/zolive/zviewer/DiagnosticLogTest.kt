@@ -84,4 +84,24 @@ class DiagnosticLogTest {
         assertTrue(file.length() <= 2 * 1024 * 1024L + 1024)
         assertTrue(file.readText().contains("达到单文件大小上限"))
     }
+
+    @Test fun clearingOldAndActiveLogsPreservesOtherFilesAndKeepsLoggingEnabled() {
+        DiagnosticLog.configure(context, true, null)
+        val legacy = File(directory, "zviewer-20261006-120000.log").apply { writeText("旧日志") }
+        val other = File(directory, "notes.log").apply { writeText("其他文件") }
+        DiagnosticLog.log("Test", "before-clear")
+        awaitContent("before-clear")
+        assertEquals(2, DiagnosticLog.files(context).size)
+
+        assertTrue(DiagnosticLog.clear(context))
+        assertTrue(DiagnosticLog.files(context).isEmpty())
+        assertFalse(legacy.exists())
+        assertTrue(other.isFile)
+
+        DiagnosticLog.log("Test", "after-clear")
+        val content = awaitContent("after-clear")
+        assertTrue(content.contains("schema=2"))
+        assertFalse(content.contains("before-clear"))
+        assertEquals(1, DiagnosticLog.files(context).size)
+    }
 }

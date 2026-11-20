@@ -5,6 +5,7 @@ package dev.zolive.zviewer.ui
 import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.text.format.Formatter
+import android.widget.Toast
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -12,7 +13,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -23,6 +23,7 @@ import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,7 +33,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.Role
@@ -49,22 +49,27 @@ import dev.zolive.zviewer.R
 import dev.zolive.zviewer.data.AppLanguage
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.CacheLimits
+import dev.zolive.zviewer.data.DiagnosticLog
 import dev.zolive.zviewer.data.UpdateDownload
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 private val SettingsContentInset = 24.dp
 private val SettingsSectionIconSize = 20.dp
+private val SettingsActionWidth = 48.dp
 
 @Composable
 fun SettingsScreen(
     state: LibraryState,
     model: LibraryViewModel,
+    active: Boolean,
     onBack: () -> Unit,
     onChooseLibrary: () -> Unit,
-    onSwipeStart: () -> Unit = {},
-    onSwipe: (Float) -> Unit = {},
-    onSwipeEnd: () -> Unit = {},
-    onSwipeCancel: () -> Unit = {}
+    onViewLogs: () -> Unit,
 ) {
     val settings = state.settings
     var customColor by remember { mutableStateOf(false) }
@@ -73,25 +78,42 @@ fun SettingsScreen(
     var cacheLimitMiB by remember(settings.cacheLimitMiB) { mutableIntStateOf(settings.cacheLimitMiB) }
     val context = LocalContext.current
     val activity = LocalActivity.current
-    val latestSwipeStart by rememberUpdatedState(onSwipeStart)
-    val latestSwipe by rememberUpdatedState(onSwipe)
-    val latestSwipeEnd by rememberUpdatedState(onSwipeEnd)
-    val latestSwipeCancel by rememberUpdatedState(onSwipeCancel)
+    val scope = rememberCoroutineScope()
+    var logOperationRunning by remember { mutableStateOf(false) }
+    var logRevision by remember { mutableIntStateOf(0) }
     val cacheSize by produceState(0L, state.cacheRevision) { value = model.repository.cacheSize() }
+    val logSize by produceState(0L, active, settings.logDirectory, settings.diagnosticLog, logRevision) {
+        while (active) {
+            value = withContext(Dispatchers.IO) { DiagnosticLog.files(context).sumOf { it.size } }
+            delay(2_000)
+        }
+    }
+    fun runLogOperation(errorMessage: Int, successMessage: Int? = null, operation: () -> Unit) {
+        if (logOperationRunning) return
+        logOperationRunning = true
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { operation() }
+                if (successMessage != null) Toast.makeText(context, successMessage, Toast.LENGTH_SHORT).show()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                Toast.makeText(context, errorMessage, Toast.LENGTH_SHORT).show()
+            } finally {
+                logOperationRunning = false
+                logRevision++
+            }
+        }
+    }
     val logPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) model.setLogDirectory(uri)
     }
-    Scaffold(modifier = Modifier.pointerInput(Unit) {
-        detectHorizontalDragGestures(
-            onDragStart = { latestSwipeStart() },
-            onHorizontalDrag = { change, dragAmount ->
-                latestSwipe(dragAmount)
-                change.consume()
-            },
-            onDragEnd = { latestSwipeEnd() },
-            onDragCancel = { latestSwipeCancel() }
-        )
-    }, topBar = {
+    val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) runLogOperation(R.string.log_export_failed, R.string.log_exported) {
+            DiagnosticLog.export(context, uri)
+        }
+    }
+    Scaffold(topBar = {
         // 顶栏默认边距 4 dp，加上 48 dp 点击区的一半，使返回箭头与分区图标中心对齐。
         val topBarInset = SettingsContentInset + SettingsSectionIconSize / 2 - 28.dp
         CenterAlignedTopAppBar(modifier = Modifier.padding(horizontal = topBarInset),
@@ -219,20 +241,38 @@ fun SettingsScreen(
                         model.settings(settings.copy(diagnosticLog = it))
                     })
                 if (settings.diagnosticLog) {
-                    HorizontalDivider(Modifier.padding(vertical = 6.dp))
                     SettingsListItem(headlineContent = { Text(stringResource(R.string.log_directory)) }, supportingContent = {
                         Text(settings.logDirectory?.let(::logDirectoryLabel) ?: stringResource(R.string.log_default_directory))
                     },
+                        trailingContent = if (settings.logDirectory != null) {
+                            {
+                                IconButton(onClick = { model.setLogDirectory(null) }, modifier = Modifier.width(SettingsActionWidth)) {
+                                    Icon(Icons.Outlined.Refresh, stringResource(R.string.restore_default_directory))
+                                }
+                            }
+                        } else null,
                         modifier = Modifier.clickable { logPicker.launch(null) })
-                    if (settings.logDirectory != null) {
-                        TextButton(onClick = { model.setLogDirectory(null) }, Modifier.align(Alignment.End).padding(bottom = 4.dp)) {
-                            Text(stringResource(R.string.restore_default_directory))
-                        }
-                    }
-                    Text(stringResource(R.string.log_filename_hint),
-                        Modifier.padding(bottom = 8.dp), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.view_logs)) },
+                    trailingContent = {
+                        Box(Modifier.width(SettingsActionWidth), contentAlignment = Alignment.Center) {
+                            Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null)
+                        }
+                    },
+                    modifier = Modifier.clickable(enabled = !logOperationRunning, role = Role.Button, onClick = onViewLogs))
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.export_logs)) },
+                    modifier = Modifier.clickable(enabled = !logOperationRunning, role = Role.Button) { exportPicker.launch(null) })
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_logs)) },
+                    supportingContent = { Text(stringResource(R.string.clear_logs_hint)) },
+                    trailingContent = { Text(Formatter.formatShortFileSize(context, logSize)) },
+                    modifier = Modifier.combinedClickable(
+                        enabled = !logOperationRunning,
+                        role = Role.Button,
+                        onClick = {},
+                        onDoubleClick = {
+                            runLogOperation(R.string.log_clear_failed) { check(DiagnosticLog.clear(context)) }
+                        },
+                    ))
             }
             SettingsSectionTitle(stringResource(R.string.app), Icons.Outlined.Info)
             SettingsCard {

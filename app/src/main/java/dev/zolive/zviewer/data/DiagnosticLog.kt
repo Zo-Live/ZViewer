@@ -2,11 +2,13 @@ package dev.zolive.zviewer.data
 
 import android.app.ActivityManager
 import android.content.Context
+import android.net.Uri
 import android.os.Build
 import android.os.Process
 import android.provider.DocumentsContract
 import android.util.Log
 import androidx.core.net.toUri
+import androidx.core.content.FileProvider
 import dev.zolive.zviewer.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +35,7 @@ object DiagnosticLog {
     private val fileFormat = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS")
     private val lineFormat = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSXXX")
     private val uriPattern = Regex("(?:content|file|https?)://[^\\s)]+")
+    private val logName = Regex("""zviewer-\d{8}-\d{6}(?:-\d{3}-\d+)?(?: \(\d+\))?\.log(?: \(\d+\))?(?:\.txt)?""")
 
     @Volatile private var enabled = false
     @Volatile private var directory: String? = null
@@ -42,6 +45,9 @@ object DiagnosticLog {
     private var bytesWritten = 0L
     private var capped = false
     private var crashHandlerInstalled = false
+    private var restartContext: Context? = null
+
+    data class LogFile(val uri: Uri, val name: String, val size: Long)
 
     init {
         scope.launch {
@@ -54,10 +60,15 @@ object DiagnosticLog {
     /** 目录变化或重新开启时新建会话，日志关闭后不会采集事件。 */
     fun configure(context: Context, enabled: Boolean, directory: String?) = synchronized(writeLock) {
         this.enabled = enabled
-        if (enabled && output != null && this.directory == directory) return@synchronized
+        if (enabled && (output != null || restartContext != null) && this.directory == directory) return@synchronized
         closeSession()
+        restartContext = null
         this.directory = directory
         if (!enabled) return@synchronized
+        startSession(context)
+    }
+
+    private fun startSession(context: Context) {
         val fallback = runCatching { openSession(context, directory) }.exceptionOrNull()
         if (fallback != null) {
             Log.w(TAG, "所选日志目录不可写，改用默认目录", fallback)
@@ -66,11 +77,11 @@ object DiagnosticLog {
                 this.enabled = false
             }
         }
-        log("Session", "日志开始 schema=2 maxBytes=$MAX_BYTES")
-        log("App", "ZViewer version=${BuildConfig.VERSION_NAME} code=${BuildConfig.VERSION_CODE} build=${BuildConfig.BUILD_TYPE}")
-        log("Device", "Android=${Build.VERSION.RELEASE} api=${Build.VERSION.SDK_INT} securityPatch=${Build.VERSION.SECURITY_PATCH} " +
-            "manufacturer=${Build.MANUFACTURER} model=${Build.MODEL} abis=${Build.SUPPORTED_ABIS.joinToString()}")
-        if (fallback != null) error("Log", "所选目录不可写，已回退默认目录", fallback)
+        write(line("INFO", "Session", "日志开始 schema=2 maxBytes=$MAX_BYTES"))
+        write(line("INFO", "App", "ZViewer version=${BuildConfig.VERSION_NAME} code=${BuildConfig.VERSION_CODE} build=${BuildConfig.BUILD_TYPE}"))
+        write(line("INFO", "Device", "Android=${Build.VERSION.RELEASE} api=${Build.VERSION.SDK_INT} securityPatch=${Build.VERSION.SECURITY_PATCH} " +
+            "manufacturer=${Build.MANUFACTURER} model=${Build.MODEL} abis=${Build.SUPPORTED_ABIS.joinToString()}"))
+        if (fallback != null) write(line("ERROR", "Log", "所选目录不可写，已回退默认目录\n${fallback.stackTraceToString()}"))
     }
 
     fun log(tag: String, message: String) = append("INFO", tag, message)
@@ -130,6 +141,92 @@ object DiagnosticLog {
 
     fun currentLocation(): String? = location
 
+    private fun defaultDirectory(context: Context) =
+        File(context.getExternalFilesDir(null) ?: context.filesDir, "logs")
+
+    fun files(context: Context): List<LogFile> {
+        val local = defaultDirectory(context).listFiles().orEmpty().mapNotNull { file ->
+            if (file.isFile && logName.matches(file.name)) LogFile(Uri.fromFile(file), file.name, file.length())
+            else null
+        }
+        val resolver = context.contentResolver
+        val custom = resolver.persistedUriPermissions.filter { it.isReadPermission && it.isWritePermission }
+            .flatMap { grant ->
+                runCatching {
+                    val tree = grant.uri
+                    val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+                    val columns = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                        DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_SIZE,
+                        DocumentsContract.Document.COLUMN_MIME_TYPE)
+                    resolver.query(children, columns, null, null, null)?.use { cursor ->
+                        buildList {
+                            while (cursor.moveToNext()) {
+                                val name = cursor.getString(1) ?: continue
+                                if (!logName.matches(name) || cursor.getString(3) == DocumentsContract.Document.MIME_TYPE_DIR) continue
+                                val uri = DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(0))
+                                add(LogFile(uri, name, cursor.getLong(2).coerceAtLeast(0)))
+                            }
+                        }
+                    }.orEmpty()
+                }.onFailure { Log.w(TAG, "无法读取所选日志目录", it) }.getOrDefault(emptyList())
+            }.distinctBy { it.uri.authority to DocumentsContract.getDocumentId(it.uri) }
+        return (local + custom).sortedByDescending { it.name }
+    }
+
+    fun read(context: Context, uri: Uri): String =
+        logInput(context, uri).bufferedReader().use { it.readText() }
+
+    fun shareUri(context: Context, uri: Uri, name: String, text: String? = null): Uri {
+        val folder = File(context.cacheDir, "shared-logs").apply { mkdirs() }
+        val file = File.createTempFile("log-", if (text == null) ".log" else ".txt", folder)
+        try {
+            if (text == null) logInput(context, uri).use { input -> file.outputStream().use { input.copyTo(it) } }
+            else file.writeText(text)
+            return FileProvider.getUriForFile(context, "${context.packageName}.logs", file, name)
+        } catch (error: Exception) {
+            file.delete()
+            throw error
+        }
+    }
+
+    fun export(context: Context, tree: Uri) {
+        val resolver = context.contentResolver
+        val treeId = DocumentsContract.getTreeDocumentId(tree)
+        val parent = DocumentsContract.buildDocumentUriUsingTree(tree, treeId)
+        files(context).forEach { log ->
+            if (log.uri.authority == tree.authority && DocumentsContract.getTreeDocumentId(log.uri) == treeId) return@forEach
+            logInput(context, log.uri).use { input ->
+                val target = DocumentsContract.createDocument(resolver, parent, "application/octet-stream", log.name)
+                    ?: throw IOException("无法创建导出文件")
+                try {
+                    val output = resolver.openOutputStream(target, "w") ?: throw IOException("无法写入导出文件")
+                    output.use { input.copyTo(it) }
+                } catch (error: Exception) {
+                    runCatching { DocumentsContract.deleteDocument(resolver, target) }
+                    throw error
+                }
+            }
+        }
+    }
+
+    fun clear(context: Context): Boolean = synchronized(writeLock) {
+        restartContext = null
+        closeSession()
+        try {
+            files(context).map { log ->
+                runCatching {
+                    if (log.uri.scheme == "file") File(checkNotNull(log.uri.path)).delete()
+                    else DocumentsContract.deleteDocument(context.contentResolver, log.uri)
+                }.getOrDefault(false)
+            }.all { it }
+        } finally {
+            if (enabled) restartContext = context.applicationContext
+        }
+    }
+
+    private fun logInput(context: Context, uri: Uri) =
+        context.contentResolver.openInputStream(uri) ?: throw IOException("无法读取日志文件")
+
     private fun openSession(context: Context, directory: String?) {
         val name = "zviewer-${OffsetDateTime.now().format(fileFormat)}-$session.log"
         if (directory != null) {
@@ -140,7 +237,7 @@ object DiagnosticLog {
             output = context.contentResolver.openOutputStream(file, "wa") ?: throw IOException("无法写入日志文件")
             location = "所选目录/$name"
         } else {
-            val dir = File(context.getExternalFilesDir(null) ?: context.filesDir, "logs").apply { mkdirs() }
+            val dir = defaultDirectory(context).apply { mkdirs() }
             dir.listFiles()?.filter { it.name.startsWith("zviewer-") && it.name.endsWith(".log") }
                 ?.sortedByDescending(File::lastModified)?.drop(MAX_FILES - 1)?.forEach { it.delete() }
             val file = File(dir, name)
@@ -150,6 +247,10 @@ object DiagnosticLog {
     }
 
     private fun write(text: String, force: Boolean = false) {
+        restartContext?.let { context ->
+            restartContext = null
+            startSession(context)
+        }
         val stream = output ?: return
         if (capped && !force) return
         runCatching {

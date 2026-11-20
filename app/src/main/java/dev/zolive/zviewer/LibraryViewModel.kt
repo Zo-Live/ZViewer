@@ -195,7 +195,10 @@ class LibraryViewModel(
                 indexLoaded = true
                 mutable.update { it.copy(treeUri = newUri, books = emptyList(), progress = emptyMap(), error = null) }
                 if (oldUri != null) {
-                    runCatching { resolver.releasePersistableUriPermission(Uri.parse(oldUri), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                    val oldTree = Uri.parse(oldUri)
+                    if (resolver.persistedUriPermissions.none { it.uri == oldTree && it.isWritePermission }) {
+                        runCatching { resolver.releasePersistableUriPermission(oldTree, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                    }
                 }
             }
             refresh()

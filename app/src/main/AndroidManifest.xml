@@ -20,6 +20,15 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/update_paths" />
         </provider>
+        <provider
+            android:name=".DiagnosticLogFileProvider"
+            android:authorities="${applicationId}.logs"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/log_share_paths" />
+        </provider>
         <service android:name=".TaskRemovalService" android:exported="false" />
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
