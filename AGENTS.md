@@ -1,6 +1,6 @@
 - 开发过程中更新 docs 中的相应文档。
-- README 简洁地说明大体功能，不追求完整反映具体实现，不需要一一讲解用户简单摸索后即可了解的功能。必要时才更新 README，不要当成 Changelog 记录每个更新细节。
+- README 简洁地说明大体功能，不追求完整反映具体实现，不需要一一讲解用户简单摸索后即可了解的功能。必要时才更新 README，不要作为 Changelog 记录每个更新细节。
 - 除了单元测试，还需通过 Android Emulator 进行功能测试与端到端测试。
-- 开发构建目录为 app/build/outputs/apk/release ，dist 为正式构建目录。
+- 开发构建目录为 app/build/outputs/apk/release，dist 为正式构建目录。
 - Commit 时将不同功能分开提交，遵循原子化原则。
-- 默认的发布流程如下：将项目内版本号更新至vx.x.x，检查 llms.txt 与 README 的内容是否正确反映项目状况，打vx.x.x的tag，构建正式release，最后发布，release note格式照常，内容简明扼要
+- 默认的构建与发布流程如下：将项目内版本号更新至 vx.x.x，检查 llms.txt 与 README 的内容是否正确反映项目状况，打 vx.x.x 的 Tag，构建正式 Release，最后发布。Release Notes 格式照常，内容简明扼要。
