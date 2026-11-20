@@ -80,10 +80,21 @@ class LibraryViewModel(
     private var manualUpdateRequested = false
 
     init {
-        val settings = store.settings()
-        DiagnosticLog.configure(application, settings.diagnosticLog, settings.logDirectory)
-        DiagnosticLog.log("App", "应用启动，书库=${store.treeUri != null}")
-        DiagnosticLog.snapshot(application, settings, "启动")
+        val settings = state.value.settings
+        viewModelScope.launch(Dispatchers.IO) {
+            var previous: ReaderSettings? = null
+            state.map { it.settings }.distinctUntilChanged().collect { settings ->
+                if (previous?.diagnosticLog != settings.diagnosticLog || previous?.logDirectory != settings.logDirectory) {
+                    DiagnosticLog.configure(application, settings.diagnosticLog, settings.logDirectory)
+                }
+                val reason = if (previous == null) {
+                    DiagnosticLog.log("App", "应用启动，书库=${store.treeUri != null}")
+                    "启动"
+                } else "设置变更"
+                DiagnosticLog.snapshot(application, settings, reason)
+                previous = settings
+            }
+        }
         if (store.treeUri != null) refresh()
         viewModelScope.launch {
             state.map { current ->
@@ -328,8 +339,6 @@ class LibraryViewModel(
         val previous = mutable.value.settings
         store.saveSettings(settings)
         mutable.update { it.copy(settings = settings) }
-        DiagnosticLog.configure(getApplication(), settings.diagnosticLog, settings.logDirectory)
-        DiagnosticLog.snapshot(getApplication(), settings, "设置变更")
         if (!previous.currentLibraryCacheOnly && settings.currentLibraryCacheOnly) refresh()
         if (previous.cacheLimitMiB != settings.cacheLimitMiB) viewModelScope.launch {
             repository.trimCache()

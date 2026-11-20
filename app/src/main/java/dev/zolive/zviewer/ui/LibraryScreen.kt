@@ -206,7 +206,6 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                 { page, position -> model.saveVideoProgress(state.session, page, position) }, model::closeBook)
             else -> {
                 val motion = transition
-                val progress = dragProgress ?: motion?.progress?.value ?: 0f
                 val layers = if (motion == null) listOf(page) else listOf(motion.parent, motion.child)
                 Box(Modifier.fillMaxSize().clipToBounds().background(MaterialTheme.colorScheme.background)
                     .onSizeChanged { viewportWidth = it.width.toFloat().coerceAtLeast(1f) }) {
@@ -215,6 +214,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                             val active = layer == page
                             val layerModifier = Modifier.fillMaxSize()
                                 .graphicsLayer {
+                                    val progress = dragProgress ?: motion?.progress?.value ?: 0f
                                     if (layer == motion?.parent) {
                                         translationX = -size.width * progress
                                         scaleX = 1f - .2f * progress

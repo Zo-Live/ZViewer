@@ -1,5 +1,6 @@
 package dev.zolive.zviewer
 
+import android.provider.DocumentsContract
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zolive.zviewer.data.DiagnosticLog
 import dev.zolive.zviewer.data.ReaderSettings
@@ -91,10 +92,10 @@ class DiagnosticLogTest {
         val other = File(directory, "notes.log").apply { writeText("其他文件") }
         DiagnosticLog.log("Test", "before-clear")
         awaitContent("before-clear")
-        assertEquals(2, DiagnosticLog.files(context).size)
+        assertEquals(2, DiagnosticLog.listFiles(context).files.size)
 
         assertTrue(DiagnosticLog.clear(context))
-        assertTrue(DiagnosticLog.files(context).isEmpty())
+        assertTrue(DiagnosticLog.listFiles(context).files.isEmpty())
         assertFalse(legacy.exists())
         assertTrue(other.isFile)
 
@@ -102,6 +103,16 @@ class DiagnosticLogTest {
         val content = awaitContent("after-clear")
         assertTrue(content.contains("schema=2"))
         assertFalse(content.contains("before-clear"))
-        assertEquals(1, DiagnosticLog.files(context).size)
+        assertEquals(1, DiagnosticLog.listFiles(context).files.size)
+    }
+
+    @Test fun unreadableLogDirectoryFailsExportAndClear() {
+        directory.writeText("普通文件")
+        val target = DocumentsContract.buildTreeDocumentUri("dev.zolive.zviewer.test.documents", "root")
+
+        assertNotNull(DiagnosticLog.listFiles(context).error)
+        assertFalse(DiagnosticLog.clear(context))
+        assertThrows(IOException::class.java) { DiagnosticLog.export(context, target) }
+        assertEquals("普通文件", directory.readText())
     }
 }

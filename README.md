@@ -33,7 +33,7 @@ Android 通常不允许授权内部存储根目录、Download 根目录及 Andro
 
 - 长按任意漫画封面进入收藏管理，可批量收藏 / 取消收藏。
 - 界面默认使用简体中文，可在「设置 → 偏好 → 语言」切换为繁體中文、English 或日本語。
-- 如遇问题，可在设置中开启「输出诊断日志」并选择日志目录，复现后把日志文件反馈给开发者。
+- 如遇问题，可在设置中开启「输出诊断日志」，复现后把日志文件反馈给开发者。
 
 ## 格式支持与限制
 
@@ -70,7 +70,7 @@ export ANDROID_HOME="$HOME/Android"
 ./gradlew :app:assembleRelease
 ```
 
-产物位于 `app/build/outputs/apk/release/`，正式发布包及其 SHA-256 校验文件放在 `dist/`。
+开发 Release 产物位于 `app/build/outputs/apk/release/`。正式发布包从 GitHub Releases 下载，仓库在 `dist/` 中保留 SHA-256 校验文件。
 
 私钥与口令不得提交到 Git，`.signing/` 须单独安全备份。后续发布必须使用同一密钥并递增 `versionCode`，否则已安装的应用无法覆盖升级。
 

@@ -44,6 +44,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import dev.zolive.zviewer.BuildConfig
 import dev.zolive.zviewer.LibraryState
 import dev.zolive.zviewer.LibraryViewModel
@@ -80,14 +83,17 @@ fun SettingsScreen(
     var cacheLimitMiB by remember(settings.cacheLimitMiB) { mutableIntStateOf(settings.cacheLimitMiB) }
     val context = LocalContext.current
     val activity = LocalActivity.current
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     val scope = rememberCoroutineScope()
     var logOperationRunning by remember { mutableStateOf(false) }
     var logRevision by remember { mutableIntStateOf(0) }
     val cacheSize by produceState(0L, state.cacheRevision) { value = model.repository.cacheSize() }
-    val logSize by produceState(0L, active, settings.logDirectory, settings.diagnosticLog, logRevision) {
-        while (active) {
-            value = withContext(Dispatchers.IO) { DiagnosticLog.files(context).sumOf { it.size } }
-            delay(2_000)
+    val logSize by produceState(0L, lifecycle, active, settings.logDirectory, settings.diagnosticLog, logRevision) {
+        if (active) lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            do {
+                value = withContext(Dispatchers.IO) { DiagnosticLog.listFiles(context).files.sumOf { it.size } }
+                if (settings.diagnosticLog) delay(2_000)
+            } while (settings.diagnosticLog)
         }
     }
     fun runLogOperation(errorMessage: Int, successMessage: Int? = null, operation: () -> Unit) {

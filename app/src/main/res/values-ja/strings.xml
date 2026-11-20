@@ -59,6 +59,7 @@
     <string name="clear_logs_hint">ダブルタップですべてのログを消去</string>
     <string name="log_clear_failed">すべてのログを消去できませんでした</string>
     <string name="log_read_failed">ログを読み込めませんでした</string>
+    <string name="log_list_failed">一部のログフォルダを読み込めませんでした</string>
     <string name="log_share_failed">ログを共有できませんでした</string>
     <string name="log_copy_failed">ログをコピーできませんでした</string>
     <string name="view_on_github">GitHub で表示</string>

@@ -1,6 +1,7 @@
 package dev.zolive.zviewer.data
 
 import android.app.ActivityManager
+import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
 import android.os.Build
@@ -144,33 +145,50 @@ object DiagnosticLog {
     private fun defaultDirectory(context: Context) =
         File(context.getExternalFilesDir(null) ?: context.filesDir, "logs")
 
-    fun files(context: Context): List<LogFile> {
-        val local = defaultDirectory(context).listFiles().orEmpty().mapNotNull { file ->
-            if (file.isFile && logName.matches(file.name)) LogFile(Uri.fromFile(file), file.name, file.length())
-            else null
+    internal data class LogListing(val files: List<LogFile>, val error: Exception?)
+
+    internal fun listFiles(context: Context): LogListing {
+        var error: Exception? = null
+        fun readDirectory(read: () -> List<LogFile>): List<LogFile> = try {
+            read()
+        } catch (failure: Exception) {
+            if (error == null) error = failure
+            Log.w(TAG, "无法读取日志目录", failure)
+            emptyList()
+        }
+
+        val local = readDirectory {
+            val dir = defaultDirectory(context)
+            val entries = if (dir.exists()) dir.listFiles() ?: throw IOException("无法读取默认日志目录")
+            else emptyArray()
+            entries.filter { it.isFile && logName.matches(it.name) }
+                .map { LogFile(Uri.fromFile(it), it.name, it.length()) }
         }
         val resolver = context.contentResolver
         val custom = resolver.persistedUriPermissions.filter { it.isReadPermission && it.isWritePermission }
-            .flatMap { grant ->
-                runCatching {
-                    val tree = grant.uri
-                    val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
-                    val columns = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                        DocumentsContract.Document.COLUMN_DISPLAY_NAME, DocumentsContract.Document.COLUMN_SIZE,
-                        DocumentsContract.Document.COLUMN_MIME_TYPE)
-                    resolver.query(children, columns, null, null, null)?.use { cursor ->
-                        buildList {
-                            while (cursor.moveToNext()) {
-                                val name = cursor.getString(1) ?: continue
-                                if (!logName.matches(name) || cursor.getString(3) == DocumentsContract.Document.MIME_TYPE_DIR) continue
-                                val uri = DocumentsContract.buildDocumentUriUsingTree(tree, cursor.getString(0))
-                                add(LogFile(uri, name, cursor.getLong(2).coerceAtLeast(0)))
-                            }
-                        }
-                    }.orEmpty()
-                }.onFailure { Log.w(TAG, "无法读取所选日志目录", it) }.getOrDefault(emptyList())
-            }.distinctBy { it.uri.authority to DocumentsContract.getDocumentId(it.uri) }
-        return (local + custom).sortedByDescending { it.name }
+            .flatMap { grant -> readDirectory { filesInTree(resolver, grant.uri) } }
+            .distinctBy { it.uri.authority to DocumentsContract.getDocumentId(it.uri) }
+        return LogListing((local + custom).sortedByDescending { it.name }, error)
+    }
+
+    private fun filesInTree(resolver: ContentResolver, tree: Uri): List<LogFile> {
+        val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
+        val columns = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+        )
+        return resolver.query(children, columns, null, null, null)?.use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val id = cursor.getString(0) ?: continue
+                    val name = cursor.getString(1) ?: continue
+                    if (!logName.matches(name) || cursor.getString(3) == DocumentsContract.Document.MIME_TYPE_DIR) continue
+                    add(LogFile(DocumentsContract.buildDocumentUriUsingTree(tree, id), name, cursor.getLong(2).coerceAtLeast(0)))
+                }
+            }
+        } ?: throw IOException("无法读取所选日志目录")
     }
 
     fun read(context: Context, uri: Uri): String =
@@ -193,19 +211,25 @@ object DiagnosticLog {
         val resolver = context.contentResolver
         val treeId = DocumentsContract.getTreeDocumentId(tree)
         val parent = DocumentsContract.buildDocumentUriUsingTree(tree, treeId)
-        files(context).forEach { log ->
-            if (log.uri.authority == tree.authority && DocumentsContract.getTreeDocumentId(log.uri) == treeId) return@forEach
-            logInput(context, log.uri).use { input ->
-                val target = DocumentsContract.createDocument(resolver, parent, "application/octet-stream", log.name)
-                    ?: throw IOException("无法创建导出文件")
-                try {
+        val listing = listFiles(context)
+        listing.error?.let { throw it }
+        val created = mutableListOf<Uri>()
+        try {
+            for (log in listing.files) {
+                if (log.uri.authority == tree.authority && DocumentsContract.getTreeDocumentId(log.uri) == treeId) continue
+                logInput(context, log.uri).use { input ->
+                    val target = DocumentsContract.createDocument(resolver, parent, "application/octet-stream", log.name)
+                        ?: throw IOException("无法创建导出文件")
+                    created.add(target)
                     val output = resolver.openOutputStream(target, "w") ?: throw IOException("无法写入导出文件")
                     output.use { input.copyTo(it) }
-                } catch (error: Exception) {
-                    runCatching { DocumentsContract.deleteDocument(resolver, target) }
-                    throw error
                 }
             }
+        } catch (error: Exception) {
+            for (target in created.asReversed()) {
+                runCatching { DocumentsContract.deleteDocument(resolver, target) }
+            }
+            throw error
         }
     }
 
@@ -213,12 +237,14 @@ object DiagnosticLog {
         restartContext = null
         closeSession()
         try {
-            files(context).map { log ->
+            val listing = listFiles(context)
+            val deleted = listing.files.map { log ->
                 runCatching {
                     if (log.uri.scheme == "file") File(checkNotNull(log.uri.path)).delete()
                     else DocumentsContract.deleteDocument(context.contentResolver, log.uri)
                 }.getOrDefault(false)
             }.all { it }
+            deleted && listing.error == null
         } finally {
             if (enabled) restartContext = context.applicationContext
         }
@@ -230,15 +256,21 @@ object DiagnosticLog {
     private fun openSession(context: Context, directory: String?) {
         val name = "zviewer-${OffsetDateTime.now().format(fileFormat)}-$session.log"
         if (directory != null) {
+            val resolver = context.contentResolver
             val tree = directory.toUri()
             val parent = DocumentsContract.buildDocumentUriUsingTree(tree, DocumentsContract.getTreeDocumentId(tree))
-            val file = DocumentsContract.createDocument(context.contentResolver, parent, "text/plain", name)
+            val file = DocumentsContract.createDocument(resolver, parent, "text/plain", name)
                 ?: throw IOException("无法创建日志文件")
-            output = context.contentResolver.openOutputStream(file, "wa") ?: throw IOException("无法写入日志文件")
+            try {
+                output = resolver.openOutputStream(file, "wa") ?: throw IOException("无法写入日志文件")
+            } catch (error: Exception) {
+                runCatching { DocumentsContract.deleteDocument(resolver, file) }
+                throw error
+            }
             location = "所选目录/$name"
         } else {
             val dir = defaultDirectory(context).apply { mkdirs() }
-            dir.listFiles()?.filter { it.name.startsWith("zviewer-") && it.name.endsWith(".log") }
+            dir.listFiles()?.filter { it.isFile && logName.matches(it.name) }
                 ?.sortedByDescending(File::lastModified)?.drop(MAX_FILES - 1)?.forEach { it.delete() }
             val file = File(dir, name)
             output = file.outputStream()

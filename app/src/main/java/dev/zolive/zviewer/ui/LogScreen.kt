@@ -34,8 +34,8 @@ import kotlinx.coroutines.withContext
 @Composable
 fun LogListScreen(active: Boolean, onBack: () -> Unit, onOpen: (DiagnosticLog.LogFile) -> Unit) {
     val context = LocalContext.current
-    val files by produceState<List<DiagnosticLog.LogFile>?>(null, active) {
-        if (active) value = withContext(Dispatchers.IO) { DiagnosticLog.files(context) }
+    val listing by produceState<DiagnosticLog.LogListing?>(null, active) {
+        if (active) value = withContext(Dispatchers.IO) { DiagnosticLog.listFiles(context) }
     }
     Scaffold(topBar = {
         CenterAlignedTopAppBar(
@@ -43,15 +43,23 @@ fun LogListScreen(active: Boolean, onBack: () -> Unit, onOpen: (DiagnosticLog.Lo
             navigationIcon = { BackButton(R.string.back_to_settings, onBack) },
         )
     }) { padding ->
-        val logs = files
-        if (logs.isNullOrEmpty()) {
+        val result = listing
+        if (result == null || result.files.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                if (logs == null) CircularProgressIndicator()
-                else Text(stringResource(R.string.no_logs))
+                when {
+                    result == null -> CircularProgressIndicator()
+                    result.error != null -> Text(stringResource(R.string.log_list_failed))
+                    else -> Text(stringResource(R.string.no_logs))
+                }
             }
         } else {
             LazyColumn(Modifier.fillMaxSize().padding(padding)) {
-                items(logs, key = { it.uri.toString() }) { file ->
+                if (result.error != null) {
+                    item {
+                        Text(stringResource(R.string.log_list_failed), Modifier.padding(horizontal = 24.dp, vertical = 12.dp))
+                    }
+                }
+                items(result.files, key = { it.uri.toString() }) { file ->
                     Box(
                         Modifier.fillMaxWidth().heightIn(min = 56.dp)
                             .clickable(role = Role.Button) { onOpen(file) }

@@ -70,7 +70,7 @@ The key is located at `.signing/zviewer-release.jks` with alias `zviewer`; passw
 ./gradlew :app:assembleRelease
 ```
 
-The artifact is written to `app/build/outputs/apk/release/`; official release APKs and their SHA-256 checksums go in `dist/`.
+Development release builds go to `app/build/outputs/apk/release/`. Download official APKs from GitHub Releases and find their SHA-256 checksums in `dist/`.
 
 The private key and passwords must not be committed to Git, and `.signing/` must be backed up separately and securely. Later releases must use the same key and an incremented `versionCode`, or installed apps cannot be upgraded in place.
 

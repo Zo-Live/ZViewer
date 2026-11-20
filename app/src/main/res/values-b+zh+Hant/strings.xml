@@ -59,6 +59,7 @@
     <string name="clear_logs_hint">點兩下以清除所有記錄</string>
     <string name="log_clear_failed">無法清除所有記錄</string>
     <string name="log_read_failed">無法讀取記錄</string>
+    <string name="log_list_failed">部分記錄資料夾無法讀取</string>
     <string name="log_share_failed">無法分享記錄</string>
     <string name="log_copy_failed">無法複製記錄</string>
     <string name="view_on_github">在 GitHub 上查看</string>
