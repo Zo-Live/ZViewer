@@ -27,8 +27,8 @@
     <string name="library_directory">书库目录</string>
     <string name="no_directory_selected">尚未选择</string>
     <string name="clear_reading_cache">清理阅读缓存</string>
-    <string name="clear_reading_cache_hint">%1$s · 双击清除临时解压文件</string>
-    <string name="clear_reading_cache_with_covers_hint">%1$s · 双击清除临时解压文件和封面</string>
+    <string name="clear_reading_cache_hint">双击清除临时解压文件</string>
+    <string name="clear_reading_cache_with_covers_hint">双击清除临时解压文件和封面</string>
     <string name="clear_covers">清理封面</string>
     <string name="current_library_cache_only">仅保留当前书库缓存</string>
     <string name="current_library_cache_only_hint">切换书库后清理其他书库的临时解压文件和封面</string>

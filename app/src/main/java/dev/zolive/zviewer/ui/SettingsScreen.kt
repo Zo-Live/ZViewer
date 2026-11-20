@@ -167,9 +167,9 @@ fun SettingsScreen(
                 SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_reading_cache)) }, supportingContent = {
                     Text(stringResource(
                         if (settings.clearCovers) R.string.clear_reading_cache_with_covers_hint else R.string.clear_reading_cache_hint,
-                        Formatter.formatShortFileSize(context, cacheSize),
                     ))
                 },
+                    trailingContent = { Text(Formatter.formatShortFileSize(context, cacheSize)) },
                     modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearCache))
                 SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_covers)) },
                     trailingContent = { Switch(checked = settings.clearCovers, onCheckedChange = null) },

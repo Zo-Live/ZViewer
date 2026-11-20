@@ -27,8 +27,8 @@
     <string name="library_directory">ライブラリフォルダー</string>
     <string name="no_directory_selected">未選択</string>
     <string name="clear_reading_cache">閲覧キャッシュを削除</string>
-    <string name="clear_reading_cache_hint">%1$s · ダブルタップで展開済みファイルを削除</string>
-    <string name="clear_reading_cache_with_covers_hint">%1$s · ダブルタップで展開済みファイルと表紙を削除</string>
+    <string name="clear_reading_cache_hint">ダブルタップで展開済みファイルを削除</string>
+    <string name="clear_reading_cache_with_covers_hint">ダブルタップで展開済みファイルと表紙を削除</string>
     <string name="clear_covers">表紙を削除</string>
     <string name="current_library_cache_only">現在のライブラリのキャッシュのみ保持</string>
     <string name="current_library_cache_only_hint">ライブラリの切り替え後にほかのライブラリの一時展開ファイルと表紙を削除します</string>

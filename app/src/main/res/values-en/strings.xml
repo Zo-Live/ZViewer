@@ -27,8 +27,8 @@
     <string name="library_directory">Library folder</string>
     <string name="no_directory_selected">Not selected</string>
     <string name="clear_reading_cache">Clear reading cache</string>
-    <string name="clear_reading_cache_hint">%1$s · Double-tap to remove extracted files</string>
-    <string name="clear_reading_cache_with_covers_hint">%1$s · Double-tap to remove extracted files and covers</string>
+    <string name="clear_reading_cache_hint">Double-tap to remove extracted files</string>
+    <string name="clear_reading_cache_with_covers_hint">Double-tap to remove extracted files and covers</string>
     <string name="clear_covers">Clear covers</string>
     <string name="current_library_cache_only">Keep only current library cache</string>
     <string name="current_library_cache_only_hint">Remove temporary extracted files and covers from other libraries when you switch libraries</string>
