@@ -2,7 +2,7 @@
 
 > ZViewer is an offline native Android comic reader for local archives (ZIP/CBZ, RAR/CBR, 7Z), PDF, image folders, and video folders, built with Kotlin 2.1.21 and Jetpack Compose (Material 3).
 
-Package `dev.zolive.zviewer`, MIT license. The latest stable release is [1.8.5](https://github.com/Zo-Live/ZViewer/releases/tag/v1.8.5) (`versionCode 28`). The app supports Android 10 and later (minSdk 29, compile and target SDK 36). The universal APK covers `arm64-v8a` and `x86_64`. Reading runs on-device through a persisted Storage Access Framework (SAF) grant. The interface defaults to Simplified Chinese and also supports Traditional Chinese, English, and Japanese.
+Package `dev.zolive.zviewer`, MIT license. The latest stable release is [1.8.6](https://github.com/Zo-Live/ZViewer/releases/tag/v1.8.6) (`versionCode 29`). The app supports Android 10 and later (minSdk 29, compile and target SDK 36). The universal APK covers `arm64-v8a` and `x86_64`. Reading runs on-device through a persisted Storage Access Framework (SAF) grant. The interface defaults to Simplified Chinese and also supports Traditional Chinese, English, and Japanese.
 
 ## Features
 
@@ -103,4 +103,4 @@ Kotlin `2.1.21`, Compose BOM `2025.05.01`, `activity-compose:1.10.1`, `lifecycle
 ## Optional
 
 - [License (MIT)](LICENSE)
-- [Release 1.8.5](https://github.com/Zo-Live/ZViewer/releases/tag/v1.8.5)
+- [Release 1.8.6](https://github.com/Zo-Live/ZViewer/releases/tag/v1.8.6)
