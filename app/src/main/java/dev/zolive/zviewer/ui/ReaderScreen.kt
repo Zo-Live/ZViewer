@@ -15,6 +15,8 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
@@ -300,7 +302,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         }
     }
     if (preferences) ModalBottomSheet(onDismissRequest = { preferences = false }) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
+        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
             Text(stringResource(R.string.reader_settings), style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(24.dp))
             ReaderPreferences(settings, onSettings)

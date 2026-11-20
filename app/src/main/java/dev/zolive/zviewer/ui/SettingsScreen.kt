@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -66,6 +67,8 @@ import kotlin.math.roundToInt
 private val SettingsContentInset = 24.dp
 private val SettingsSectionIconSize = 20.dp
 private val SettingsActionWidth = 48.dp
+private val SettingsTrailingGap = 16.dp
+private val SettingsSupportingMaxWidth = 480.dp
 
 @Composable
 fun SettingsScreen(
@@ -142,7 +145,7 @@ fun SettingsScreen(
                         "dark" to stringResource(R.string.theme_dark),
                     ),
                 ) { model.settings(settings.copy(theme = it)) }
-                Text(stringResource(R.string.theme_color), Modifier.padding(top = 12.dp), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.theme_color), Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodyLarge)
                 Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     val colors = listOf(0xFF49684D to stringResource(R.string.color_moss), 0xFF476A8A to stringResource(R.string.color_mist), 0xFF79618C to stringResource(R.string.color_wisteria), 0xFF9A5357 to stringResource(R.string.color_rose), 0xFF8B683E to stringResource(R.string.color_amber))
                     colors.forEach { (color, name) ->
@@ -188,12 +191,10 @@ fun SettingsScreen(
                     Text(state.treeUri?.let { android.net.Uri.decode(it.substringAfterLast('/')) } ?: stringResource(R.string.no_directory_selected))
                 },
                     modifier = Modifier.clickable(onClick = onChooseLibrary))
-                SettingsListItem(headlineContent = { Text(stringResource(R.string.current_library_cache_only)) },
-                    supportingContent = { Text(stringResource(R.string.current_library_cache_only_hint)) },
-                    trailingContent = { Switch(checked = settings.currentLibraryCacheOnly, onCheckedChange = null) },
-                    modifier = Modifier.toggleable(value = settings.currentLibraryCacheOnly, role = Role.Switch) {
-                        model.settings(settings.copy(currentLibraryCacheOnly = it))
-                    })
+                PreferenceSwitch(stringResource(R.string.current_library_cache_only),
+                    stringResource(R.string.current_library_cache_only_hint), settings.currentLibraryCacheOnly) {
+                    model.settings(settings.copy(currentLibraryCacheOnly = it))
+                }
                 SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_reading_cache)) }, supportingContent = {
                     Text(stringResource(
                         if (settings.clearCovers) R.string.clear_reading_cache_with_covers_hint else R.string.clear_reading_cache_hint,
@@ -206,12 +207,10 @@ fun SettingsScreen(
                     modifier = Modifier.toggleable(value = settings.clearCovers, role = Role.Switch) {
                         model.settings(settings.copy(clearCovers = it))
                     })
-                SettingsListItem(headlineContent = { Text(stringResource(R.string.rebuild_library_covers)) },
-                    supportingContent = { Text(stringResource(R.string.rebuild_library_covers_hint)) },
-                    trailingContent = { Switch(checked = settings.rebuildLibraryCovers, onCheckedChange = null) },
-                    modifier = Modifier.toggleable(value = settings.rebuildLibraryCovers, role = Role.Switch) {
-                        model.settings(settings.copy(rebuildLibraryCovers = it))
-                    })
+                PreferenceSwitch(stringResource(R.string.rebuild_library_covers),
+                    stringResource(R.string.rebuild_library_covers_hint), settings.rebuildLibraryCovers) {
+                    model.settings(settings.copy(rebuildLibraryCovers = it))
+                }
                 SettingsListItem(headlineContent = { Text(stringResource(R.string.cache_limit)) },
                     trailingContent = { Text(if (cacheLimitMiB < 1024) "$cacheLimitMiB MiB"
                         else "${(cacheLimitMiB / 1024f).toString().removeSuffix(".0")} GiB") })
@@ -239,15 +238,10 @@ fun SettingsScreen(
             }
             SettingsSectionTitle(stringResource(R.string.diagnostics), Icons.Outlined.BugReport)
             SettingsCard {
-                SettingsListItem(headlineContent = { Text(stringResource(R.string.write_diagnostic_logs)) }, supportingContent = {
-                    Text(stringResource(R.string.write_diagnostic_logs_hint))
-                },
-                    trailingContent = {
-                        Switch(checked = settings.diagnosticLog, onCheckedChange = null)
-                    },
-                    modifier = Modifier.toggleable(value = settings.diagnosticLog, role = Role.Switch) {
-                        model.settings(settings.copy(diagnosticLog = it))
-                    })
+                PreferenceSwitch(stringResource(R.string.write_diagnostic_logs),
+                    stringResource(R.string.write_diagnostic_logs_hint), settings.diagnosticLog) {
+                    model.settings(settings.copy(diagnosticLog = it))
+                }
                 if (settings.diagnosticLog) {
                     SettingsListItem(headlineContent = { Text(stringResource(R.string.log_directory)) }, supportingContent = {
                         Text(settings.logDirectory?.let(::logDirectoryLabel) ?: stringResource(R.string.log_default_directory))
@@ -293,14 +287,14 @@ fun SettingsScreen(
                 }
                 SettingsListItem(headlineContent = { Text(updateLabel) },
                     supportingContent = { Text(download?.let { "ZViewer ${it.version}" } ?: stringResource(R.string.current_version, BuildConfig.VERSION_NAME)) },
-                    trailingContent = {
-                        if (state.checkingUpdate || state.downloadingUpdate) {
+                    trailingContent = if (state.checkingUpdate || state.downloadingUpdate) {
+                        {
                             val description = stringResource(
                                 if (state.downloadingUpdate) R.string.update_download_preparing else R.string.update_checking,
                             )
                             CircularProgressIndicator(Modifier.size(24.dp).semantics { contentDescription = description }, strokeWidth = 2.dp)
                         }
-                    },
+                    } else null,
                     modifier = Modifier.clickable(
                         enabled = !state.checkingUpdate && !state.downloadingUpdate && download !is UpdateDownload.Pending,
                         role = Role.Button
@@ -388,17 +382,21 @@ private fun SettingsListItem(
     // 水平留白由 SettingsCard 统一提供，避免列表项再叠加默认的 16 dp。
     Row(modifier.fillMaxWidth().semantics(mergeDescendants = true) {}
         .heightIn(min = if (supportingContent == null) 56.dp else 72.dp).padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
+        horizontalArrangement = Arrangement.spacedBy(SettingsTrailingGap), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             ProvideTextStyle(MaterialTheme.typography.bodyLarge, headlineContent)
             if (supportingContent != null) {
-                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
-                    ProvideTextStyle(MaterialTheme.typography.bodyMedium, supportingContent)
+                Box(Modifier.widthIn(max = SettingsSupportingMaxWidth)) {
+                    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                        ProvideTextStyle(MaterialTheme.typography.bodyMedium, supportingContent)
+                    }
                 }
             }
         }
         if (trailingContent != null) {
-            ProvideTextStyle(MaterialTheme.typography.labelSmall, trailingContent)
+            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                ProvideTextStyle(MaterialTheme.typography.labelMedium, trailingContent)
+            }
         }
     }
 }
@@ -428,15 +426,14 @@ private fun <T> PreferenceMenu(
         modifier = Modifier.selectableGroup(),
         anchor = {
             BoxWithConstraints {
-                val spacing = 12.dp
-                val valueMaxWidth = ((maxWidth - spacing) / 2).coerceAtLeast(0.dp)
+                val valueMaxWidth = ((maxWidth - SettingsTrailingGap) / 2).coerceAtLeast(0.dp)
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = 56.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .clickable(role = Role.Button, onClickLabel = action) { expanded = !expanded }
                         .semantics { stateDescription = menuState }
                         .padding(vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(spacing),
+                    horizontalArrangement = Arrangement.spacedBy(SettingsTrailingGap),
                     verticalAlignment = Alignment.CenterVertically) {
                     Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically) {
@@ -450,7 +447,7 @@ private fun <T> PreferenceMenu(
                     ) {
                         val tint = MaterialTheme.colorScheme.onSurfaceVariant
                         Text(current.second, Modifier.weight(1f, fill = false),
-                            style = MaterialTheme.typography.bodyMedium, color = tint)
+                            style = MaterialTheme.typography.bodyMedium, color = tint, textAlign = TextAlign.End)
                         Icon(if (expanded) Icons.Outlined.ArrowDropUp else Icons.Outlined.ArrowDropDown,
                             null, Modifier.size(20.dp), tint)
                     }
@@ -495,18 +492,12 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
 
 @Composable
 private fun PreferenceSwitch(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth()
-        .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
-        .padding(top = 18.dp)
-        .semantics(mergeDescendants = true) {},
-        verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).padding(end = 12.dp)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(subtitle, Modifier.padding(top = 3.dp), style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked, onCheckedChange = null)
-    }
+    SettingsListItem(
+        headlineContent = { Text(title) },
+        supportingContent = { Text(subtitle) },
+        trailingContent = { Switch(checked, onCheckedChange = null) },
+        modifier = Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+    )
 }
 
 private fun logDirectoryLabel(uri: String): String {
