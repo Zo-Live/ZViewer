@@ -1,6 +1,7 @@
 package dev.zolive.zviewer
 
 import android.content.Context
+import android.provider.DocumentsContract
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.*
@@ -124,6 +125,31 @@ class CacheSettingsTest {
         scenario.recreate()
         currentLibrary.performScrollTo().assertIsOn().performClick().assertIsOff()
         rebuildCovers.performScrollTo().assertIsOn()
+    }
+
+    @Test fun missingCoversAreRebuiltWithoutLeavingSettings() {
+        val tree = DocumentsContract.buildTreeDocumentUri("dev.zolive.zviewer.test.documents", "root/书库")
+        val covers = runBlocking {
+            BookRepository(context).use { repository ->
+                val books = repository.scan(tree)
+                store.treeUri = tree.toString()
+                store.saveLibrary(books)
+                books.map { repository.cover(it) }
+            }
+        }
+        launchSettings()
+        rule.onNodeWithText("清理封面").performClick().assertIsOn()
+        val clear = rule.onNodeWithText("清理阅读缓存")
+        clear.performScrollTo().performTouchInput { doubleClick() }
+        rule.waitUntil(5_000) { covers.none { it.exists() } }
+
+        rule.onNodeWithText("自动补全封面").performScrollTo().performClick().assertIsOn()
+        rule.waitUntil(15_000) { covers.all { it.length() > 0 } }
+        covers.forEach { assertTrue(it.setLastModified(1000)) }
+
+        clear.performScrollTo().performTouchInput { doubleClick() }
+        rule.waitUntil(15_000) { covers.all { it.length() > 0 && it.lastModified() > 1000 } }
+        rule.onNodeWithContentDescription("返回书库").assertIsDisplayed()
     }
 
     @Test fun loweringThresholdImmediatelyTrimsAndRaisingItPreservesReadingFiles() = runBlocking {

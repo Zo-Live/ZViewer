@@ -2,7 +2,9 @@
 
 package dev.zolive.zviewer.ui
 
+import android.graphics.Bitmap
 import android.net.Uri
+import android.util.Size as PixelSize
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -64,6 +66,7 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -87,10 +90,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import androidx.core.view.WindowCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
-import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -107,17 +106,6 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
         }
     }
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
-    if (state.settings.rebuildLibraryCovers && !settingsOpen && state.session == null && state.opening == null &&
-        !state.scanning && !state.clearingCache && state.books.isNotEmpty()
-    ) {
-        val lifecycle = LocalLifecycleOwner.current.lifecycle
-        LaunchedEffect(lifecycle, state.books, state.cacheRevision) {
-            lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                delay(500)
-                model.repository.rebuildMissingCovers(state.books)
-            }
-        }
-    }
     var settingsDragging by remember { mutableStateOf(false) }
     var settingsDragProgress by remember { mutableFloatStateOf(if (settingsOpen) 1f else 0f) }
     var viewportWidth by remember { mutableFloatStateOf(1f) }
@@ -260,6 +248,15 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     var managingFavorites by rememberSaveable { mutableStateOf(false) }
     val contentInset = 24.dp
     val actionInset = contentInset - 12.dp
+    val columns = state.settings.gridColumns
+    val gridPadding = 20.dp
+    val gridSpacing = 12.dp
+    val windowWidth = LocalWindowInfo.current.containerSize.width
+    val coverWidth = with(LocalDensity.current) {
+        ((windowWidth - 2 * gridPadding.roundToPx() - (columns - 1) * gridSpacing.roundToPx()) / columns)
+            .coerceAtLeast(1)
+    }
+    val coverSize = remember(coverWidth) { PixelSize(coverWidth, (coverWidth / BookCoverAspectRatio).roundToInt()) }
     BackHandler(enabled = active && (managingFavorites || searching)) {
         if (managingFavorites) managingFavorites = false
         else { searching = false; query = "" }
@@ -367,10 +364,10 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                             }
                             LibraryFilters(filterOptions, selectedFilter, contentInset) { filter = it }
                         }
-                        LazyVerticalGrid(columns = GridCells.Fixed(state.settings.gridColumns),
+                        LazyVerticalGrid(columns = GridCells.Fixed(columns),
                             state = gridStates[tab], modifier = Modifier.fillMaxSize().testTag("library-grid-$tab"),
-                            contentPadding = PaddingValues(20.dp, 12.dp, 20.dp, 88.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
+                            contentPadding = PaddingValues(gridPadding, 12.dp, gridPadding, 88.dp),
+                            horizontalArrangement = Arrangement.spacedBy(gridSpacing), verticalArrangement = Arrangement.spacedBy(22.dp)) {
                             val recent = if (tab == 0 && query.isEmpty() && selectedFilter == 0) books
                                 .filter { (state.progress[it.id]?.updated ?: 0) > 0 && (state.progress[it.id]?.fraction ?: 0f) < 1f }
                                 .maxByOrNull { state.progress[it.id]?.updated ?: 0 } else null
@@ -379,7 +376,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                             }
                             items(books, key = { it.id }) { book ->
                                 BookCard(book, state.progress[book.id] ?: ReadingProgress(), book.id in state.favorites,
-                                    model.repository, state.cacheRevision, state.settings.showFileType,
+                                    model.repository, coverSize, state.coverRevision, state.settings.showFileType,
                                     showFavoriteIcon = state.settings.showFavoriteIcon || managingFavorites,
                                     onClick = { if (managingFavorites) model.toggleFavorite(book) else model.open(book) },
                                     onLongClick = { managingFavorites = true },
@@ -564,15 +561,17 @@ private fun ContinueCard(book: Book, progress: ReadingProgress, onClick: () -> U
     }
 }
 
+private const val BookCoverAspectRatio = .69f
+
 @Composable
 private fun BookCard(book: Book, progress: ReadingProgress, favorite: Boolean, repository: BookRepository,
-    revision: Int, showFileType: Boolean, showFavoriteIcon: Boolean, onClick: () -> Unit,
+    coverSize: PixelSize, revision: Int, showFileType: Boolean, showFavoriteIcon: Boolean, onClick: () -> Unit,
     onLongClick: () -> Unit, onFavorite: () -> Unit) {
     Column(Modifier.clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onClick,
         onLongClickLabel = stringResource(R.string.manage_favorites), onLongClick = onLongClick)) {
-        Box(Modifier.fillMaxWidth().aspectRatio(.69f).clip(RoundedCornerShape(12.dp))
+        Box(Modifier.fillMaxWidth().aspectRatio(BookCoverAspectRatio).clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
-            BookCover(book, repository, revision)
+            BookCover(book, repository, coverSize, revision)
             if (showFileType) {
                 Surface(Modifier.align(Alignment.TopStart).padding(7.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = .92f),
                     shape = RoundedCornerShape(6.dp)) {
@@ -603,20 +602,23 @@ private fun BookCard(book: Book, progress: ReadingProgress, favorite: Boolean, r
 }
 
 @Composable
-private fun BookCover(book: Book, repository: BookRepository, revision: Int) {
-    var failed by remember(book.cacheKey, revision) { mutableStateOf(false) }
-    val bitmap by produceState<android.graphics.Bitmap?>(null, book.cacheKey, revision) {
+private fun BookCover(book: Book, repository: BookRepository, size: PixelSize, revision: Int) {
+    var failed by remember(book.cacheKey, size, revision) { mutableStateOf(false) }
+    var bitmap by remember(book.cacheKey, size, revision) {
+        mutableStateOf<Bitmap?>(repository.cachedCoverBitmap(book, size, revision))
+    }
+    LaunchedEffect(book.cacheKey, size, revision) {
+        if (bitmap != null) return@LaunchedEffect
         try {
-            value = repository.withBookCache(book) {
-                android.graphics.BitmapFactory.decodeFile(repository.cover(book).absolutePath)
-            }
+            bitmap = repository.coverBitmap(book, size, revision)
         } catch (error: CancellationException) { throw error }
         catch (error: Exception) {
             dev.zolive.zviewer.data.DiagnosticLog.error("Cover", "封面加载失败 book=${book.id.take(8)} kind=${book.kind}", error)
             failed = true
         }
     }
-    if (bitmap != null) Image(bitmap!!.asImageBitmap(), book.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+    val image = bitmap
+    if (image != null) Image(image.asImageBitmap(), book.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
     else Column(Modifier.fillMaxSize().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center) {
         Icon(if (failed) Icons.Outlined.ImageNotSupported else Icons.AutoMirrored.Outlined.MenuBook, null,

@@ -11,6 +11,8 @@ import android.provider.DocumentsContract
 import android.system.ErrnoException
 import android.system.Os
 import android.system.OsConstants
+import android.util.LruCache
+import android.util.Size
 import androidx.annotation.StringRes
 import dev.zolive.zviewer.R
 import kotlinx.coroutines.CancellationException
@@ -50,6 +52,11 @@ class BookRepository(private val context: Context) : Closeable {
     private val locks = ConcurrentHashMap<String, Mutex>()
     private val coverSlots = Semaphore(2)
     private val coverLocks = ConcurrentHashMap<String, Mutex>()
+    private data class ThumbnailKey(val bookKey: String, val size: Size, val revision: Int)
+    private val thumbnailSlots = Semaphore(2)
+    private val thumbnails = object : LruCache<ThumbnailKey, Bitmap>(24 * 1024 * 1024) {
+        override fun sizeOf(key: ThumbnailKey, value: Bitmap) = value.allocationByteCount
+    }
     private val maintenance = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val trimRequests = Channel<Unit>(Channel.CONFLATED)
 
@@ -277,18 +284,43 @@ class BookRepository(private val context: Context) : Closeable {
     private fun coverFile(book: Book) =
         File(covers, if (book.kind == "pdf") "${book.cacheKey}.jpg" else "${book.cacheKey}-pinyin.jpg")
 
-    suspend fun rebuildMissingCovers(books: List<Book>) = withContext(Dispatchers.IO) {
+    fun cachedCoverBitmap(book: Book, size: Size, revision: Int): Bitmap? =
+        thumbnails.get(ThumbnailKey(book.cacheKey, size, revision))
+
+    suspend fun coverBitmap(book: Book, size: Size, revision: Int): Bitmap = withContext(Dispatchers.IO) {
+        val key = ThumbnailKey(book.cacheKey, size, revision)
+        thumbnails.get(key)?.let { return@withContext it }
+        readingCache.acquire(book.cacheKey).use {
+            val file = coverFile(book).takeIf(File::isFile) ?: cover(book)
+            thumbnailSlots.withPermit {
+                thumbnails.get(key) ?: ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ ->
+                    val source = info.size
+                    val cropScale = maxOf(size.width.toFloat() / source.width, size.height.toFloat() / source.height)
+                    val pixelBudget = 2f * size.width * size.height
+                    val scale = minOf(1f, cropScale, kotlin.math.sqrt(pixelBudget / (source.width.toFloat() * source.height)))
+                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                    decoder.setTargetSize((source.width * scale).roundToInt().coerceAtLeast(1),
+                        (source.height * scale).roundToInt().coerceAtLeast(1))
+                }.also { thumbnails.put(key, it) }
+            }
+        }
+    }
+
+    suspend fun rebuildMissingCovers(books: List<Book>): Boolean = withContext(Dispatchers.IO) {
+        var rebuilt = false
         for (book in books) {
             ensureActive()
             if (coverFile(book).isFile) continue
             try {
                 cover(book)
+                rebuilt = true
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Exception) {
                 DiagnosticLog.error("Cover", "补全封面失败 book=${book.id.take(8)} kind=${book.kind}", error)
             }
         }
+        rebuilt
     }
 
     suspend fun cover(book: Book): File = withBookCache(book) {
@@ -372,7 +404,9 @@ class BookRepository(private val context: Context) : Closeable {
                     }
                     val temporary = File(covers, "${book.cacheKey}.tmp")
                     try {
+                        currentCoroutineContext().ensureActive()
                         temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 93, it) }
+                        currentCoroutineContext().ensureActive()
                         if (!temporary.renameTo(cover)) throw readerError(R.string.cover_cache_write_error)
                         if (book.kind != "pdf") File(covers, "${book.cacheKey}.jpg").delete()
                     } finally { bitmap.recycle(); temporary.delete() }

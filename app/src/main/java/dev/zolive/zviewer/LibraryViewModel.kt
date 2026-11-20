@@ -45,6 +45,7 @@ data class LibraryState(
     val progress: Map<String, ReadingProgress> = emptyMap(),
     val error: String? = null,
     val cacheRevision: Int = 0,
+    val coverRevision: Int = 0,
     val clearingCache: Boolean = false,
     val checkingUpdate: Boolean = false,
     val downloadingUpdate: Boolean = false,
@@ -67,6 +68,7 @@ class LibraryViewModel(
         settings = store.settings(), favorites = store.favorites()))
     val state = mutable.asStateFlow()
     private val scanMutex = Mutex()
+    private val coverRebuildMutex = Mutex()
     private var scanJob: Job? = null
     private var openJob: Job? = null
     private var manualUpdateRequested = false
@@ -78,6 +80,17 @@ class LibraryViewModel(
         DiagnosticLog.log("App", "应用启动，书库=${store.treeUri != null}")
         DiagnosticLog.snapshot(application, settings, "启动")
         if (store.treeUri != null) refresh()
+        viewModelScope.launch {
+            state.map { current ->
+                if (current.settings.rebuildLibraryCovers && !current.scanning && !current.clearingCache &&
+                    current.books.isNotEmpty()) current.books to current.coverRevision else null
+            }.distinctUntilChanged().collectLatest { request ->
+                request?.let { (books, _) ->
+                    val rebuilt = coverRebuildMutex.withLock { repository.rebuildMissingCovers(books) }
+                    if (rebuilt) mutable.update { it.copy(cacheRevision = it.cacheRevision + 1) }
+                }
+            }
+        }
         viewModelScope.launch { repository.trimCache() }
         if (settings.checkUpdatesOnStartup) checkForUpdates(manual = false)
     }
@@ -317,9 +330,10 @@ class LibraryViewModel(
         mutable.update { it.copy(clearingCache = true) }
         viewModelScope.launch {
             try {
-                repository.clearCache(includeCovers)
+                coverRebuildMutex.withLock { repository.clearCache(includeCovers) }
                 DiagnosticLog.log("Cache", "手动清理完成 includeCovers=$includeCovers")
-                mutable.update { it.copy(cacheRevision = it.cacheRevision + 1) }
+                mutable.update { it.copy(cacheRevision = it.cacheRevision + 1,
+                    coverRevision = it.coverRevision + if (includeCovers) 1 else 0) }
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) { showError(error) }
             finally { mutable.update { it.copy(clearingCache = false) } }

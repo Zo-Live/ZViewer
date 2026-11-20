@@ -33,7 +33,7 @@
     <string name="current_library_cache_only">仅保留当前书库缓存</string>
     <string name="current_library_cache_only_hint">切换书库后清理其他书库的临时解压文件和封面</string>
     <string name="rebuild_library_covers">自动补全封面</string>
-    <string name="rebuild_library_covers_hint">进入书库时自动生成所有缺失的封面</string>
+    <string name="rebuild_library_covers_hint">在后台自动生成书库中缺失的封面</string>
     <string name="cache_limit">自动清理阈值</string>
     <string name="clear_cache_on_removal">移除后台时清理阅读缓存</string>
     <string name="clear_reading_history">清除阅读记录</string>

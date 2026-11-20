@@ -33,7 +33,7 @@
     <string name="current_library_cache_only">現在のライブラリのキャッシュのみ保持</string>
     <string name="current_library_cache_only_hint">ライブラリの切り替え後にほかのライブラリの一時展開ファイルと表紙を削除します</string>
     <string name="rebuild_library_covers">表紙を自動生成</string>
-    <string name="rebuild_library_covers_hint">ライブラリを開いたときに不足している表紙をすべて自動生成します</string>
+    <string name="rebuild_library_covers_hint">ライブラリにない表紙をバックグラウンドで自動生成します</string>
     <string name="cache_limit">自動削除のしきい値</string>
     <string name="clear_cache_on_removal">最近使ったアプリから削除時にキャッシュを消去</string>
     <string name="clear_reading_history">閲覧履歴を消去</string>
