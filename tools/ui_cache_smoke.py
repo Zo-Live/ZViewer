@@ -116,7 +116,8 @@ def cover_path(book):
     key = f"{book['id']}-{book['modified']}-{book['size']}"
     if book.get("contentSignature"):
         key += "-" + book["contentSignature"]
-    return "files/covers/" + hashlib.sha256(key.encode()).hexdigest()[:32] + ".jpg"
+    suffix = ".jpg" if book["kind"] == "pdf" else "-pinyin.jpg"
+    return "files/covers/" + hashlib.sha256(key.encode()).hexdigest()[:32] + suffix
 
 
 def fingerprint(path):
