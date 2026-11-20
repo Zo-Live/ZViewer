@@ -21,6 +21,7 @@ import dev.zolive.zviewer.data.UpdateInfo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +33,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 data class LibraryState(
     val books: List<Book> = emptyList(),
@@ -52,6 +54,7 @@ data class LibraryState(
     val updateDownload: UpdateDownload? = null,
     val updatePrompt: UpdateInfo? = null,
     @StringRes val updateNotice: Int? = null,
+    internal val openingRequest: Any? = null,
 )
 
 class LibraryViewModel(
@@ -185,9 +188,9 @@ class LibraryViewModel(
             val newUri = uri.toString()
             if (oldUri != newUri) {
                 scanJob?.cancel()
-                store.treeUri = newUri
-                store.saveLibrary(emptyList())
-                mutable.update { it.copy(treeUri = newUri, books = emptyList(), error = null) }
+                cancelOpen()
+                store.selectLibrary(newUri)
+                mutable.update { it.copy(treeUri = newUri, books = emptyList(), progress = emptyMap(), error = null) }
                 if (oldUri != null) {
                     runCatching { resolver.releasePersistableUriPermission(Uri.parse(oldUri), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
                 }
@@ -198,48 +201,75 @@ class LibraryViewModel(
     }
 
     fun refresh() {
-        val uri = store.treeUri ?: return
+        val current = mutable.value
+        val uri = current.treeUri ?: return
         scanJob?.cancel()
         mutable.update { it.copy(scanning = true) }
         scanJob = viewModelScope.launch {
             val started = android.os.SystemClock.elapsedRealtime()
             try {
                 DiagnosticLog.log("Library", "开始扫描书库")
-                val books = scanMutex.withLock { repository.scan(Uri.parse(uri), store.readLibrary()) }
-                store.saveLibrary(books)
-                mutable.update {
-                    it.copy(books = books, error = null,
-                        cacheRevision = it.cacheRevision + if (it.settings.currentLibraryCacheOnly) 1 else 0)
+                scanMutex.withLock {
+                    val previous = mutable.value.books
+                    val books = repository.scanBooks(Uri.parse(uri))
+                    val keepOnlyCurrent = mutable.value.settings.currentLibraryCacheOnly
+                    store.saveLibrary(books)
+                    publishBooks(books)
+                    withContext(NonCancellable) {
+                        repository.reconcileBooks(previous, books, keepOnlyCurrent)
+                    }
+                    if (keepOnlyCurrent && isActive) mutable.update { it.copy(cacheRevision = it.cacheRevision + 1) }
                 }
-                refreshProgress()
-                DiagnosticLog.log("Library", "扫描完成 count=${books.size} kinds=${books.groupingBy { it.kind }.eachCount()} elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
+                DiagnosticLog.log("Library", "扫描完成 count=${mutable.value.books.size} elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
             } catch (error: CancellationException) { throw error }
-            catch (error: Exception) { showError(error) }
+            catch (error: Exception) { if (isActive) showError(error) }
             finally { if (isActive) mutable.update { it.copy(scanning = false) } }
         }
     }
 
+    private fun publishBooks(books: List<Book>) {
+        val progress = books.associate { it.id to store.progress(it.id) }
+        mutable.update { it.copy(books = books, progress = progress, error = null) }
+    }
+
     fun open(book: Book) {
+        val request = Any()
+        mutable.update { it.copy(opening = message(R.string.opening_book, book.title), openingRequest = request, error = null) }
         openJob?.cancel()
         openJob = viewModelScope.launch {
-            mutable.update { it.copy(opening = message(R.string.opening_book, book.title), error = null) }
             val started = android.os.SystemClock.elapsedRealtime()
             try {
                 DiagnosticLog.log("Library", "打开 book=${book.id.take(8)} kind=${book.kind} bytes=${book.size}")
-                val session = repository.open(book) { status -> mutable.update { it.copy(opening = status) } }
-                val page = store.resumePage(session)
-                val previous = mutable.value.session
-                mutable.update { it.copy(session = session, initialPage = page) }
-                previous?.let(::releaseSession)
-                saveProgress(session, page)
-                DiagnosticLog.log("Library", "打开完成 book=${book.id.take(8)} pages=${session.pages.size} page=${page + 1} elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
+                val session = repository.open(book) { status -> updateOpening(request, status) }
+                try {
+                    if (mutable.value.openingRequest !== request) return@launch
+                    val page = store.resumePage(session)
+                    val previous = mutable.value.session
+                    store.saveProgress(session, page)
+                    mutable.update { it.copy(session = session, initialPage = page, opening = null, openingRequest = null) }
+                    previous?.let(::releaseSession)
+                    DiagnosticLog.log("Library", "打开完成 book=${book.id.take(8)} pages=${session.pages.size} page=${page + 1} elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
+                } finally {
+                    if (mutable.value.session !== session) releaseSession(session)
+                }
             } catch (error: CancellationException) { throw error }
-            catch (error: Exception) { showError(error) }
-            finally { mutable.update { it.copy(opening = null) } }
+            catch (error: Exception) { if (mutable.value.openingRequest === request) showError(error) }
+            finally {
+                mutable.update { if (it.openingRequest === request) it.copy(opening = null, openingRequest = null) else it }
+            }
         }
     }
 
-    fun cancelOpen() { DiagnosticLog.log("Library", "取消打开"); openJob?.cancel(); mutable.update { it.copy(opening = null) } }
+    private fun updateOpening(request: Any, status: String) {
+        mutable.update { if (it.openingRequest === request) it.copy(opening = status) else it }
+    }
+
+    fun cancelOpen() {
+        if (mutable.value.openingRequest == null) return
+        DiagnosticLog.log("Library", "取消打开")
+        mutable.update { it.copy(opening = null, openingRequest = null) }
+        openJob?.cancel()
+    }
 
     fun closeBook() {
         val session = mutable.value.session
@@ -255,6 +285,7 @@ class LibraryViewModel(
     }
 
     override fun onCleared() {
+        cancelOpen()
         mutable.value.session?.let(::releaseSession)
         repository.close()
         super.onCleared()

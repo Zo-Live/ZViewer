@@ -108,7 +108,14 @@ class BookRepository(private val context: Context) : Closeable {
         } ?: throw readerError(R.string.directory_read_error)
     }
 
-    suspend fun scan(treeUri: Uri, previousBooks: List<Book> = emptyList()): List<Book> = withContext(Dispatchers.IO) {
+    suspend fun scan(treeUri: Uri, previousBooks: List<Book> = emptyList()): List<Book> {
+        val books = scanBooks(treeUri)
+        reconcileBooks(previousBooks, books,
+            preferences.treeUri == treeUri.toString() && preferences.settings().currentLibraryCacheOnly)
+        return books
+    }
+
+    internal suspend fun scanBooks(treeUri: Uri): List<Book> = withContext(Dispatchers.IO) {
         val root = DocumentsContract.buildDocumentUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri))
         val rootName = resolver.query(root, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
             ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "图片集"
@@ -145,22 +152,23 @@ class BookRepository(private val context: Context) : Closeable {
         }
         visit(root, rootName, 0)
         currentCoroutineContext().ensureActive()
-        // 只有整次扫描成功后才删除变更或移除书目的旧缓存，权限失败与取消不代表文件被删除。
-        val currentById = books.associateBy { it.id }
-        val upgradedKeys = previousBooks.mapNotNull { previous ->
-            val current = currentById[previous.id] ?: return@mapNotNull null
-            if (previous.contentSignature.isEmpty() && current.contentSignature.isNotEmpty() &&
-                previous.modified == current.modified && previous.size == current.size && previous.kind == current.kind)
-                previous.cacheKey to current.cacheKey else null
-        }.toMap()
-        val sorted = NaturalOrder.sorted(books, Book::title)
-        val keepOnlyCurrent = preferences.treeUri == treeUri.toString() && preferences.settings().currentLibraryCacheOnly
-        val previousKeys = previousBooks.map { it.cacheKey }.toSet()
-        val currentKeys = books.map { it.cacheKey }.toSet()
-        currentCoroutineContext().ensureActive()
-        readingCache.reconcile(previousKeys, currentKeys, upgradedKeys, keepOnlyCurrent)
-        sorted
+        NaturalOrder.sorted(books, Book::title)
     }
+
+    internal suspend fun reconcileBooks(previousBooks: List<Book>, books: List<Book>, keepOnlyCurrent: Boolean) =
+        withContext(Dispatchers.IO) {
+            val currentById = books.associateBy { it.id }
+            val upgradedKeys = previousBooks.mapNotNull { previous ->
+                val current = currentById[previous.id] ?: return@mapNotNull null
+                if (previous.contentSignature.isEmpty() && current.contentSignature.isNotEmpty() &&
+                    previous.modified == current.modified && previous.size == current.size && previous.kind == current.kind)
+                    previous.cacheKey to current.cacheKey else null
+            }.toMap()
+            val previousKeys = previousBooks.map { it.cacheKey }.toSet()
+            val currentKeys = books.map { it.cacheKey }.toSet()
+            currentCoroutineContext().ensureActive()
+            readingCache.reconcile(previousKeys, currentKeys, upgradedKeys, keepOnlyCurrent)
+        }
 
     suspend fun open(book: Book, status: (String) -> Unit = {}): BookSession {
         var lease: Closeable? = null

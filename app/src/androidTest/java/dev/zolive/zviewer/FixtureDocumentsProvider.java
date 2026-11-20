@@ -14,10 +14,15 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public class FixtureDocumentsProvider extends ContentProvider {
     private File base;
     private String failingChildren;
+    private final ConcurrentHashMap<String, CountDownLatch> openGates = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, CountDownLatch> enteredGates = new ConcurrentHashMap<>();
     private static final String[] DOCUMENT_COLUMNS = {
         DocumentsContract.Document.COLUMN_DOCUMENT_ID,
         DocumentsContract.Document.COLUMN_DISPLAY_NAME,
@@ -131,6 +136,21 @@ public class FixtureDocumentsProvider extends ContentProvider {
     // 仅测试 APK 提供：模拟真实文件变更及扫描中途失败，测试结束后由调用方恢复。
     @Override public Bundle call(String method, String arg, Bundle extras) {
         Bundle result = new Bundle();
+        switch (method) {
+            case "blockOpen":
+                enteredGates.put(arg, new CountDownLatch(1));
+                openGates.put(arg, new CountDownLatch(1));
+                return result;
+            case "enteredOpen":
+                CountDownLatch entered = enteredGates.get(arg);
+                result.putBoolean("entered", entered != null && entered.getCount() == 0);
+                return result;
+            case "releaseOpen":
+                CountDownLatch gate = openGates.remove(arg);
+                if (gate != null) gate.countDown();
+                enteredGates.remove(arg);
+                return result;
+        }
         if ("failChildren".equals(method)) {
             failingChildren = arg;
             return result;
@@ -151,6 +171,18 @@ public class FixtureDocumentsProvider extends ContentProvider {
     }
 
     @Override public ParcelFileDescriptor openFile(Uri uri, String mode) throws FileNotFoundException {
+        String documentId = DocumentsContract.getDocumentId(uri);
+        CountDownLatch gate = openGates.get(documentId);
+        if (gate != null) {
+            CountDownLatch entered = enteredGates.get(documentId);
+            if (entered != null) entered.countDown();
+            try {
+                if (!gate.await(15, TimeUnit.SECONDS)) throw new FileNotFoundException("等待测试释放文件超时");
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                throw new FileNotFoundException(error.toString());
+            }
+        }
         if ("true".equals(uri.getQueryParameter("pipe"))) {
             File source = file(DocumentsContract.getDocumentId(uri));
             try {

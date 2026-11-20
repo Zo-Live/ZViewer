@@ -1,6 +1,7 @@
 package dev.zolive.zviewer
 
 import android.content.Context
+import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
@@ -9,6 +10,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.lifecycle.ViewModelProvider
 import dev.zolive.zviewer.data.AppLanguage
 import dev.zolive.zviewer.data.Book
 import dev.zolive.zviewer.data.BookRepository
@@ -19,6 +21,7 @@ import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
+import java.io.File
 
 class NavigationInteractionTest {
     @get:Rule val rule = createEmptyComposeRule()
@@ -58,6 +61,42 @@ class NavigationInteractionTest {
     }
 
     private fun tab(title: String) = rule.onNode(hasText(title) and isSelectable())
+
+    @Test fun cancelledOpenCannotClearTheReplacementRequest() {
+        val first = book.copy(modified = book.modified + 1)
+        val pdf = store.readLibrary().first { it.kind == "pdf" }
+        val second = pdf.copy(modified = pdf.modified + 1)
+        val firstId = DocumentsContract.getDocumentId(Uri.parse(first.uri))
+        val secondId = DocumentsContract.getDocumentId(Uri.parse(second.uri))
+        val resolver = context.contentResolver
+        val authority = "dev.zolive.zviewer.test.documents"
+        val firstCache = File(context.cacheDir, "books/${first.cacheKey}")
+        resolver.call(authority, "blockOpen", firstId, null)
+        resolver.call(authority, "blockOpen", secondId, null)
+        try {
+            launch()
+            lateinit var model: LibraryViewModel
+            scenario.onActivity {
+                model = ViewModelProvider(it)[LibraryViewModel::class.java]
+                model.open(first)
+            }
+            rule.waitUntil(10_000) { resolver.call(authority, "enteredOpen", firstId, null)?.getBoolean("entered") == true }
+            scenario.onActivity {
+                model.cancelOpen()
+                model.open(second)
+            }
+            resolver.call(authority, "releaseOpen", firstId, null)
+            rule.waitUntil(10_000) {
+                !firstCache.exists() && resolver.call(authority, "enteredOpen", secondId, null)?.getBoolean("entered") == true
+            }
+            rule.onNodeWithText("正在准备 PDF", substring = true).assertExists()
+            resolver.call(authority, "releaseOpen", secondId, null)
+            rule.waitUntil(10_000) { model.state.value.session?.book == second }
+        } finally {
+            resolver.call(authority, "releaseOpen", firstId, null)
+            resolver.call(authority, "releaseOpen", secondId, null)
+        }
+    }
 
     private fun swipe(left: Boolean) {
         rule.onNodeWithTag("library-pager").performTouchInput {

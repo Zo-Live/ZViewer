@@ -10,6 +10,10 @@ class PreferenceStore(context: Context) {
         get() = preferences.getString("library_uri", null)
         set(value) { preferences.edit().putString("library_uri", value).apply() }
 
+    internal fun selectLibrary(treeUri: String) {
+        preferences.edit().putString("library_uri", treeUri).remove("books").apply()
+    }
+
     val language: AppLanguage
         get() = AppLanguage.fromTag(preferences.getString("language", null))
 
