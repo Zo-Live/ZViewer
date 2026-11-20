@@ -4,6 +4,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.os.Bundle
 import android.provider.DocumentsContract
+import android.util.Size
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zolive.zviewer.data.BookRepository
@@ -87,6 +88,18 @@ class CacheIntegrationTest {
         repository.close(session)
         assertFalse(page.exists())
         assertFalse(cover.exists())
+    }
+
+    @Test fun backgroundAndVisibleCoversRecoverFromInvalidCacheFiles() = runBlocking {
+        val book = repository.scan(tree).first { it.kind == "cbz" }
+        val cover = repository.cover(book)
+        cover.writeBytes(byteArrayOf())
+        assertTrue(repository.rebuildMissingCovers(listOf(book)))
+        assertTrue(cover.length() > 0)
+        cover.writeBytes(byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 0xd9.toByte()))
+        val bitmap = repository.coverBitmap(book, Size(100, 150), 0)
+        assertTrue(bitmap.width > 0)
+        assertTrue(cover.length() > 4)
     }
 
     @Test fun coverAndVideoFrameBytesTriggerReclamationButAreNeverEvicted() = runBlocking {

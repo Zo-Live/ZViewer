@@ -37,6 +37,8 @@ import java.io.File
 import java.io.Closeable
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
+import java.io.IOException
+import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.roundToInt
@@ -304,26 +306,51 @@ class BookRepository(private val context: Context) : Closeable {
         val key = ThumbnailKey(book.cacheKey, size, revision)
         thumbnails.get(key)?.let { return@withContext it }
         readingCache.acquire(book.cacheKey).use {
-            val file = coverFile(book).takeIf(File::isFile) ?: cover(book)
-            thumbnailSlots.withPermit {
-                thumbnails.get(key) ?: ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ ->
-                    val source = info.size
-                    val cropScale = maxOf(size.width.toFloat() / source.width, size.height.toFloat() / source.height)
-                    val pixelBudget = 2f * size.width * size.height
-                    val scale = minOf(1f, cropScale, kotlin.math.sqrt(pixelBudget / (source.width.toFloat() * source.height)))
-                    decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-                    decoder.setTargetSize((source.width * scale).roundToInt().coerceAtLeast(1),
-                        (source.height * scale).roundToInt().coerceAtLeast(1))
-                }.also { thumbnails.put(key, it) }
+            readingCache.fileLock("cover-${book.cacheKey}").withLock {
+                thumbnails.get(key)?.let { return@withLock it }
+                val file = coverFile(book)
+                val bitmap = if (isCompleteCover(file)) {
+                    try {
+                        decodeThumbnail(file, size)
+                    } catch (_: IOException) {
+                        file.delete()
+                        decodeThumbnail(generateCover(book, file), size)
+                    }
+                } else decodeThumbnail(generateCover(book, file), size)
+                thumbnails.put(key, bitmap)
+                bitmap
             }
         }
+    }
+
+    private suspend fun decodeThumbnail(file: File, size: Size): Bitmap = thumbnailSlots.withPermit {
+        ImageDecoder.decodeBitmap(ImageDecoder.createSource(file)) { decoder, info, _ ->
+            val source = info.size
+            val cropScale = maxOf(size.width.toFloat() / source.width, size.height.toFloat() / source.height)
+            val pixelBudget = 2f * size.width * size.height
+            val scale = minOf(1f, cropScale, kotlin.math.sqrt(pixelBudget / (source.width.toFloat() * source.height)))
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            decoder.setTargetSize((source.width * scale).roundToInt().coerceAtLeast(1),
+                (source.height * scale).roundToInt().coerceAtLeast(1))
+        }
+    }
+
+    private fun isCompleteCover(file: File): Boolean {
+        if (file.length() < 4) return false
+        return try {
+            RandomAccessFile(file, "r").use { input ->
+                if (input.readUnsignedShort() != 0xffd8) return false
+                input.seek(input.length() - 2)
+                input.readUnsignedShort() == 0xffd9
+            }
+        } catch (_: IOException) { false }
     }
 
     suspend fun rebuildMissingCovers(books: List<Book>): Boolean = withContext(Dispatchers.IO) {
         var rebuilt = false
         for (book in books) {
             ensureActive()
-            if (coverFile(book).isFile) continue
+            if (isCompleteCover(coverFile(book))) continue
             try {
                 cover(book)
                 rebuilt = true
@@ -338,96 +365,98 @@ class BookRepository(private val context: Context) : Closeable {
 
     suspend fun cover(book: Book): File = withBookCache(book) {
         val cover = coverFile(book)
-        if (cover.isFile) return@withBookCache cover
         readingCache.fileLock("cover-${book.cacheKey}").withLock {
-            coverSlots.withPermit {
-                if (cover.isFile) return@withPermit cover
-                readingCache.temporaryCovers.mkdirs()
-                val scratch = File(readingCache.temporaryCovers, "${book.cacheKey}.source")
-                try {
-                    val bitmap = when (book.kind) {
-                        "folder" -> {
-                            val first = children(Uri.parse(book.uri)).filter { !it.directory && isImage(it.name) }
-                                .minWithOrNull { first, second -> NaturalOrder.compare(first.name, second.name) }
-                                ?: throw readerError(R.string.empty_image_folder)
-                            decodeBitmap(ImageDecoder.createSource(resolver, first.uri), 1000)
+            if (isCompleteCover(cover)) cover else generateCover(book, cover)
+        }
+    }
+
+    private suspend fun generateCover(book: Book, cover: File): File = coverSlots.withPermit {
+        readingCache.temporaryCovers.mkdirs()
+        val scratch = File(readingCache.temporaryCovers, "${book.cacheKey}.source")
+        try {
+            val bitmap = when (book.kind) {
+                "folder" -> {
+                    val first = children(Uri.parse(book.uri)).filter { !it.directory && isImage(it.name) }
+                        .minWithOrNull { first, second -> NaturalOrder.compare(first.name, second.name) }
+                        ?: throw readerError(R.string.empty_image_folder)
+                    decodeBitmap(ImageDecoder.createSource(resolver, first.uri), 1000)
+                }
+                "pdf" -> {
+                    val local = File(cache, "${book.cacheKey}/document.pdf")
+                    val renderer = if (local.isFile) pdfRenderer(local)
+                        else openSeekablePdf(Uri.parse(book.uri)) ?: run {
+                            copyUri(Uri.parse(book.uri), scratch, 4L * 1024 * 1024 * 1024)
+                            pdfRenderer(scratch)
                         }
-                        "pdf" -> {
-                            val local = File(cache, "${book.cacheKey}/document.pdf")
-                            val renderer = if (local.isFile) pdfRenderer(local)
-                                else openSeekablePdf(Uri.parse(book.uri)) ?: run {
-                                    copyUri(Uri.parse(book.uri), scratch, 4L * 1024 * 1024 * 1024)
-                                    pdfRenderer(scratch)
-                                }
-                            renderer.use { renderPdfPage(it, 0, 1000) }
-                        }
-                        "video-folder" -> {
-                            val first = children(Uri.parse(book.uri)).filter { !it.directory && isVideo(it.name) }
-                                .minWithOrNull { first, second -> NaturalOrder.compare(first.name, second.name) }
-                                ?: throw readerError(R.string.empty_video_folder)
-                            videoCover(first.uri)
-                        }
-                        "mixed-folder" -> {
-                            val first = children(Uri.parse(book.uri)).filter { !it.directory && (isImage(it.name) || isVideo(it.name)) }
-                                .minWithOrNull { first, second -> NaturalOrder.compare(first.name, second.name) }
-                                ?: throw readerError(R.string.empty_mixed_folder)
-                            if (isVideo(first.name)) videoCover(first.uri)
-                            else decodeBitmap(ImageDecoder.createSource(resolver, first.uri), 1000)
-                        }
-                        else -> {
-                            var firstName: String? = null
-                            var firstVideo = false
-                            var foundVideos = false
-                            var foundPdf = false
-                            withArchive(book) { archive ->
-                                var entry = Archive.readNextHeader(archive)
-                                while (entry != 0L) {
-                                    currentCoroutineContext().ensureActive()
-                                    val name = entryName(entry)
-                                    if (ArchiveEntry.filetype(entry) == 0x8000) {
-                                        val image = isImage(name)
-                                        val video = isVideo(name)
-                                        foundPdf = foundPdf || isPdf(name)
-                                        foundVideos = foundVideos || video
-                                        if ((image || video) && (firstName == null || NaturalOrder.compare(name, firstName!!) < 0)) {
-                                            firstName = name
-                                            firstVideo = video
-                                        }
-                                    }
-                                    entry = Archive.readNextHeader(archive)
-                                }
-                            }
-                            if (foundPdf) throw readerError(R.string.archive_contains_pdf)
-                            if (firstName == null) throw readerError(R.string.no_cover)
-                            val limit = if (foundVideos) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024
-                            withArchive(book) { archive ->
-                                var entry = Archive.readNextHeader(archive)
-                                while (entry != 0L) {
-                                    currentCoroutineContext().ensureActive()
-                                    if (entryName(entry) == firstName) {
-                                        checkEntrySize(entry, limit)
-                                        extract(archive, scratch, limit, limit)
-                                        break
-                                    }
-                                    entry = Archive.readNextHeader(archive)
+                    renderer.use { renderPdfPage(it, 0, 1000) }
+                }
+                "video-folder" -> {
+                    val first = children(Uri.parse(book.uri)).filter { !it.directory && isVideo(it.name) }
+                        .minWithOrNull { first, second -> NaturalOrder.compare(first.name, second.name) }
+                        ?: throw readerError(R.string.empty_video_folder)
+                    videoCover(first.uri)
+                }
+                "mixed-folder" -> {
+                    val first = children(Uri.parse(book.uri)).filter { !it.directory && (isImage(it.name) || isVideo(it.name)) }
+                        .minWithOrNull { first, second -> NaturalOrder.compare(first.name, second.name) }
+                        ?: throw readerError(R.string.empty_mixed_folder)
+                    if (isVideo(first.name)) videoCover(first.uri)
+                    else decodeBitmap(ImageDecoder.createSource(resolver, first.uri), 1000)
+                }
+                else -> {
+                    var firstName: String? = null
+                    var firstVideo = false
+                    var foundVideos = false
+                    var foundPdf = false
+                    withArchive(book) { archive ->
+                        var entry = Archive.readNextHeader(archive)
+                        while (entry != 0L) {
+                            currentCoroutineContext().ensureActive()
+                            val name = entryName(entry)
+                            if (ArchiveEntry.filetype(entry) == 0x8000) {
+                                val image = isImage(name)
+                                val video = isVideo(name)
+                                foundPdf = foundPdf || isPdf(name)
+                                foundVideos = foundVideos || video
+                                if ((image || video) && (firstName == null || NaturalOrder.compare(name, firstName!!) < 0)) {
+                                    firstName = name
+                                    firstVideo = video
                                 }
                             }
-                            if (firstVideo) videoCover(Uri.fromFile(scratch))
-                            else decodeBitmap(ImageDecoder.createSource(scratch), 1000)
+                            entry = Archive.readNextHeader(archive)
                         }
                     }
-                    val temporary = File(covers, "${book.cacheKey}.tmp")
-                    try {
-                        currentCoroutineContext().ensureActive()
-                        temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 93, it) }
-                        currentCoroutineContext().ensureActive()
-                        if (!temporary.renameTo(cover)) throw readerError(R.string.cover_cache_write_error)
-                        if (book.kind != "pdf") File(covers, "${book.cacheKey}.jpg").delete()
-                    } finally { bitmap.recycle(); temporary.delete() }
-                    cover
-                } finally { scratch.delete() }
+                    if (foundPdf) throw readerError(R.string.archive_contains_pdf)
+                    if (firstName == null) throw readerError(R.string.no_cover)
+                    val limit = if (foundVideos) 4L * 1024 * 1024 * 1024 else 256L * 1024 * 1024
+                    withArchive(book) { archive ->
+                        var entry = Archive.readNextHeader(archive)
+                        while (entry != 0L) {
+                            currentCoroutineContext().ensureActive()
+                            if (entryName(entry) == firstName) {
+                                checkEntrySize(entry, limit)
+                                extract(archive, scratch, limit, limit)
+                                break
+                            }
+                            entry = Archive.readNextHeader(archive)
+                        }
+                    }
+                    if (firstVideo) videoCover(Uri.fromFile(scratch))
+                    else decodeBitmap(ImageDecoder.createSource(scratch), 1000)
+                }
             }
-        }
+            val temporary = File(covers, "${book.cacheKey}.tmp")
+            try {
+                currentCoroutineContext().ensureActive()
+                val written = temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 93, it) }
+                if (!written) throw readerError(R.string.cover_cache_write_error)
+                currentCoroutineContext().ensureActive()
+                if (!temporary.renameTo(cover)) throw readerError(R.string.cover_cache_write_error)
+                if (book.kind != "pdf") File(covers, "${book.cacheKey}.jpg").delete()
+                requestTrim()
+            } finally { bitmap.recycle(); temporary.delete() }
+            cover
+        } finally { scratch.delete() }
     }
 
     private fun videoCover(uri: Uri): Bitmap = MediaMetadataRetriever().use { retriever ->
