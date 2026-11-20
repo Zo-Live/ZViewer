@@ -67,6 +67,7 @@ import kotlin.math.roundToInt
 private val SettingsContentInset = 24.dp
 private val SettingsSectionIconSize = 20.dp
 private val SettingsActionWidth = 48.dp
+private val SettingsTrailingMinWidth = 52.dp
 private val SettingsTrailingGap = 16.dp
 private val SettingsSupportingMaxWidth = 480.dp
 
@@ -388,14 +389,17 @@ private fun SettingsListItem(
             if (supportingContent != null) {
                 Box(Modifier.widthIn(max = SettingsSupportingMaxWidth)) {
                     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
-                        ProvideTextStyle(MaterialTheme.typography.bodyMedium, supportingContent)
+                        ProvideTextStyle(MaterialTheme.typography.bodySmall, supportingContent)
                     }
                 }
             }
         }
         if (trailingContent != null) {
-            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
-                ProvideTextStyle(MaterialTheme.typography.labelMedium, trailingContent)
+            // 短数值也预留与开关同宽的位置，让相邻行的说明文字在同一列内换行。
+            Box(Modifier.widthIn(min = SettingsTrailingMinWidth), contentAlignment = Alignment.CenterEnd) {
+                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                    ProvideTextStyle(MaterialTheme.typography.labelMedium, trailingContent)
+                }
             }
         }
     }
