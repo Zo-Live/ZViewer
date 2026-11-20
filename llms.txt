@@ -2,16 +2,17 @@
 
 > ZViewer is an offline native Android comic reader for local archives (ZIP/CBZ, RAR/CBR, 7Z), PDF, image folders, and video folders, built with Kotlin 2.1.21 and Jetpack Compose (Material 3).
 
-Package `dev.zolive.zviewer`, version 1.8.2 (`versionCode 25`), MIT license. Targets Android 10+ (minSdk 29, compile/target SDK 36); the universal APK covers `arm64-v8a` and `x86_64`. Reading runs on-device: network access is used only for GitHub update checks and downloads, while local files are read through a persisted Storage Access Framework (SAF) grant without broad storage permissions. The interface defaults to Simplified Chinese and also supports Traditional Chinese, English, and Japanese.
+Package `dev.zolive.zviewer`, version 1.8.3 (`versionCode 26`), MIT license. The app supports Android 10 and later (minSdk 29, compile and target SDK 36). The universal APK covers `arm64-v8a` and `x86_64`. Reading runs on-device through a persisted Storage Access Framework (SAF) grant. Network access is used only for GitHub update checks and downloads. The interface defaults to Simplified Chinese and also supports Traditional Chinese, English, and Japanese.
 
 ## Features
 
-- Library: recursive scan, natural filename sorting (`2.jpg` before `10.jpg`), covers, search, reading-status filter, and Library / Favorites / Recently Read tabs that can be switched by swiping. Long-press a cover to enter favorite management, where tapping a cover or its button toggles the favorite. Search, filters, sorting, and tab switches keep management mode on. The close button, Settings, refresh, system back, or picking a new library folder exits it.
+- The library scans folders recursively and offers covers, search, natural filename sorting (`2.jpg` before `10.jpg`), and horizontally scrollable reading-status filters. Swipe between Library, Favorites, and Recently Read. Each tab keeps its scroll position and shows a return-to-top button after scrolling. Long-press a cover to enter favorite management, where tapping a cover or its button toggles the favorite. Search, filters, sorting, and tab switches keep management mode on. The close button, Settings, refresh, system back, or picking a new library folder exits it.
 - Reader: continuous vertical scrolling or horizontal paging, optional right-to-left paging, loop mode (first and last pages adjoin), pinch / double-tap / button zoom from 1× to 5×, page jump, keep screen on, and saved per-page and per-video progress.
 - Video: folders or archives that contain only videos, or a mix of images and videos, open in one pager that follows the vertical/horizontal setting. The seek slider appears only on video pages. Options: loop a single video, or open in preview mode (paused until tapped). Codec support depends on the device's Media3 / system decoders.
-- Settings sections: Appearance (follow-system / light / dark theme, preset or custom accent color), Preferences (2–5 cover columns, show file type [off by default], show favorite icon [on by default]), Reading (reading mode, dark reader background, right-to-left paging, keep screen on, single-video loop, video preview, loop mode), Library & Storage (library folder, cache size and clear cache [double-tap], clear-covers option, cache limit, clear reading history [double-tap]), Diagnostics, and App (check for updates, optional startup checks [off by default], About). Swipe right or use system back to leave Settings.
+- Settings includes Appearance (theme and accent color), Preferences (language, 2–5 cover columns, file type labels off by default, and favorite icons on by default), Reading (reading mode, dark reader background, right-to-left paging, keep screen on, single-video loop, video preview, and loop mode), Library & Storage, Diagnostics, and App (check for updates, startup checks off by default, and About). Swipe right or use system back to leave Settings.
+- Library & Storage lets you choose the library folder, see cache size, set a cache limit, and double-tap to clear the reading cache or reading history. Manual cache clearing includes covers and video frames when Clear covers is enabled. Separate switches can clear the cache or reading history when the app is removed from Android Recents. Keep only current library cache removes other libraries' cached reading files, covers, and video frames after a successful scan of the selected library. Generate missing covers fills in uncached covers in the background when the library is shown, including off-screen books. These switches are off by default.
 - Diagnostic log (optional): written to the app-specific external `logs/` directory by default, or to a SAF folder the user picks.
-- Storage. Extracted pages, copied images, fallback copies of non-seekable PDFs, and temporary cover sources live in the app cache. Complete covers and video frames persist under app files. Their combined size is compared with a configurable limit (256 MiB–8 GiB, default 1.5 GiB). At the limit, idle reading files and incomplete temporary files are trimmed to about two-thirds of the limit. Open books and files still being written are protected. Complete covers and frames are exempt from size-based trimming, so the limit is soft. Clearing the cache (with the clear-covers option) or reading history never touches original files or favorites.
+- Extracted pages, copied images, fallback copies of non-seekable PDFs, and temporary cover sources live in the app cache. Complete covers and video frames persist under app files. Their combined size is compared with a configurable limit (256 MiB–8 GiB, default 1.5 GiB). At the limit, idle reading files and incomplete temporary files are trimmed to about two-thirds of the limit. Open books and files still being written are protected. Complete covers and frames are exempt from size-based trimming, so the limit is soft. Cache and reading history cleanup preserve original files and favorites.
 
 ## Supported Formats
 
@@ -20,7 +21,7 @@ Package `dev.zolive.zviewer`, version 1.8.2 (`versionCode 25`), MIT license. Tar
 | Archives | `zip`, `cbz`, `rar`, `cbr`, `7z` (via libarchive) |
 | Documents | `pdf` (via `PdfRenderer`; library root or plain subfolders only) |
 | Static images | `jpg`, `jpeg`, `png`, `webp`, `bmp`, `heif`, `heic`, `avif` |
-| Animated images | `apng`, animated `webp`, `gif`, animated `avif` (via APNG4Android + libavif) |
+| Animated images | `apng`, animated `webp`, `gif`, animated `avif` |
 | Video | `mp4`, `m4v`, `mkv`, `webm`, `avi`, `mov`, `3gp`, `3g2`, `mpg`, `mpeg`, `mpe`, `ts`, `mts`, `m2ts`, `mpegts`, `flv`, `wmv`, `ogv`, `vob`, `rm`, `rmvb` |
 
 Not supported: encrypted or multi-volume archives, password-protected PDFs, PDFs inside archives (the user is asked to extract them first), DRM content, animated HEIF. HEIF/HEIC decoding depends on the device. A solid 7Z archive has to be fully prepared on first open.
@@ -33,38 +34,38 @@ Source root: `app/src/main/java/dev/zolive/zviewer/`.
 - `LibraryViewModel.kt`: app state, SAF folder selection, scan/open jobs, error mapping, settings, and progress.
 - `data/Models.kt`: `Book`, `BookSession`, media-aware `PageSource`, `ReadingProgress`, `ReaderSettings`, `ReaderException`.
 - `data/NaturalOrder.kt`: natural numbers, Latin letters, phrase-aware Chinese pinyin and Japanese collation for names containing kana. The library, pages and covers use the same ordering.
-- `data/UpdateChecker.kt`, `data/UpdateDownloader.kt`, `ui/UpdateFeedback.kt`: stable GitHub release checks with persistent caching for newer releases (manual 60 seconds / startup 6 hours), ETag revalidation, bounded timeouts, numeric version comparison, and system DownloadManager handoff. Failed or up-to-date checks can be retried immediately. Feedback waits until the reader closes and the app resumes. Startup checks are off by default and only announce new releases.
+- `data/UpdateChecker.kt`, `data/UpdateDownloader.kt`, and `ui/UpdateFeedback.kt` check stable GitHub releases with persistent caching for newer releases (60 seconds for manual checks and 6 hours at startup), ETag revalidation, bounded timeouts, and numeric version comparison. Failed or up-to-date checks can be retried immediately. Android DownloadManager handles background downloads. The app checks the APK's package and version and opens the system installer after the reader closes and the app resumes. Startup checks only announce new releases.
 - `data/PreferenceStore.kt`: SharedPreferences storage for the tree URI, the book index JSON, page/video progress, favorites, settings, and log options.
 - `data/BookRepository.kt`: bulk `DocumentsContract` queries, background extraction, PDF sources, video preparation, cover and page caches, and safety limits.
-- `data/PdfDocument.kt` and `ui/PdfReaderPages.kt` reuse one renderer per reading session. They display PDF bitmaps directly from memory, render visible pages first, and prerender one page on each side in either reading mode.
+- `data/PdfDocument.kt` and `ui/PdfReaderPages.kt` reuse one renderer per reading session. Seekable SAF files open directly, with a local cache copy as the fallback for non-seekable sources. PDF pages are rendered into memory, prioritizing visible pages and then one page on each side in either reading mode.
 - `data/CacheLimits.kt`: cache-limit bounds and normalization (256 MiB–8 GiB, 256 MiB steps, 1.5 GiB default).
-- `data/ReadingCache.kt`: size accounting across cache and persistent cover/frame directories, reconciliation of changed/removed books, LRU trimming of idle reading files and incomplete temporary files, migration of legacy covers, and reference-counted protection for open books. Complete covers and frames are never trimmed automatically.
+- `data/ReadingCache.kt` accounts for reading files and persistent covers and frames, reconciles caches after a successful scan, trims idle reading files and incomplete files in LRU order, migrates legacy covers, and protects open books with reference counts. Reconciliation can remove complete covers and frames for changed or removed books and, when enabled, books outside the current library.
 - `data/DiagnosticLog.kt`: optional local diagnostics covering device/display/resources, permissions/settings, lifecycle, scan/open timings, reading/cache/update activity, media failures, and uncaught exceptions. Lines include timestamp, level, category, process, and thread. A 512-entry queue serializes writes; each file is capped at about 2 MiB (crashes may exceed this), and the default folder keeps five sessions. SAF folders are supported with fallback to the default directory. URIs are redacted; routine events use shortened book IDs. Exception stacks may contain paths.
 - `reader/ImageLoader.kt`: APNG detection from PNG chunks, AVIF via APNG4Android + libavif, all other formats via `ImageDecoder`.
 - `reader/SampledAnimationDrawable.kt`: draws animations at a downsampled target size.
 - `reader/ZoomImageView.kt`, `reader/ZoomVideoView.kt`: native matrix zoom/pan inside an `AndroidView`. Unzoomed gestures pass through to the Compose list or pager. The video view keeps a cached first-frame cover behind the Media3 `TextureView`.
 - `reader/ReaderPaging.kt`: maps virtual loop positions to real page numbers for `LazyColumn` / `HorizontalPager`.
 - `ui/LibraryScreen.kt`: `ZViewerApp` entry point, library tabs and grid, search/filter, continue-reading card, favorite management.
-- `ui/ReaderScreen.kt`: the main reader (image pages and the video pager host) and its shared toolbar.
+- `ui/ReaderScreen.kt` hosts image pages, PDF pages, the video pager, and the shared reader toolbar.
 - `ui/VideoReader.kt`: Media3 playback. Details are below.
 - `ui/SettingsScreen.kt`, `ui/Theme.kt`: Material 3 settings (with the swipe-right exit gesture) and theming.
 
 Video playback design (`ui/VideoReader.kt`):
 
-- Player pool: players are preloaded for the settled page and its two neighbours, at most three. Each off-screen neighbour renders its saved-position first frame into its own `TextureView`, so swiping never creates or destroys a surface. A player is released once its page is two or more positions away or leaves the composition, so aborted or back-and-forth drags reuse the same instance. Only those three virtual items get players, even when loop mode repeats a real page. Pages farther out show only a cover from a session LRU cache.
+- The player pool preloads videos for the settled page and its two neighbours, at most three players. Each off-screen neighbour can render its saved-position frame into its own `TextureView` before a swipe. A player is released once its page is two or more positions away or leaves the composition, so aborted or back-and-forth drags within that range reuse the same instance. Only those three virtual items get players, even when loop mode repeats a real page. Pages farther out display a cover from a bounded session cache that evicts the oldest inserted cover.
 - No flashing: every video page has the same `AndroidView` structure with or without a player. The Media3 shutter is transparent and the cover sits behind the video until the first frame paints over it. Each player belongs to exactly one view, and ownership moves by detaching the old view before binding the new one. Playback also requires the owning surface to be attached.
 - `repeatMode` is set only from the loop settings and is never changed during transitions. Changing it near the end of a clip makes ExoPlayer reinitialize its output and flash. Instead, a video that ends mid-transition restarts from the beginning in `onEnded`, and a finished video restarts when the user returns to it.
 - Video folders play directly from SAF URIs. Videos inside archives play from extracted files. Covers for video books come from `MediaMetadataRetriever`; mixed folders/archives use the first media item in natural order (an image or a video frame).
 
-Data flow: the user picks a folder → persisted SAF read grant → background recursive scan → book index → covers generated on demand → a book is opened → images decoded or archive members extracted → visible media shown or played → page / video index and video position saved.
+After the user picks a folder, the app persists the SAF read grant, scans the folder in the background, and saves the book index. It generates covers on demand or in the background when Generate missing covers is enabled. In the reader it decodes images, renders PDFs, or plays videos, extracting archive media to cache as needed. The app saves the current page and per-video playback positions.
 
 ## Privacy and Security
 
 - `INTERNET` is used only for GitHub update checks and APK downloads. No external-storage or `MANAGE_EXTERNAL_STORAGE` permission, accounts, ads, or telemetry. Reading files are not uploaded.
-- Only the granted directory is read. Original files are never modified, moved, or deleted.
+- Reading files are accessed within the granted library directory. Original files are preserved.
 - Backup and device-to-device transfer are disabled, so URI grants don't move with app data.
 - Archive members are written under generated sequential filenames. Hidden files, `__MACOSX`, symlinks, and unsupported entries are skipped. Member names are decoded as UTF-8 (`Archive.setCharset`) so Chinese names work.
-- Safety limits: 20,000 archive members per book, 256 MiB per image, 4 GiB per video, 4 GiB total extracted per archive, and archive scan depth 32.
+- Limits include 20,000 extracted image or video entries per archive, 256 MiB per extracted or copied image, 4 GiB per extracted or copied video, 4 GiB total extracted per archive, 4 GiB per local PDF copy, and a library directory scan depth of 32.
 
 ## Build and Test
 
@@ -78,8 +79,8 @@ export ANDROID_HOME="$HOME/Android"
 ./gradlew :app:assembleRelease             # signed release build
 ```
 
-- Unit tests (`app/src/test/`): `NaturalOrderTest` (ordering, hidden files, cache keys, extensions), `ReadingCacheTest` (limits, LRU order, persistent covers/frames, migration and reconciliation, protection of books in use), `ReaderPagingTest` (loop boundaries, single-page and large books).
-- Instrumented tests (`app/src/androidTest/`): `FormatIntegrationTest` (every archive/PDF/image format, corrupt or empty archives, path traversal, large APNG), `VideoIntegrationTest`, `ReaderInteractionTest`, `NavigationInteractionTest` (tab swipes, Settings transitions and swipe exit), `FavoriteManagementTest`, `CacheIntegrationTest` (persistent covers/frames and reclamation), `CacheSettingsTest` (clear-covers option, threshold slider and immediate trimming), `DiagnosticLogTest`, `UpdateCheckerTest`, `UpdateInteractionTest`, and `UpdateDownloadIntegrationTest`. SAF access is provided by `FixtureDocumentsProvider`.
+- Unit tests in `app/src/test/` cover version parsing and comparison (`AppVersionTest`), filename ordering and media recognition (`NaturalOrderTest`), cache limits, migration, and reconciliation (`ReadingCacheTest`), and reader paging (`ReaderPagingTest`).
+- Instrumented tests in `app/src/androidTest/` cover formats, video playback, paging and reader gestures, navigation and favorites, language menus, cache settings and cleanup, seekable and non-seekable PDFs, diagnostics, and update checks and downloads. `FixtureDocumentsProvider` provides SAF access to test files.
 - Fixtures: `tools/generate_fixtures.py` and `tools/generate_video_fixtures.py` (needs FFmpeg) write to `tools/fixtures/`, which is packaged as androidTest assets.
 - Emulator UI smoke scripts (uiautomator2): `tools/ui_smoke.py`, `tools/ui_navigation_smoke.py`, `tools/ui_cache_smoke.py`, `tools/ui_update_smoke.py`. `tools/collect_licenses.py` regenerates the open source notices.
 - Release signing: `.signing/zviewer-release.jks` (alias `zviewer`), with passwords from `ZVIEWER_STORE_PASSWORD` / `ZVIEWER_KEY_PASSWORD`. Never commit `.signing/`.
@@ -101,4 +102,4 @@ Kotlin `2.1.21`, Compose BOM `2025.05.01`, `activity-compose:1.10.1`, `lifecycle
 ## Optional
 
 - [License (MIT)](LICENSE)
-- [Release 1.8.2 checksum](dist/ZViewer-1.8.2-release.apk.sha256)
+- [Release 1.8.3](https://github.com/Zo-Live/ZViewer/releases/tag/v1.8.3)
