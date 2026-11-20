@@ -145,8 +145,13 @@ class BookRepository(private val context: Context) : Closeable {
                 previous.modified == current.modified && previous.size == current.size && previous.kind == current.kind)
                 previous.cacheKey to current.cacheKey else null
         }.toMap()
-        readingCache.reconcile(previousBooks.map { it.cacheKey }.toSet(), books.map { it.cacheKey }.toSet(), upgradedKeys)
-        NaturalOrder.sorted(books, Book::title)
+        val sorted = NaturalOrder.sorted(books, Book::title)
+        val keepOnlyCurrent = preferences.treeUri == treeUri.toString() && preferences.settings().currentLibraryCacheOnly
+        val previousKeys = previousBooks.map { it.cacheKey }.toSet()
+        val currentKeys = books.map { it.cacheKey }.toSet()
+        currentCoroutineContext().ensureActive()
+        readingCache.reconcile(previousKeys, currentKeys, upgradedKeys, keepOnlyCurrent)
+        sorted
     }
 
     suspend fun open(book: Book, status: (String) -> Unit = {}): BookSession {

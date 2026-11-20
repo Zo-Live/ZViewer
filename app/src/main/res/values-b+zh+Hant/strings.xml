@@ -30,6 +30,8 @@
     <string name="clear_reading_cache_hint">%1$s · 點兩下以清除暫時解壓縮的檔案</string>
     <string name="clear_reading_cache_with_covers_hint">%1$s · 點兩下以清除暫時解壓縮的檔案和封面</string>
     <string name="clear_covers">清除封面</string>
+    <string name="current_library_cache_only">僅保留目前書庫快取</string>
+    <string name="current_library_cache_only_hint">切換書庫後清除其他書庫的暫存解壓縮檔案和封面</string>
     <string name="cache_limit">自動清除門檻</string>
     <string name="clear_cache_on_removal">從最近使用的應用程式移除時清除閱讀快取</string>
     <string name="clear_reading_history">清除閱讀記錄</string>

@@ -212,6 +212,27 @@ class ReadingCacheTest {
         assertEquals(20L, File(cache.covers, "frames/signed-0.jpg").length())
     }
 
+    @Test fun currentLibraryOnlyRemovesOtherLibrariesIncludingInFlightWrites() {
+        val cache = ReadingCache(root, persistentRoot)
+        val extracted = file("books/previous/page.png", 10, 1)
+        val cover = file("covers/previous-pinyin.jpg", 10, 1)
+        val frame = file("covers/frames/older-0.jpg", 10, 1)
+        val scratch = File(root, "covers/older.source.part").apply { writeText("临时文件") }
+        val current = file("covers/current.jpg", 10, 1)
+        val lease = cache.acquire("writing")
+
+        cache.reconcile(emptySet(), setOf("current"), keepOnlyCurrent = true)
+
+        assertFalse(extracted.exists())
+        assertFalse(cover.exists())
+        assertFalse(frame.exists())
+        assertFalse(scratch.exists())
+        assertTrue(current.isFile)
+        val lateCover = file("covers/writing.jpg", 10, 1)
+        lease.close()
+        assertFalse(lateCover.exists())
+    }
+
     @Test fun changedBookInUseIsRemovedOnlyAfterLastUserFinishes() {
         val cache = ReadingCache(root, persistentRoot)
         val first = cache.acquire("old")

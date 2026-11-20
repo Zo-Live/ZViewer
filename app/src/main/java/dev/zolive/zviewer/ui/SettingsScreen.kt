@@ -158,6 +158,12 @@ fun SettingsScreen(
                     Text(state.treeUri?.let { android.net.Uri.decode(it.substringAfterLast('/')) } ?: stringResource(R.string.no_directory_selected))
                 },
                     modifier = Modifier.clickable(onClick = onChooseLibrary))
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.current_library_cache_only)) },
+                    supportingContent = { Text(stringResource(R.string.current_library_cache_only_hint)) },
+                    trailingContent = { Switch(checked = settings.currentLibraryCacheOnly, onCheckedChange = null) },
+                    modifier = Modifier.toggleable(value = settings.currentLibraryCacheOnly, role = Role.Switch) {
+                        model.settings(settings.copy(currentLibraryCacheOnly = it))
+                    })
                 SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_reading_cache)) }, supportingContent = {
                     Text(stringResource(
                         if (settings.clearCovers) R.string.clear_reading_cache_with_covers_hint else R.string.clear_reading_cache_hint,

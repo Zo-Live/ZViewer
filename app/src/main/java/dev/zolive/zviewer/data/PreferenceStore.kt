@@ -30,6 +30,7 @@ class PreferenceStore(context: Context) {
         logDirectory = preferences.getString("log_directory", null),
         checkUpdatesOnStartup = preferences.getBoolean("check_updates_on_startup", false),
         clearCovers = preferences.getBoolean("clear_covers", false),
+        currentLibraryCacheOnly = preferences.getBoolean("current_library_cache_only", false),
         cacheLimitMiB = CacheLimits.normalize(preferences.getInt("cache_limit_mib", CacheLimits.DEFAULT_MIB)),
         clearCacheOnTaskRemoval = preferences.getBoolean("clear_cache_on_task_removal", false),
         clearProgressOnTaskRemoval = preferences.getBoolean("clear_progress_on_task_removal", false),
@@ -50,6 +51,7 @@ class PreferenceStore(context: Context) {
             .putString("log_directory", settings.logDirectory)
             .putBoolean("check_updates_on_startup", settings.checkUpdatesOnStartup)
             .putBoolean("clear_covers", settings.clearCovers)
+            .putBoolean("current_library_cache_only", settings.currentLibraryCacheOnly)
             .putBoolean("clear_cache_on_task_removal", settings.clearCacheOnTaskRemoval)
             .putBoolean("clear_progress_on_task_removal", settings.clearProgressOnTaskRemoval)
             .putString("language", settings.language.tag)

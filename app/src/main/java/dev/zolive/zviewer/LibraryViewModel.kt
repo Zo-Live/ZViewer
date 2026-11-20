@@ -28,7 +28,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 data class LibraryState(
     val books: List<Book> = emptyList(),
@@ -62,6 +65,7 @@ class LibraryViewModel(
     private val mutable = MutableStateFlow(LibraryState(books = store.readLibrary(), treeUri = store.treeUri,
         settings = store.settings(), favorites = store.favorites()))
     val state = mutable.asStateFlow()
+    private val scanMutex = Mutex()
     private var scanJob: Job? = null
     private var openJob: Job? = null
     private var manualUpdateRequested = false
@@ -164,12 +168,15 @@ class LibraryViewModel(
             val resolver = getApplication<Application>().contentResolver
             resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             val oldUri = store.treeUri
-            scanJob?.cancel()
-            store.treeUri = uri.toString()
-            store.saveLibrary(emptyList())
-            mutable.update { it.copy(treeUri = uri.toString(), books = emptyList(), error = null) }
-            if (oldUri != null && oldUri != uri.toString()) {
-                runCatching { resolver.releasePersistableUriPermission(Uri.parse(oldUri), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            val newUri = uri.toString()
+            if (oldUri != newUri) {
+                scanJob?.cancel()
+                store.treeUri = newUri
+                store.saveLibrary(emptyList())
+                mutable.update { it.copy(treeUri = newUri, books = emptyList(), error = null) }
+                if (oldUri != null) {
+                    runCatching { resolver.releasePersistableUriPermission(Uri.parse(oldUri), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                }
             }
             refresh()
             DiagnosticLog.log("Permission", "已选择书库 authority=${uri.authority}")
@@ -179,19 +186,22 @@ class LibraryViewModel(
     fun refresh() {
         val uri = store.treeUri ?: return
         scanJob?.cancel()
+        mutable.update { it.copy(scanning = true) }
         scanJob = viewModelScope.launch {
-            mutable.update { it.copy(scanning = true) }
             val started = android.os.SystemClock.elapsedRealtime()
             try {
                 DiagnosticLog.log("Library", "开始扫描书库")
-                val books = repository.scan(Uri.parse(uri), store.readLibrary())
+                val books = scanMutex.withLock { repository.scan(Uri.parse(uri), store.readLibrary()) }
                 store.saveLibrary(books)
-                mutable.update { it.copy(books = books, error = null) }
+                mutable.update {
+                    it.copy(books = books, error = null,
+                        cacheRevision = it.cacheRevision + if (it.settings.currentLibraryCacheOnly) 1 else 0)
+                }
                 refreshProgress()
                 DiagnosticLog.log("Library", "扫描完成 count=${books.size} kinds=${books.groupingBy { it.kind }.eachCount()} elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) { showError(error) }
-            finally { mutable.update { it.copy(scanning = false) } }
+            finally { if (isActive) mutable.update { it.copy(scanning = false) } }
         }
     }
 
@@ -261,12 +271,13 @@ class LibraryViewModel(
     }
 
     fun settings(settings: ReaderSettings) {
-        val previousLimit = mutable.value.settings.cacheLimitMiB
+        val previous = mutable.value.settings
         store.saveSettings(settings)
         mutable.update { it.copy(settings = settings) }
         DiagnosticLog.configure(getApplication(), settings.diagnosticLog, settings.logDirectory)
         DiagnosticLog.snapshot(getApplication(), settings, "设置变更")
-        if (previousLimit != settings.cacheLimitMiB) viewModelScope.launch {
+        if (!previous.currentLibraryCacheOnly && settings.currentLibraryCacheOnly) refresh()
+        if (previous.cacheLimitMiB != settings.cacheLimitMiB) viewModelScope.launch {
             repository.trimCache()
             mutable.update { it.copy(cacheRevision = it.cacheRevision + 1) }
         }

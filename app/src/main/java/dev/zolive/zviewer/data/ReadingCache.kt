@@ -67,7 +67,12 @@ internal class ReadingCache(
 
     @Synchronized fun size(): Long = entries().sumOf { it.bytes }
 
-    @Synchronized fun reconcile(previousKeys: Set<String>, currentKeys: Set<String>, upgradedKeys: Map<String, String> = emptyMap()) {
+    @Synchronized fun reconcile(
+        previousKeys: Set<String>,
+        currentKeys: Set<String>,
+        upgradedKeys: Map<String, String> = emptyMap(),
+        keepOnlyCurrent: Boolean = false,
+    ) {
         // 旧版未保存目录成员签名；原有大小和修改时间未变时沿用封面，建立新版签名基线。
         if (upgradedKeys.isNotEmpty()) for (entry in entries()) {
             val newKey = upgradedKeys[entry.key] ?: continue
@@ -85,7 +90,14 @@ internal class ReadingCache(
         }
         invalidated.removeAll(currentKeys)
         invalidated.addAll(previousKeys - currentKeys)
-        deleteUnused(invalidated)
+        if (keepOnlyCurrent) {
+            invalidated.addAll(users.keys - currentKeys)
+            for (entry in entries()) {
+                if (entry.key !in currentKeys && entry.key !in users) entry.file.deleteRecursively()
+            }
+        } else {
+            deleteUnused(invalidated)
+        }
     }
 
     private fun deleteUnused(keys: Set<String>) {

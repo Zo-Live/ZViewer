@@ -52,6 +52,7 @@ data class ReaderSettings(
     val logDirectory: String? = null,
     val checkUpdatesOnStartup: Boolean = false,
     val clearCovers: Boolean = false,
+    val currentLibraryCacheOnly: Boolean = false,
     val cacheLimitMiB: Int = CacheLimits.DEFAULT_MIB,
     val clearCacheOnTaskRemoval: Boolean = false,
     val clearProgressOnTaskRemoval: Boolean = false,

@@ -30,6 +30,8 @@
     <string name="clear_reading_cache_hint">%1$s · Double-tap to remove extracted files</string>
     <string name="clear_reading_cache_with_covers_hint">%1$s · Double-tap to remove extracted files and covers</string>
     <string name="clear_covers">Clear covers</string>
+    <string name="current_library_cache_only">Keep only current library cache</string>
+    <string name="current_library_cache_only_hint">Remove temporary extracted files and covers from other libraries when you switch libraries</string>
     <string name="cache_limit">Automatic cleanup threshold</string>
     <string name="clear_cache_on_removal">Clear reading cache when removed from Recents</string>
     <string name="clear_reading_history">Clear reading history</string>
