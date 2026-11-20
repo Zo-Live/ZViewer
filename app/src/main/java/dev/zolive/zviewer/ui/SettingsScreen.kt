@@ -2,6 +2,8 @@
 
 package dev.zolive.zviewer.ui
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.text.format.Formatter
@@ -308,6 +310,19 @@ fun SettingsScreen(
                     })
                 SettingsListItem(headlineContent = { Text(stringResource(R.string.about)) },
                     modifier = Modifier.clickable(role = Role.Button) { about = true })
+                SettingsListItem(headlineContent = { Text(stringResource(R.string.view_on_github)) },
+                    modifier = Modifier.clickable(role = Role.Button) {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/Zo-Live/ZViewer"))
+                        try {
+                            context.startActivity(Intent(intent).setPackage("com.github.android"))
+                        } catch (_: ActivityNotFoundException) {
+                            try {
+                                context.startActivity(intent)
+                            } catch (_: ActivityNotFoundException) {
+                                Toast.makeText(context, R.string.github_open_failed, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    })
             }
             Spacer(Modifier.height(20.dp))
         }
