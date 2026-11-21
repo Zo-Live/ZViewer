@@ -58,8 +58,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     // 仅使用 JAR 内的拼音字典。
     runtimeOnly("com.github.houbb:pinyin:0.4.0") { isTransitive = false }
-    implementation("androidx.media3:media3-exoplayer:1.6.1")
-    implementation("androidx.media3:media3-ui:1.6.1")
+    implementation("androidx.media3:media3-exoplayer:1.9.4")
+    implementation("androidx.media3:media3-ui:1.9.4")
     implementation("me.zhanghai.android.libarchive:library:1.1.6")
     implementation("com.github.penfeizhou.android.animation:apng:3.0.5")
     implementation("com.github.penfeizhou.android.animation:avif:3.0.5")

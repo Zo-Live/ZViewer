@@ -1,3 +1,5 @@
+@file:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+
 package dev.zolive.zviewer.ui
 
 import android.content.Context
@@ -30,6 +32,8 @@ import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.reader.ZoomVideoView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
@@ -58,6 +62,9 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     var firstFrameReady by mutableStateOf(false)
     var failed by mutableStateOf(false)
     var seekable by mutableStateOf(false)
+    var scrubPosition by mutableStateOf<Long?>(null)
+        private set
+    private var lastPreviewSeek = -1L
     var saveProgress: (Int, Long) -> Unit = { _, _ -> }
     var preparedIndex by mutableIntStateOf(-1)
     private var released = false
@@ -72,12 +79,40 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     }
 
     fun save() {
-        if (index >= 0) saveProgress(index, if (player.playbackState == Player.STATE_ENDED) 0L else player.currentPosition.coerceAtLeast(0L))
+        if (index >= 0 && scrubPosition == null) {
+            saveProgress(index, if (player.playbackState == Player.STATE_ENDED) 0L else player.currentPosition.coerceAtLeast(0L))
+        }
     }
 
-    fun seek(positionMs: Long) {
-        if (!seekable || duration <= 0L) return
-        player.seekTo(positionMs.coerceIn(0L, duration))
+    fun scrubTo(positionMs: Long) {
+        if (released || !seekable || duration <= 0L) return
+        val target = positionMs.coerceIn(0L, duration)
+        val previous = scrubPosition
+        if (target == previous) return
+        scrubPosition = target
+        if (previous == null) {
+            pause()
+            player.setScrubbingModeEnabled(true)
+        }
+    }
+
+    fun submitScrubPreview() {
+        val target = scrubPosition?.coerceAtMost(duration - 1) ?: return
+        if (released || !seekable || target < 0 || target == lastPreviewSeek) return
+        lastPreviewSeek = target
+        player.seekTo(target)
+    }
+
+    fun finishScrub() {
+        val target = scrubPosition ?: return
+        scrubPosition = null
+        if (released) return
+        player.setScrubbingModeEnabled(false)
+        if (seekable && duration > 0L) {
+            val finalPosition = target.coerceIn(0L, duration)
+            if (finalPosition != lastPreviewSeek) player.seekTo(finalPosition)
+        }
+        lastPreviewSeek = -1L
         refresh()
         save()
     }
@@ -89,7 +124,6 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     }
 
     fun pause() {
-        player.playWhenReady = false
         player.pause()
         refresh()
     }
@@ -154,6 +188,7 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
 
     fun release() {
         if (released) return
+        finishScrub()
         released = true
         DiagnosticLog.log("Video", "释放播放器 index=$index position=${player.currentPosition} state=${player.playbackState}")
         save()
@@ -209,6 +244,7 @@ internal fun rememberVideoPlayback(
     val latestProgress by rememberUpdatedState(onProgress)
     val latestEnded by rememberUpdatedState(onEnded)
     val latestActive by rememberUpdatedState(active)
+    val latestAllowPlayback by rememberUpdatedState(allowPlayback)
     state.saveProgress = { page, position -> latestProgress(page, position) }
 
     DisposableEffect(state) {
@@ -218,7 +254,7 @@ internal fun rememberVideoPlayback(
                 state.refresh()
                 DiagnosticLog.log("Video", "index=${state.index} playbackState=${stateName(playbackState)} " +
                     "position=${state.position}/${state.duration}")
-                if (playbackState == Player.STATE_ENDED) {
+                if (playbackState == Player.STATE_ENDED && state.scrubPosition == null && latestAllowPlayback) {
                     state.playRequested = false
                     state.save()
                     if (latestActive) latestEnded()
@@ -279,26 +315,30 @@ internal fun rememberVideoPlayback(
     LaunchedEffect(state, settings.videoPreview) {
         state.playRequested = !settings.videoPreview
     }
-    LaunchedEffect(state, active, allowPlayback, state.playRequested, state.ready, state.failed, state.surfaceAttached) {
-        val shouldPlay = active && allowPlayback && state.playRequested && state.ready && !state.failed && state.surfaceAttached
+    val scrubbing = state.scrubPosition != null
+    val shouldPlay = active && allowPlayback && !scrubbing && state.playRequested && state.ready && !state.failed && state.surfaceAttached
+    LaunchedEffect(state, shouldPlay) {
         state.player.playWhenReady = shouldPlay
-        if (!shouldPlay) state.player.pause()
         state.refresh()
-        if (!active) state.save()
     }
     LaunchedEffect(state, active) {
+        if (!active) state.save()
+    }
+    LaunchedEffect(state, active, allowPlayback) {
         // 混合内容会保留已创建的播放器；视频播完后自动进入下一项，再次回到该项时播放器停在结尾帧。
         // 重新激活已播完的播放器时回到开头并按设置恢复播放；用户手动暂停（非 ENDED）不受影响。
-        if (active && state.player.playbackState == Player.STATE_ENDED) {
+        if (active && allowPlayback && state.player.playbackState == Player.STATE_ENDED) {
             state.player.seekTo(0L)
             state.playRequested = !settings.videoPreview
             state.refresh()
         }
         var ticks = 0
         while (active) {
-            state.refresh()
             state.surfaceAttached = state.ownerView?.isSurfaceAvailable == true
-            if (ticks++ % 5 == 0) state.save()
+            if (state.scrubPosition == null) {
+                state.refresh()
+                if (ticks++ % 5 == 0) state.save()
+            }
             delay(200)
         }
     }
@@ -418,23 +458,36 @@ internal fun VideoPage(
 }
 
 @Composable
-internal fun VideoProgressControls(state: VideoPlaybackState) {
-    var dragPosition by remember(state.index) { mutableStateOf<Long?>(null) }
-    val displayedPosition = dragPosition ?: state.position
+internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean = true) {
+    val scrubbing = state.scrubPosition != null
+    val displayedPosition = state.scrubPosition ?: state.position
+    DisposableEffect(state) {
+        onDispose { state.finishScrub() }
+    }
+    LaunchedEffect(state) {
+        snapshotFlow { state.scrubPosition }.filterNotNull().conflate().collect {
+            withFrameNanos { state.submitScrubPreview() }
+        }
+    }
+    val positionSeconds = displayedPosition / 1000L
+    val durationSeconds = state.duration / 1000L
+    val time = remember(positionSeconds, durationSeconds) {
+        "${formatVideoTime(displayedPosition)} / ${formatVideoTime(state.duration)}"
+    }
     Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        Text("${formatVideoTime(displayedPosition)} / ${formatVideoTime(state.duration)}",
+        Text(time,
             style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 48.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = state::togglePlayback, enabled = !state.failed && state.index >= 0) {
+            IconButton(onClick = state::togglePlayback, enabled = enabled && !scrubbing && !state.failed && state.index >= 0) {
                 Icon(if (state.playRequested) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
                     stringResource(if (state.playRequested) R.string.pause_video else R.string.play_video))
             }
             val progressDescription = stringResource(R.string.video_playback_progress)
             Slider(value = displayedPosition.toFloat().coerceIn(0f, state.duration.coerceAtLeast(1L).toFloat()),
-                onValueChange = { dragPosition = it.toLong() },
-                onValueChangeFinished = { dragPosition?.let(state::seek); dragPosition = null },
+                onValueChange = { state.scrubTo(it.toLong()) },
+                onValueChangeFinished = state::finishScrub,
                 valueRange = 0f..state.duration.coerceAtLeast(1L).toFloat(),
-                enabled = state.seekable && state.duration > 0L && !state.failed,
+                enabled = enabled && state.seekable && state.duration > 0L && !state.failed,
                 modifier = Modifier.weight(1f).semantics { contentDescription = progressDescription })
         }
         HorizontalDivider(Modifier.padding(vertical = 4.dp))

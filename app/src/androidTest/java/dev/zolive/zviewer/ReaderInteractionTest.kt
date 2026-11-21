@@ -5,7 +5,10 @@ import android.view.ViewGroup
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
+import android.os.SystemClock
 import android.provider.DocumentsContract
+import android.view.InputDevice
+import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
@@ -120,6 +123,46 @@ class ReaderInteractionTest {
             rule.onAllNodesWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).fetchSemanticsNodes().isNotEmpty() == visible
         }
         rule.waitForIdle()
+    }
+
+    private fun sliderDrag(slider: SemanticsNodeInteraction, fractions: List<Float>, inspect: (Float, Float) -> Unit) {
+        rule.waitUntil(5_000) { isEnabled().matches(slider.fetchSemanticsNode()) }
+        val node = slider.assertIsDisplayed().fetchSemanticsNode()
+        val bounds = node.boundsInWindow
+        val range = node.config[SemanticsProperties.ProgressBarRangeInfo].range
+        val automation = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().uiAutomation
+        val downTime = SystemClock.uptimeMillis()
+        var fraction = .15f
+        fun send(action: Int) {
+            val event = MotionEvent.obtain(downTime, SystemClock.uptimeMillis(), action,
+                bounds.left + bounds.width * fraction, bounds.center.y, 0)
+            try {
+                event.source = InputDevice.SOURCE_TOUCHSCREEN
+                assertTrue(automation.injectInputEvent(event, true))
+            } finally {
+                event.recycle()
+            }
+        }
+        send(MotionEvent.ACTION_DOWN)
+        try {
+            for (target in fractions) {
+                val start = fraction
+                for (step in 1..6) {
+                    fraction = start + (target - start) * step / 6
+                    send(MotionEvent.ACTION_MOVE)
+                    SystemClock.sleep(25)
+                }
+                var position = 0f
+                rule.waitUntil(5_000) {
+                    position = slider.fetchSemanticsNode().config[SemanticsProperties.ProgressBarRangeInfo].current
+                    val expected = range.start + target * (range.endInclusive - range.start)
+                    kotlin.math.abs(position - expected) <= (range.endInclusive - range.start) * .06f
+                }
+                inspect(target, position)
+            }
+        } finally {
+            send(MotionEvent.ACTION_UP)
+        }
     }
 
     private fun screenshot(name: String): Bitmap {
@@ -392,27 +435,42 @@ class ReaderInteractionTest {
     }
 
     @Test fun progressControlsSeekAndHideTogether() {
-        open()
+        open(names = listOf("moving-video/moving.mp4", "video-folder/video2.mp4"))
         swipe(vertical = false)
         rule.runOnIdle {
             assertEquals(0, currentPage)
             assertEquals(0L, currentVideoView().playerView.player!!.currentPosition)
         }
         toggleControls()
-        val before = screenshot("video-controls")
-        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).assertIsDisplayed().performTouchInput {
-            down(Offset(width * .1f, centerY))
-            moveTo(Offset(width * .6f, centerY), 500)
+        val player = rule.runOnIdle { currentVideoView().playerView.player!! }
+        fun frame() = rule.runOnIdle { (currentVideoView().playerView.videoSurfaceView as android.view.TextureView).bitmap!! }
+        val slider = rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_progress))
+        var before = frame()
+        var lastTarget = 0L
+        sliderDrag(slider, listOf(.35f, .8f, .4f, .6f)) { fraction, position ->
+            assertEquals(fraction * 60_000, position, 3_500f)
+            val target = position.toLong()
+            try {
+                rule.waitUntil(5_000) {
+                    val dragging = frame()
+                    val changed = !before.sameAs(dragging)
+                    dragging.recycle()
+                    changed && rule.runOnIdle { player.currentPosition == target && !player.playWhenReady }
+                }
+            } catch (timeout: ComposeTimeoutException) {
+                val position = rule.runOnIdle { player.currentPosition }
+                throw AssertionError("拖动至 ${target}ms，播放器位置为 ${position}ms", timeout)
+            }
+            before.recycle()
+            before = frame()
+            lastTarget = target
+            assertEquals(0L, rule.runOnIdle { saved[0] ?: 0L })
         }
-        val timeText = rule.onNode(hasText(" / 00:12", substring = true)).fetchSemanticsNode()
-            .config[SemanticsProperties.Text].single().text
-        assertTrue(timeText, Regex("00:0[5-9] / 00:12").matches(timeText))
-        val dragging = screenshot("video-seeking")
-        assertEquals(before.getPixel(before.width / 2, before.height / 2), dragging.getPixel(dragging.width / 2, dragging.height / 2))
         before.recycle()
-        dragging.recycle()
-        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).performTouchInput { up() }
-        rule.waitUntil(15_000) { (saved[0] ?: 0L) in 5_000L..9_000L }
+        val timeText = rule.onNode(hasText(" / 01:00", substring = true)).fetchSemanticsNode()
+            .config[SemanticsProperties.Text].single().text
+        assertTrue(timeText, Regex("00:3[0-9] / 01:00").matches(timeText))
+        rule.waitUntil(15_000) { rule.runOnIdle { saved[0] } == lastTarget }
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.play_video)).performClick()
         rule.waitUntil(15_000) {
             var playing = false
