@@ -45,6 +45,10 @@ data class ReadingProgress(val page: Int = 0, val total: Int = 0, val updated: L
     val fraction: Float get() = if (total > 0) (page + 1).toFloat() / total else 0f
 }
 
+enum class AutoLockInterval(val seconds: Int) {
+    Immediately(0), FifteenSeconds(15), OneMinute(60), FiveMinutes(300),
+}
+
 data class ReaderSettings(
     val theme: String = "system",
     val accent: Long = 0xFF49684D,
@@ -69,6 +73,9 @@ data class ReaderSettings(
     val clearProgressOnTaskRemoval: Boolean = false,
     val language: AppLanguage = AppLanguage.SIMPLIFIED_CHINESE,
     val dynamicColor: Boolean = false,
+    val verifyOnStartup: Boolean = false,
+    val verifyAfterBackground: Boolean = false,
+    val autoLockInterval: AutoLockInterval = AutoLockInterval.FifteenSeconds,
 )
 
 data class PageSource(

@@ -224,4 +224,17 @@
         <item quantity="one">%d comic</item>
         <item quantity="other">%d comics</item>
     </plurals>
+    <string name="security_and_privacy">Security and privacy</string>
+    <string name="verify_on_startup">Verify on startup</string>
+    <string name="verify_on_startup_hint">Use biometrics or your screen lock to access this app</string>
+    <string name="verify_after_background">Verify again after leaving the app</string>
+    <string name="auto_lock_interval">Auto-lock interval</string>
+    <string name="auto_lock_interval_hint">Choose how long the app can stay in the background before verification is required again</string>
+    <string name="auto_lock_immediately">Immediately</string>
+    <string name="auto_lock_fifteen_seconds">15 seconds</string>
+    <string name="auto_lock_one_minute">1 minute</string>
+    <string name="auto_lock_five_minutes">5 minutes</string>
+    <string name="verify_to_access">Verify to access</string>
+    <string name="verify">Verify</string>
+    <string name="verification_needs_screen_lock">Set up a screen lock in system settings first</string>
 </resources>

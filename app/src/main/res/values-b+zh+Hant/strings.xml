@@ -223,4 +223,17 @@
     <plurals name="comic_count">
         <item quantity="other">%d 本漫畫</item>
     </plurals>
+    <string name="security_and_privacy">安全與隱私</string>
+    <string name="verify_on_startup">啟動時驗證</string>
+    <string name="verify_on_startup_hint">使用生物辨識技術或螢幕解鎖方式以存取此應用程式</string>
+    <string name="verify_after_background">切換至背景後重新驗證</string>
+    <string name="auto_lock_interval">自動鎖定間隔</string>
+    <string name="auto_lock_interval_hint">設定切換至背景後間隔多久需重新驗證</string>
+    <string name="auto_lock_immediately">立即</string>
+    <string name="auto_lock_fifteen_seconds">15 秒</string>
+    <string name="auto_lock_one_minute">1 分鐘</string>
+    <string name="auto_lock_five_minutes">5 分鐘</string>
+    <string name="verify_to_access">請驗證以存取</string>
+    <string name="verify">進行驗證</string>
+    <string name="verification_needs_screen_lock">請先在系統設定中設定螢幕鎖定</string>
 </resources>

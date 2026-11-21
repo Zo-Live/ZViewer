@@ -2,6 +2,7 @@
 
 package dev.zolive.zviewer.ui
 
+import android.app.KeyguardManager
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
@@ -55,6 +56,7 @@ import dev.zolive.zviewer.LibraryState
 import dev.zolive.zviewer.LibraryViewModel
 import dev.zolive.zviewer.R
 import dev.zolive.zviewer.data.AppLanguage
+import dev.zolive.zviewer.data.AutoLockInterval
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.CacheLimits
 import dev.zolive.zviewer.data.DiagnosticLog
@@ -80,6 +82,7 @@ internal enum class SettingsSection(@StringRes val title: Int, val icon: ImageVe
     Reading(R.string.reading, Icons.Outlined.AutoStories, "settings-reading-screen"),
     LibraryAndStorage(R.string.library_and_storage, Icons.Outlined.FolderOpen, "settings-storage-screen"),
     Diagnostics(R.string.diagnostics, Icons.Outlined.BugReport, "settings-diagnostics-screen"),
+    Security(R.string.security_and_privacy, Icons.Outlined.Security, "settings-security-screen"),
     Application(R.string.app, Icons.Outlined.Info, "settings-application-screen"),
 }
 
@@ -126,6 +129,7 @@ internal fun SettingsSectionScreen(
             SettingsSection.Reading -> ReaderPreferences(state.settings, model::settings)
             SettingsSection.LibraryAndStorage -> LibraryStorageSettings(state, model, onChooseLibrary)
             SettingsSection.Diagnostics -> DiagnosticsSettings(state.settings, model, active, onViewLogs)
+            SettingsSection.Security -> SecuritySettings(state, model)
             SettingsSection.Application -> ApplicationSettings(state, model)
         }
     }
@@ -244,6 +248,37 @@ private fun AppPreferences(settings: ReaderSettings, onSettings: (ReaderSettings
     }
     PreferenceSwitch(stringResource(R.string.show_favorite_icon), stringResource(R.string.show_favorite_icon_hint), settings.showFavoriteIcon) {
         onSettings(settings.copy(showFavoriteIcon = it))
+    }
+}
+
+@Composable
+private fun SecuritySettings(state: LibraryState, model: LibraryViewModel) {
+    val context = LocalContext.current
+    val settings = state.settings
+    fun canEnableVerification(enabled: Boolean): Boolean {
+        if (!enabled || context.getSystemService(KeyguardManager::class.java).isDeviceSecure) return true
+        Toast.makeText(context, R.string.verification_needs_screen_lock, Toast.LENGTH_SHORT).show()
+        return false
+    }
+    PreferenceSwitch(
+        stringResource(R.string.verify_on_startup), stringResource(R.string.verify_on_startup_hint),
+        settings.verifyOnStartup,
+    ) { if (canEnableVerification(it)) model.settings(settings.copy(verifyOnStartup = it)) }
+    PreferenceSwitch(
+        stringResource(R.string.verify_after_background), checked = settings.verifyAfterBackground,
+    ) { if (canEnableVerification(it)) model.settings(settings.copy(verifyAfterBackground = it)) }
+    if (settings.verifyAfterBackground) {
+        PreferenceMenu(
+            title = stringResource(R.string.auto_lock_interval),
+            subtitle = stringResource(R.string.auto_lock_interval_hint),
+            selectedValue = settings.autoLockInterval,
+            options = listOf(
+                AutoLockInterval.Immediately to stringResource(R.string.auto_lock_immediately),
+                AutoLockInterval.FifteenSeconds to stringResource(R.string.auto_lock_fifteen_seconds),
+                AutoLockInterval.OneMinute to stringResource(R.string.auto_lock_one_minute),
+                AutoLockInterval.FiveMinutes to stringResource(R.string.auto_lock_five_minutes),
+            ),
+        ) { model.settings(settings.copy(autoLockInterval = it)) }
     }
 }
 
@@ -503,6 +538,7 @@ private fun <T> PreferenceMenu(
     selectedValue: T,
     options: List<Pair<T, String>>,
     titleIcon: ImageVector? = null,
+    subtitle: String? = null,
     onSelect: (T) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -517,17 +553,22 @@ private fun <T> PreferenceMenu(
             BoxWithConstraints {
                 val valueMaxWidth = ((maxWidth - SettingsTrailingGap) / 2).coerceAtLeast(0.dp)
                 Row(
-                    Modifier.fillMaxWidth().heightIn(min = 56.dp)
+                    Modifier.fillMaxWidth().heightIn(min = if (subtitle == null) 56.dp else 72.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .clickable(role = Role.Button, onClickLabel = action) { expanded = !expanded }
                         .semantics { stateDescription = menuState }
                         .padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(SettingsTrailingGap),
                     verticalAlignment = Alignment.CenterVertically) {
-                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically) {
-                        Text(title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyLarge)
-                        if (titleIcon != null) Icon(titleIcon, null, Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyLarge)
+                            if (titleIcon != null) Icon(titleIcon, null, Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (subtitle != null) {
+                            Text(subtitle, Modifier.widthIn(max = SettingsSupportingMaxWidth),
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
                     }
                     Row(
                         Modifier.widthIn(max = valueMaxWidth),

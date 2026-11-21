@@ -223,4 +223,17 @@
     <plurals name="comic_count">
         <item quantity="other">漫画 %d 冊</item>
     </plurals>
+    <string name="security_and_privacy">セキュリティとプライバシー</string>
+    <string name="verify_on_startup">起動時に認証</string>
+    <string name="verify_on_startup_hint">生体認証または画面ロックの解除方法でこのアプリにアクセス</string>
+    <string name="verify_after_background">バックグラウンドに移動後に再認証</string>
+    <string name="auto_lock_interval">自動ロックまでの時間</string>
+    <string name="auto_lock_interval_hint">バックグラウンドに移動してから再認証が必要になるまでの時間を設定</string>
+    <string name="auto_lock_immediately">すぐに</string>
+    <string name="auto_lock_fifteen_seconds">15 秒</string>
+    <string name="auto_lock_one_minute">1 分</string>
+    <string name="auto_lock_five_minutes">5 分</string>
+    <string name="verify_to_access">認証してアクセス</string>
+    <string name="verify">認証する</string>
+    <string name="verification_needs_screen_lock">先にシステム設定で画面ロックを設定してください</string>
 </resources>

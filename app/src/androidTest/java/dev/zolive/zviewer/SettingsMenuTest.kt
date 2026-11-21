@@ -16,6 +16,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.zolive.zviewer.data.AutoLockInterval
 import dev.zolive.zviewer.data.PreferenceStore
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -55,6 +56,7 @@ class SettingsMenuTest {
             "阅读" to "阅读模式",
             "书库与存储" to "清理阅读缓存",
             "诊断" to "查看日志",
+            "安全与隐私" to "启动时验证",
             "应用" to "关于 ZViewer",
         )
         val positions = sections.map { (section, _) -> setting(section).fetchSemanticsNode().boundsInRoot.top }
@@ -66,6 +68,31 @@ class SettingsMenuTest {
             rule.onNodeWithContentDescription("返回设置").performClick()
             setting(section).assertIsDisplayed()
         }
+    }
+
+    @Test fun securityDefaultsAndAutoLockIntervalArePersisted() {
+        setting("安全与隐私").performClick()
+        setting("启动时验证").assertIsOff()
+        setting("切换至后台后重新验证").assertIsOff()
+        rule.onNodeWithText("自动锁定间隔").assertDoesNotExist()
+        assertEquals(AutoLockInterval.FifteenSeconds, store.settings().autoLockInterval)
+
+        store.saveSettings(store.settings().copy(verifyAfterBackground = true))
+        scenario.close()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        rule.onNodeWithContentDescription("设置").performClick()
+        setting("安全与隐私").performClick()
+
+        val interval = setting("自动锁定间隔")
+        interval.assert(hasText("设定切换至后台后间隔多久需重新验证")).assert(hasText("15 秒")).performClick()
+        option("立即").assertIsNotSelected()
+        option("15 秒").assertIsSelected()
+        option("1 分钟").assertIsNotSelected()
+        option("5 分钟").assertIsNotSelected().performClick()
+        interval.assert(hasText("5 分钟"))
+        setting("切换至后台后重新验证").performClick().assertIsOff()
+        rule.onNodeWithText("自动锁定间隔").assertDoesNotExist()
+        assertEquals(AutoLockInterval.FiveMinutes, store.settings().autoLockInterval)
     }
 
     @Test fun settingsExposeCurrentValuesAndMenuSelection() {
