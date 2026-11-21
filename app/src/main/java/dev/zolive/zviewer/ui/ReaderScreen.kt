@@ -232,8 +232,9 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         val index = paging.pageAt(item)
                         val visible by remember(item) { derivedStateOf { listState.layoutInfo.visibleItemsInfo.any { it.index == item } } }
                         val current by remember(item) { derivedStateOf { item == listState.firstVisibleItemIndex } }
+                        val zoomTarget = if (index == zoomPage && !paging.looping) visible else current && index == zoomPage
                         ReaderPage(session, index, repository, vertical = true, active = active && visible,
-                            foreground = foreground, zoomSequence = if (current && index == zoomPage) zoomSequence else 0,
+                            foreground = foreground, zoomSequence = if (zoomTarget) zoomSequence else 0,
                             zoomAction = zoomAction, initialRatio = ratios[index], onRatio = { ratios[index] = it },
                             loadEnabled = initialImageLoaded || current, onLoaded = onInitialImageLoaded, pdfPages = pdfPages,
                             onTap = { controls = !controls })

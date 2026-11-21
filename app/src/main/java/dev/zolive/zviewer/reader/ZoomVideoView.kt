@@ -47,9 +47,15 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     private var zoom = 1f
     private var offsetX = 0f
     private var offsetY = 0f
+    private val zoomAnimator = ZoomAnimator()
     private var multiTouch = false
     private var lastCommand = 0
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+            zoomAnimator.cancel()
+            return true
+        }
+
         override fun onScale(detector: ScaleGestureDetector): Boolean {
             setZoom(zoom * detector.scaleFactor, detector.focusX, detector.focusY)
             return true
@@ -60,11 +66,12 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         override fun onSingleTapConfirmed(event: MotionEvent): Boolean { performClick(); return true }
         override fun onDoubleTap(event: MotionEvent): Boolean {
             multiTouch = true
-            setZoom(if (zoom > 1.1f) 1f else 2.5f, event.x, event.y)
+            animateZoom(if ((zoomAnimator.target ?: zoom) > 1.1f) 1f else 2.5f, event.x, event.y)
             return true
         }
         override fun onScroll(first: MotionEvent?, second: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
             if (zoom > 1f && !multiTouch && !scaleDetector.isInProgress) {
+                zoomAnimator.cancel()
                 offsetX -= distanceX
                 offsetY -= distanceY
                 updateTransform()
@@ -88,6 +95,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         if (page == index) return
         DiagnosticLog.log("View", "bindPage index=$index view=${hashCode()}")
         page = index
+        zoomAnimator.cancel()
         zoom = 1f
         offsetX = 0f
         offsetY = 0f
@@ -107,7 +115,12 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     fun command(sequence: Int, action: Int) {
         if (sequence == lastCommand) return
         lastCommand = sequence
-        setZoom(when (action) { 1 -> zoom * 1.5f; -1 -> zoom / 1.5f; else -> 1f }, width / 2f, height / 2f)
+        val target = zoomAnimator.target ?: zoom
+        animateZoom(when (action) { 1 -> target * 1.5f; -1 -> target / 1.5f; else -> 1f }, width / 2f, height / 2f)
+    }
+
+    private fun animateZoom(value: Float, focusX: Float, focusY: Float) {
+        zoomAnimator.animate(zoom, value) { setZoom(it, focusX, focusY) }
     }
 
     private fun setZoom(value: Float, focusX: Float, focusY: Float) {
@@ -125,6 +138,10 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         playerView.scaleY = zoom
         playerView.translationX = offsetX
         playerView.translationY = offsetY
+        coverView.scaleX = zoom
+        coverView.scaleY = zoom
+        coverView.translationX = offsetX
+        coverView.translationY = offsetY
     }
 
     override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
@@ -136,6 +153,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         onLayoutReady(isVideoLayoutReady)
     }
     override fun onDetachedFromWindow() {
+        zoomAnimator.cancel()
         super.onDetachedFromWindow()
         onLayoutReady(false)
     }
@@ -147,7 +165,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
             MotionEvent.ACTION_DOWN -> {
                 multiTouch = false
                 // 未放大时把手势交给外层 Pager，实现跟手的翻页过渡；放大后自行处理平移。
-                parent?.requestDisallowInterceptTouchEvent(zoom > 1f)
+                parent?.requestDisallowInterceptTouchEvent((zoomAnimator.target ?: zoom) > 1f || zoom > 1f)
             }
             MotionEvent.ACTION_POINTER_DOWN -> {
                 multiTouch = true
@@ -156,8 +174,8 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> parent?.requestDisallowInterceptTouchEvent(false)
         }
         if (event.pointerCount > 1) multiTouch = true
-        scaleDetector.onTouchEvent(event)
         gestureDetector.onTouchEvent(event)
+        scaleDetector.onTouchEvent(event)
         return true
     }
 

@@ -358,16 +358,24 @@ class ReaderInteractionTest {
         rule.waitUntil(15_000) { currentPage == 1 }
         waitForVideo()
         rule.onRoot().performTouchInput { doubleClick(Offset(width * .2f, height * .4f)) }
+        waitForVideoZoom(2.5f)
         rule.runOnIdle {
             val view = currentVideoView()
-            assertEquals(2.5f, view.playerView.scaleX, .01f)
             assertFalse(view.playerView.player!!.playWhenReady)
             assertEquals(0L, view.playerView.player!!.currentPosition)
         }
         rule.onRoot().performTouchInput { doubleClick(Offset(width * .8f, height * .4f)) }
-        rule.runOnIdle { assertEquals(1f, currentVideoView().playerView.scaleX, .01f) }
+        waitForVideoZoom(1f)
         swipe(forward = true, vertical = false)
         rule.waitUntil(15_000) { currentPage == 0 }
+    }
+
+    private fun waitForVideoZoom(scale: Float) {
+        rule.waitUntil(5_000) {
+            var reached = false
+            rule.runOnUiThread { reached = kotlin.math.abs(currentVideoView().playerView.scaleX - scale) < .01f }
+            reached
+        }
     }
 
     @Test fun progressControlsSeekAndHideTogether() {

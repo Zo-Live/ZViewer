@@ -8,6 +8,7 @@ import android.graphics.drawable.Drawable
 import android.view.GestureDetector
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
+import android.view.ViewConfiguration
 import android.widget.ImageView
 
 class ZoomImageView(context: Context) : ImageView(context) {
@@ -15,6 +16,10 @@ class ZoomImageView(context: Context) : ImageView(context) {
     private var zoom = 1f
     private var offsetX = 0f
     private var offsetY = 0f
+    private val zoomAnimator = ZoomAnimator()
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private var downX = 0f
+    private var downY = 0f
     private var lastX = 0f
     private var lastY = 0f
     private var lastCommand = 0
@@ -23,6 +28,7 @@ class ZoomImageView(context: Context) : ImageView(context) {
     private val transform = Matrix()
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
+            zoomAnimator.cancel()
             parent?.requestDisallowInterceptTouchEvent(true)
             return true
         }
@@ -35,7 +41,7 @@ class ZoomImageView(context: Context) : ImageView(context) {
         override fun onDown(event: MotionEvent): Boolean = true
         override fun onSingleTapConfirmed(event: MotionEvent): Boolean { performClick(); return true }
         override fun onDoubleTap(event: MotionEvent): Boolean {
-            setZoom(if (zoom > 1.1f) 1f else 2.5f, event.x, event.y)
+            animateZoom(if ((zoomAnimator.target ?: zoom) > 1.1f) 1f else 2.5f, event.x, event.y)
             return true
         }
     })
@@ -48,6 +54,7 @@ class ZoomImageView(context: Context) : ImageView(context) {
     fun bind(image: Drawable, description: String, animate: Boolean) {
         contentDescription = description
         if (drawable !== image) {
+            zoomAnimator.cancel()
             setAnimationStarted(false)
             setImageDrawable(image)
             zoom = 1f; offsetX = 0f; offsetY = 0f
@@ -58,6 +65,7 @@ class ZoomImageView(context: Context) : ImageView(context) {
     }
 
     fun clearImage() {
+        zoomAnimator.cancel()
         shouldAnimate = false
         setAnimationStarted(false)
         setImageDrawable(null)
@@ -73,7 +81,12 @@ class ZoomImageView(context: Context) : ImageView(context) {
     fun command(sequence: Int, action: Int) {
         if (sequence == lastCommand) return
         lastCommand = sequence
-        setZoom(when (action) { 1 -> zoom * 1.5f; -1 -> zoom / 1.5f; else -> 1f }, width / 2f, height / 2f)
+        val target = zoomAnimator.target ?: zoom
+        animateZoom(when (action) { 1 -> target * 1.5f; -1 -> target / 1.5f; else -> 1f }, width / 2f, height / 2f)
+    }
+
+    private fun animateZoom(value: Float, focusX: Float, focusY: Float) {
+        zoomAnimator.animate(zoom, value) { setZoom(it, focusX, focusY) }
     }
 
     private fun setZoom(value: Float, focusX: Float, focusY: Float) {
@@ -107,11 +120,23 @@ class ZoomImageView(context: Context) : ImageView(context) {
         scaleDetector.onTouchEvent(event)
         gestureDetector.onTouchEvent(event)
         when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> { lastX = event.x; lastY = event.y; parent?.requestDisallowInterceptTouchEvent(zoom > 1f) }
+            MotionEvent.ACTION_DOWN -> {
+                downX = event.x
+                downY = event.y
+                lastX = event.x
+                lastY = event.y
+                parent?.requestDisallowInterceptTouchEvent((zoomAnimator.target ?: zoom) > 1f || zoom > 1f)
+            }
             MotionEvent.ACTION_POINTER_DOWN -> parent?.requestDisallowInterceptTouchEvent(true)
             MotionEvent.ACTION_MOVE -> {
                 if (zoom > 1f && !scaleDetector.isInProgress && event.pointerCount == 1) {
-                    offsetX += event.x - lastX; offsetY += event.y - lastY; updateMatrix()
+                    if (zoomAnimator.target == null ||
+                        kotlin.math.hypot(event.x - downX, event.y - downY) > touchSlop) {
+                        zoomAnimator.cancel()
+                        offsetX += event.x - lastX
+                        offsetY += event.y - lastY
+                        updateMatrix()
+                    }
                 }
                 lastX = event.x; lastY = event.y
             }
@@ -127,6 +152,7 @@ class ZoomImageView(context: Context) : ImageView(context) {
     }
 
     override fun onDetachedFromWindow() {
+        zoomAnimator.cancel()
         setAnimationStarted(false)
         super.onDetachedFromWindow()
     }
