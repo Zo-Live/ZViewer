@@ -42,7 +42,7 @@ class PdfDocument internal constructor(renderer: PdfRenderer) {
 
 internal fun renderPdfPage(renderer: PdfRenderer, index: Int, width: Int, maxPixels: Int = 12_000_000): Bitmap =
     renderer.openPage(index).use { page ->
-        val renderWidth = width.coerceIn(480, 2560)
+        val renderWidth = width.coerceIn(240, 2560)
         val renderHeight = renderWidth.toDouble() * page.height / page.width
         val scale = minOf(1.0, sqrt(maxPixels / (renderWidth * renderHeight)), 8192 / renderHeight)
         val bitmap = Bitmap.createBitmap(

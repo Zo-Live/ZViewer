@@ -13,7 +13,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -38,8 +40,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
@@ -67,12 +71,18 @@ import dev.zolive.zviewer.reader.ZoomImageView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.roundToInt
+
+private const val PagePreviewHoldMillis = 120L
+private const val FastPagePreviewHoldMillis = 250L
 
 @Composable
 fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSettings, repository: BookRepository,
@@ -88,6 +98,19 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     var zoomAction by remember { mutableIntStateOf(0) }
     var zoomPage by remember { mutableIntStateOf(-1) }
     var backProgress by remember { mutableFloatStateOf(0f) }
+    var pageSliderPosition by remember(session) { mutableStateOf<Float?>(null) }
+    val sliderTarget by remember(session) { derivedStateOf { pageSliderPosition?.roundToInt() } }
+    val scrubbing by remember(session) { derivedStateOf { sliderTarget != null } }
+    var pageSliderVideoState by remember(session) { mutableStateOf<VideoPlaybackState?>(null) }
+    var pendingPreviewPage by remember(session) { mutableStateOf<Int?>(null) }
+    var heldPreviewPage by remember(session) { mutableStateOf<Int?>(null) }
+    var renderedPreviewPage by remember(session) { mutableStateOf<Int?>(null) }
+    val previewPage by remember(session) {
+        derivedStateOf { pendingPreviewPage ?: heldPreviewPage?.takeIf { it == sliderTarget } }
+    }
+    val targetPageReady by remember(session) {
+        derivedStateOf { renderedPreviewPage != null && renderedPreviewPage == (sliderTarget ?: pendingPreviewPage) }
+    }
     val paging = remember(session.pages.size, settings.loopMode) { ReaderPaging(session.pages.size, settings.loopMode) }
     val listState = rememberLazyListState(paging.anchor(currentPage))
     val pagerState = rememberPagerState(initialPage = paging.anchor(currentPage)) { paging.itemCount }
@@ -105,7 +128,13 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     val mixedBook = remember(session) { videoBook && session.pages.any { !it.isVideo } }
     val verticalReading = settings.vertical
     val pagerReading = videoBook || !verticalReading
-    val pdfPages = if (session.pdf != null) rememberPdfReaderPages(session, active) {
+    val continuous = !pagerReading
+    val loadedItems = remember(session, paging) { mutableStateMapOf<Int, Unit>() }
+    val priorityPage = previewPage?.takeUnless { targetPageReady }
+    val normalPageLoading = (!scrubbing && pendingPreviewPage == null) || targetPageReady
+    val pdfPages = if (session.pdf != null) rememberPdfReaderPages(
+        session, active && (normalPageLoading || priorityPage != null), priorityPage,
+    ) {
         val first = if (verticalReading) listState.firstVisibleItemIndex else pagerState.currentPage
         val visible = if (verticalReading) listState.layoutInfo.visibleItemsInfo.map { it.index } else emptyList()
         val last = visible.lastOrNull() ?: first
@@ -114,11 +143,43 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             .map(paging::pageAt)
             .distinct()
     } else null
+    val videoCovers = remember(session) { VideoCoverCache() }
+    val pagePreviews = rememberReaderPagePreview(
+        session, repository, videoCovers, continuous, looping = paging.looping,
+        canDecode = {
+            active && controls && (initialImageLoaded || videoBook) && session.pages.size > 1 && previewPage == null
+        },
+        idlePage = { currentPage.takeIf { active && visible && (initialImageLoaded || videoBook) &&
+            !scrubbing && pendingPreviewPage == null && !listState.isScrollInProgress && !pagerState.isScrollInProgress } },
+        pdfPages = pdfPages,
+    ) {
+        if (active && controls) pendingPreviewPage ?: sliderTarget else null
+    }
+    val continuousPreviews by remember(pagePreviews) {
+        derivedStateOf { pagePreviews.value?.pages.orEmpty().associateBy { it.index } }
+    }
+    val showingRenderedPreview by remember(session, paging, continuous, pagePreviews) {
+        derivedStateOf {
+            targetPageReady && (!continuous || listState.layoutInfo.visibleItemsInfo.all {
+                it.index in loadedItems || paging.pageAt(it.index) in continuousPreviews
+            })
+        }
+    }
+    val onPreviewReady: (Int) -> Unit = { index ->
+        if (!continuous && !scrubbing && pendingPreviewPage == index) {
+            pendingPreviewPage = null
+            pageSliderVideoState = null
+        } else if (previewPage == index) {
+            renderedPreviewPage = index
+        }
+    }
+    LaunchedEffect(continuous, scrubbing, pendingPreviewPage, showingRenderedPreview) {
+        if (continuous && !scrubbing && pendingPreviewPage != null && showingRenderedPreview) {
+            pendingPreviewPage = null
+            renderedPreviewPage = null
+        }
+    }
     val videoPool = remember(session.book.cacheKey, videoBook) { if (videoBook) VideoPlaybackPool(context) else null }
-    // 会话级封面缓存：同一真实页在循环模式下可能被多个虚拟项复用，
-    // 重建视图时直接取已解码的封面，避免异步解码造成一帧空档。
-    val videoCovers = remember(session.book.cacheKey) { VideoCoverCache() }
-
     DisposableEffect(videoPool) {
         onDispose { videoPool?.releaseAll() }
     }
@@ -159,10 +220,11 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         val item = paging.anchor(currentPage)
         if (pagerReading) pagerState.scrollToPage(item) else listState.scrollToItem(item)
         snapshotFlow {
-            if (pagerReading) paging.pageAt(pagerState.settledPage)
+            if (scrubbing) null
+            else if (pagerReading) paging.pageAt(pagerState.settledPage)
             else if (!paging.looping && !listState.canScrollForward && listState.canScrollBackward) paging.pageCount - 1
             else paging.pageAt(listState.firstVisibleItemIndex)
-        }.distinctUntilChanged().collect { page -> currentPage = page; onProgress(page)
+        }.distinctUntilChanged().filterNotNull().collect { page -> currentPage = page; onProgress(page)
             DiagnosticLog.log("Reader", "停靠到第 ${page + 1}/${session.pages.size} 项")
         }
     }
@@ -170,25 +232,57 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         if (!videoBook || !active) return@LaunchedEffect
         videoPool?.snapshot()?.forEach { (item, state) -> if (item != pagerState.settledPage) state.pause() }
     }
-    val jump: (Int) -> Unit = { target ->
+    val pageInteractions = if (pagerReading) pagerState.interactionSource else listState.interactionSource
+    LaunchedEffect(pageInteractions) {
+        pageInteractions.interactions.collect { interaction ->
+            if (interaction is DragInteraction.Start) {
+                pendingPreviewPage = null
+                pageSliderVideoState = null
+            }
+        }
+    }
+    suspend fun scrollToReaderPage(page: Int, animate: Boolean) {
+        if (pagerReading) {
+            val item = paging.nearestItem(page, pagerState.currentPage)
+            if (animate) pagerState.animateScrollToPage(item) else pagerState.scrollToPage(item)
+        } else {
+            listState.scrollToItem(paging.nearestItem(page, listState.firstVisibleItemIndex))
+        }
+    }
+    LaunchedEffect(session, paging, pagerReading, controls, active) {
+        if (!controls || !active) return@LaunchedEffect
+        var previousPosition: Float? = null
+        snapshotFlow { pageSliderPosition.takeIf { pendingPreviewPage == null } }.collectLatest { position ->
+            val previous = previousPosition
+            previousPosition = position
+            val target = position?.roundToInt() ?: return@collectLatest
+            if (heldPreviewPage != target) {
+                heldPreviewPage = null
+                renderedPreviewPage = null
+                val fast = previous != null && abs(position - previous) >= 2f
+                delay(if (fast) FastPagePreviewHoldMillis else PagePreviewHoldMillis)
+                if (pageSliderPosition != position || pendingPreviewPage != null) return@collectLatest
+                heldPreviewPage = target
+            }
+            if (!showingRenderedPreview) scrollToReaderPage(target, animate = false)
+        }
+    }
+    fun jump(target: Int) {
         val page = paging.destination(target)
+        pendingPreviewPage = null
+        pageSliderVideoState = null
         jumpJob?.cancel()
         if (videoBook) {
             DiagnosticLog.log("Reader", "跳转到第 ${page + 1} 项")
             // 视频统一交给 Pager 平滑过渡：跟手拖动、动画期间当前视频继续播放，停靠后切换播放器。
-            jumpJob = scope.launch { pagerState.animateScrollToPage(paging.nearestItem(page, pagerState.currentPage)) }
-        } else if (verticalReading) {
-            currentPage = page
-            onProgress(page)
-            jumpJob = scope.launch { listState.scrollToItem(paging.nearestItem(page, listState.firstVisibleItemIndex)) }
         } else {
             currentPage = page
             onProgress(page)
-            jumpJob = scope.launch { pagerState.scrollToPage(paging.nearestItem(page, pagerState.currentPage)) }
         }
+        jumpJob = scope.launch { scrollToReaderPage(page, animate = videoBook) }
     }
     val volumePage by rememberUpdatedState<(Int) -> Unit> { direction ->
-        if (paging.looping || currentPage + direction in session.pages.indices) {
+        if (!scrubbing && (paging.looping || currentPage + direction in session.pages.indices)) {
             jump(currentPage + direction)
         }
     }
@@ -199,9 +293,13 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         }
         onDispose { mainActivity?.onVolumePage = null }
     }
-    val currentPageIsVideo = session.pages.getOrNull(currentPage)?.isVideo == true
-    val toolbarVideoState = if (currentPageIsVideo) videoPool?.get(pagerState.settledPage) else null
-    val onVideoEnded: (VideoPlaybackState) -> Unit = { state ->
+    val currentPageIsVideo = session.pages[currentPage].isVideo
+    val toolbarVideoState = if (scrubbing) pageSliderVideoState
+        else if (currentPageIsVideo && paging.pageAt(pagerState.settledPage) == currentPage) {
+            videoPool?.get(pagerState.settledPage) ?: pageSliderVideoState
+        } else null
+    val onVideoEnded: (VideoPlaybackState) -> Unit = onEnded@{ state ->
+        if (scrubbing) return@onEnded
         DiagnosticLog.log("Reader", "视频播放结束 index=${state.index} scrolling=${pagerState.isScrollInProgress} page=$currentPage")
         if (pagerState.isScrollInProgress) {
             // 切换尚未完成时当前视频播完就循环播放，而不是停在结尾等待下一次手势。
@@ -222,8 +320,9 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             if (videoBook) {
                 val itemContent: @Composable (Int) -> Unit = { item ->
                     VideoPagerPage(item, session, paging, pagerState, repository, videoPool!!, videoCovers,
-                        active, allowPlayback = visible, settings, foreground,
+                        active, allowPlayback = visible && !scrubbing, settings, foreground,
                         videoPosition, onVideoProgress, zoomSequence, zoomAction, zoomPage,
+                        previewPage, normalPageLoading, onPreviewReady,
                         onEntryReady = if (visible) null else onVideoEntryReady,
                         onTap = { controls = !controls }, onEnded = onVideoEnded)
                 }
@@ -235,17 +334,22 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         beyondViewportPageCount = 1, key = { "${session.book.cacheKey}-$it" }) { item -> itemContent(item) }
                 }
             } else if (verticalReading) {
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(ReaderPageSpacing)) {
                     items(paging.itemCount, key = { "${session.book.cacheKey}-$it" }) { item ->
                         val index = paging.pageAt(item)
                         val visible by remember(item) { derivedStateOf { listState.layoutInfo.visibleItemsInfo.any { it.index == item } } }
                         val current by remember(item) { derivedStateOf { item == listState.firstVisibleItemIndex } }
                         val zoomTarget = if (index == zoomPage && !paging.looping) visible else current && index == zoomPage
-                        ReaderPage(session, index, repository, vertical = true, active = active && visible,
+                        DisposableEffect(loadedItems, item) { onDispose { loadedItems.remove(item) } }
+                        ReaderPage(session, index, repository, vertical = true, active = active && visible && normalPageLoading,
                             doubleTapZoomEnabled = settings.doubleTapZoom,
                             foreground = foreground, zoomSequence = if (zoomTarget) zoomSequence else 0,
                             zoomAction = zoomAction, initialRatio = ratios[index], onRatio = { ratios[index] = it },
-                            loadEnabled = initialImageLoaded || current, onLoaded = onInitialImageLoaded, pdfPages = pdfPages,
+                            loadEnabled = priorityPage == index || normalPageLoading && (initialImageLoaded || current),
+                            onLoaded = { onInitialImageLoaded(); loadedItems[item] = Unit }, pdfPages = pdfPages,
+                            waitingForPreview = previewPage == index && visible && (current || !listState.canScrollForward),
+                            onPreviewReady = onPreviewReady,
+                            preview = continuousPreviews[index],
                             onTap = { controls = !controls })
                     }
                 }
@@ -253,12 +357,20 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 HorizontalPager(state = pagerState, reverseLayout = settings.rightToLeft, modifier = Modifier.fillMaxSize(),
                     beyondViewportPageCount = 1, key = { "${session.book.cacheKey}-$it" }) { item ->
                     val index = paging.pageAt(item)
-                    ReaderPage(session, index, repository, vertical = false, active = active && pagerState.currentPage == item,
+                    ReaderPage(session, index, repository, vertical = false,
+                        active = active && normalPageLoading && pagerState.currentPage == item,
                         doubleTapZoomEnabled = settings.doubleTapZoom,
                         foreground = foreground, zoomSequence = if (item == pagerState.currentPage && index == zoomPage) zoomSequence else 0,
-                        zoomAction = zoomAction, loadEnabled = initialImageLoaded || pagerState.currentPage == item,
-                        onLoaded = onInitialImageLoaded, pdfPages = pdfPages, onTap = { controls = !controls })
+                        zoomAction = zoomAction, loadEnabled = priorityPage == index ||
+                            normalPageLoading && (initialImageLoaded || pagerState.currentPage == item),
+                        onLoaded = onInitialImageLoaded, pdfPages = pdfPages,
+                        waitingForPreview = previewPage == index && pagerState.currentPage == item,
+                        onPreviewReady = onPreviewReady,
+                        onTap = { controls = !controls })
                 }
+            }
+            if (controls && (scrubbing || pendingPreviewPage != null) && !showingRenderedPreview) {
+                ReaderPreviewOverlay(pagePreviews, session, pagerReading, background)
             }
             if (!controls) {
                 Surface(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(12.dp),
@@ -291,34 +403,53 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                     Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) {
                         Box(Modifier.align(Alignment.CenterHorizontally).size(32.dp, 4.dp).clip(RoundedCornerShape(2.dp))
                             .background(MaterialTheme.colorScheme.outlineVariant))
-                        if (toolbarVideoState != null) VideoProgressControls(toolbarVideoState)
-                        var slider by remember { mutableFloatStateOf(currentPage.toFloat()) }
-                        var dragging by remember { mutableStateOf(false) }
-                        LaunchedEffect(currentPage) { if (!dragging) slider = currentPage.toFloat() }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            TextButton(onClick = { jumpDialog = true }) { Text(stringResource(
-                                when {
-                                    mixedBook -> R.string.item_progress
-                                    videoBook -> R.string.video_progress
-                                    else -> R.string.page_progress
-                                },
-                                if (dragging) slider.roundToInt() + 1 else currentPage + 1,
-                                session.pages.size,
-                            )) }
-                            Spacer(Modifier.weight(1f))
-                            Text("${((currentPage + 1f) / session.pages.size * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium)
+                        if (toolbarVideoState != null) {
+                            VideoProgressControls(toolbarVideoState, enabled = !scrubbing && pendingPreviewPage == null)
                         }
-                        Slider(value = if (dragging) slider else currentPage.toFloat(),
-                            onValueChange = { dragging = true; slider = it },
-                            onValueChangeFinished = { jump(slider.roundToInt()); dragging = false },
-                            valueRange = 0f..maxOf(1, session.pages.lastIndex).toFloat(), enabled = session.pages.size > 1,
-                            modifier = Modifier.fillMaxWidth())
+                        ReaderPageSlider(
+                            progressLabel = when {
+                                mixedBook -> R.string.item_progress
+                                videoBook -> R.string.video_progress
+                                else -> R.string.page_progress
+                            },
+                            pageCount = session.pages.size,
+                            currentPage = currentPage,
+                            scrubbing = scrubbing,
+                            sliderPosition = { pageSliderPosition },
+                            onJump = { jumpDialog = true },
+                            onValueChange = { value ->
+                                if (pageSliderPosition == null) {
+                                    jumpJob?.cancel()
+                                    pendingPreviewPage = null
+                                    heldPreviewPage = null
+                                    renderedPreviewPage = null
+                                    pageSliderVideoState = toolbarVideoState
+                                }
+                                pageSliderPosition = value
+                            },
+                            onValueChangeFinished = {
+                                pageSliderPosition?.let { value ->
+                                    jumpJob?.cancel()
+                                    val target = value.roundToInt()
+                                    pendingPreviewPage = target
+                                    jumpJob = scope.launch {
+                                        if (!showingRenderedPreview) scrollToReaderPage(target, animate = false)
+                                        currentPage = target
+                                        onProgress(target)
+                                        pageSliderPosition = null
+                                        heldPreviewPage = null
+                                        if (renderedPreviewPage == target) onPreviewReady(target)
+                                        if (!continuous) renderedPreviewPage = null
+                                    }
+                                }
+                            },
+                        )
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { jump(currentPage - 1) }, enabled = settings.loopMode || currentPage > 0) { Icon(Icons.AutoMirrored.Outlined.NavigateBefore, stringResource(R.string.previous_page)) }
-                            IconButton(onClick = { zoomPage = currentPage; zoomAction = -1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomOut, stringResource(if (currentPageIsVideo) R.string.zoom_out_video else R.string.zoom_out_image)) }
-                            TextButton(onClick = { zoomPage = currentPage; zoomAction = 0; zoomSequence++ }) { Text(stringResource(R.string.fit_screen)) }
-                            IconButton(onClick = { zoomPage = currentPage; zoomAction = 1; zoomSequence++ }) { Icon(Icons.Outlined.ZoomIn, stringResource(if (currentPageIsVideo) R.string.zoom_in_video else R.string.zoom_in_image)) }
-                            IconButton(onClick = { jump(currentPage + 1) }, enabled = settings.loopMode || currentPage < session.pages.lastIndex) { Icon(Icons.AutoMirrored.Outlined.NavigateNext, stringResource(R.string.next_page)) }
+                            IconButton(onClick = { jump(currentPage - 1) }, enabled = !scrubbing && (settings.loopMode || currentPage > 0)) { Icon(Icons.AutoMirrored.Outlined.NavigateBefore, stringResource(R.string.previous_page)) }
+                            IconButton(onClick = { zoomPage = currentPage; zoomAction = -1; zoomSequence++ }, enabled = !scrubbing) { Icon(Icons.Outlined.ZoomOut, stringResource(if (currentPageIsVideo) R.string.zoom_out_video else R.string.zoom_out_image)) }
+                            TextButton(onClick = { zoomPage = currentPage; zoomAction = 0; zoomSequence++ }, enabled = !scrubbing) { Text(stringResource(R.string.fit_screen)) }
+                            IconButton(onClick = { zoomPage = currentPage; zoomAction = 1; zoomSequence++ }, enabled = !scrubbing) { Icon(Icons.Outlined.ZoomIn, stringResource(if (currentPageIsVideo) R.string.zoom_in_video else R.string.zoom_in_image)) }
+                            IconButton(onClick = { jump(currentPage + 1) }, enabled = !scrubbing && (settings.loopMode || currentPage < session.pages.lastIndex)) { Icon(Icons.AutoMirrored.Outlined.NavigateNext, stringResource(R.string.next_page)) }
                         }
                     }
                 }
@@ -369,7 +500,9 @@ private fun VideoPagerPage(
     pool: VideoPlaybackPool, covers: VideoCoverCache,
     active: Boolean, allowPlayback: Boolean, settings: ReaderSettings, foreground: Color,
     videoPosition: (Int) -> Long, onVideoProgress: (Int, Long) -> Unit,
-    zoomSequence: Int, zoomAction: Int, zoomPage: Int, onEntryReady: (() -> Unit)?,
+    zoomSequence: Int, zoomAction: Int, zoomPage: Int, previewPage: Int?, normalPageLoading: Boolean,
+    onPreviewReady: (Int) -> Unit,
+    onEntryReady: (() -> Unit)?,
     onTap: () -> Unit, onEnded: (VideoPlaybackState) -> Unit,
 ) {
     val index = paging.pageAt(item)
@@ -390,67 +523,142 @@ private fun VideoPagerPage(
                 onEntryReady?.invoke()
             }
         }
+        val previewReady = previewPage == index && frameReady
+        LaunchedEffect(previewReady) {
+            if (previewReady) {
+                withFrameNanos { }
+                onPreviewReady(index)
+            }
+        }
         VideoPage(state, index, session, cover, settings,
             videoPosition, onVideoProgress, foreground, active && settled, allowPlayback,
             sequence, zoomAction, onTap = onTap, onEnded = onEnded)
     } else {
-        ReaderPage(session, index, repository, vertical = false, active = active && settled,
+        ReaderPage(session, index, repository, vertical = false, active = active && settled && normalPageLoading,
             doubleTapZoomEnabled = settings.doubleTapZoom,
             foreground = foreground, zoomSequence = sequence,
-            zoomAction = zoomAction, onTap = onTap)
+            zoomAction = zoomAction, loadEnabled = normalPageLoading || previewPage == index,
+            waitingForPreview = previewPage == index && settled,
+            onPreviewReady = onPreviewReady,
+            onTap = onTap)
+    }
+}
+
+@Composable
+private fun ReaderPageSlider(
+    progressLabel: Int, pageCount: Int, currentPage: Int, scrubbing: Boolean,
+    sliderPosition: () -> Float?, onJump: () -> Unit,
+    onValueChange: (Float) -> Unit, onValueChangeFinished: () -> Unit,
+) {
+    val position = sliderPosition()
+    val pageNumber = (position?.roundToInt() ?: currentPage) + 1
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        TextButton(onClick = onJump, enabled = !scrubbing) {
+            Text(stringResource(progressLabel, pageNumber, pageCount))
+        }
+        Spacer(Modifier.weight(1f))
+        Text("${(pageNumber.toFloat() / pageCount * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium)
+    }
+    Slider(value = position ?: currentPage.toFloat(), onValueChange = onValueChange,
+        onValueChangeFinished = onValueChangeFinished, valueRange = 0f..maxOf(1, pageCount - 1).toFloat(),
+        enabled = pageCount > 1, modifier = Modifier.fillMaxWidth())
+}
+
+@Composable
+private fun ReaderPreviewOverlay(
+    previews: State<ReaderPreviewViewport?>, session: BookSession, pagerReading: Boolean, background: Color,
+) {
+    val frame = previews.value ?: return
+    val pages = frame.pages
+    if (pagerReading) {
+        val preview = pages.first()
+        ReaderPreviewImage(preview, Modifier.fillMaxSize().background(background),
+            video = session.pages[preview.index].isVideo)
+    } else {
+        Column(Modifier.fillMaxSize().background(background).clipToBounds()
+            .wrapContentHeight(if (frame.alignBottom) Alignment.Bottom else Alignment.Top, unbounded = true),
+            verticalArrangement = Arrangement.spacedBy(ReaderPageSpacing)) {
+            for (preview in pages) {
+                ReaderPreviewImage(preview, Modifier.fillMaxWidth().aspectRatio(preview.ratio),
+                    contentScale = ContentScale.FillWidth)
+            }
+        }
     }
 }
 
 private val imageDecodeDispatcher = Dispatchers.IO.limitedParallelism(2)
 
 @Composable
+private fun ReaderPreviewImage(preview: ReaderPagePreview, modifier: Modifier,
+    video: Boolean = false, contentScale: ContentScale = ContentScale.Fit) {
+    val bitmap = remember(preview.bitmap) { preview.bitmap.asImageBitmap() }
+    Image(bitmap, stringResource(
+        if (video) R.string.video_accessibility_without_zoom else R.string.image_accessibility_without_zoom,
+        preview.index + 1,
+    ), modifier, contentScale = contentScale)
+}
+
+@Composable
 private fun ReaderPage(session: BookSession, index: Int, repository: BookRepository, vertical: Boolean, active: Boolean,
     doubleTapZoomEnabled: Boolean,
     foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float? = null,
     onRatio: (Float) -> Unit = {}, loadEnabled: Boolean = true, onLoaded: () -> Unit = {},
-    pdfPages: SnapshotStateMap<Int, Result<Bitmap>>? = null, onTap: () -> Unit) {
+    pdfPages: SnapshotStateMap<Int, Result<Bitmap>>? = null,
+    waitingForPreview: Boolean, onPreviewReady: (Int) -> Unit, preview: ReaderPagePreview? = null, onTap: () -> Unit) {
     if (pdfPages != null) {
         val bitmap = pdfPages[index]?.getOrNull()
         val resources = LocalContext.current.resources
         val image = remember(bitmap, resources) { bitmap?.let { BitmapDrawable(resources, it) } }
+        val loaded = pdfPages[index] != null
+        LaunchedEffect(loaded, waitingForPreview) {
+            if (loaded) {
+                onLoaded()
+                if (waitingForPreview) onPreviewReady(index)
+            }
+        }
         ReaderPageContent(index, image, pdfPages[index]?.isFailure == true, vertical, active,
-            doubleTapZoomEnabled, foreground, zoomSequence, zoomAction, initialRatio, onRatio, onTap, onRetry = { pdfPages.remove(index) })
+            doubleTapZoomEnabled, foreground, zoomSequence, zoomAction, initialRatio, onRatio, onTap,
+            onRetry = { pdfPages.remove(index) }, preview = preview)
         return
     }
     val viewportWidth = LocalWindowInfo.current.containerSize.width
     val width = (viewportWidth * 2).coerceIn(480, 3200)
     val animationWidth = viewportWidth.coerceIn(480, 3200)
     var retry by remember { mutableIntStateOf(0) }
-    var failure by remember(session.book.cacheKey, index) { mutableStateOf(false) }
-    val drawable by produceState<Drawable?>(null, width, animationWidth, retry, loadEnabled) {
-        if (!loadEnabled) return@produceState
-        failure = false
-        try {
-            val file = repository.pageFile(session, index)
-            value = withContext(imageDecodeDispatcher) { ImageLoader.load(file, width, animationWidth) }
-        } catch (error: CancellationException) { throw error }
-        catch (error: Exception) {
-            DiagnosticLog.error("Image", "页面解码失败 book=${session.book.id.take(8)} page=${index + 1} format=${session.pages[index].name.substringAfterLast('.')} targetWidth=$width", error)
-            failure = true
+    var failure by remember(session, index, width, animationWidth, retry) { mutableStateOf(false) }
+    val drawable by key(session, index, width, animationWidth, retry) {
+        produceState<Drawable?>(null, loadEnabled) {
+            if (!loadEnabled || value != null || failure) return@produceState
+            try {
+                val file = repository.pageFile(session, index)
+                value = withContext(imageDecodeDispatcher) { ImageLoader.load(file, width, animationWidth) }
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) {
+                DiagnosticLog.error("Image", "页面解码失败 book=${session.book.id.take(8)} page=${index + 1} format=${session.pages[index].name.substringAfterLast('.')} targetWidth=$width", error)
+                failure = true
+            }
         }
     }
-    LaunchedEffect(drawable, failure) {
-        if (drawable != null || failure) onLoaded()
+    val loaded = drawable != null || failure
+    LaunchedEffect(loaded, waitingForPreview) {
+        if (loaded) {
+            onLoaded()
+            if (waitingForPreview) onPreviewReady(index)
+        }
     }
     ReaderPageContent(index, drawable, failure, vertical, active, doubleTapZoomEnabled, foreground, zoomSequence, zoomAction,
-        initialRatio, onRatio, onTap, onRetry = { retry++ })
+        initialRatio, onRatio, onTap, onRetry = { retry++ }, preview = preview)
 }
 
 @Composable
 private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, vertical: Boolean, active: Boolean,
-    doubleTapZoomEnabled: Boolean,
-    foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float?, onRatio: (Float) -> Unit,
-    onTap: () -> Unit, onRetry: () -> Unit) {
+    doubleTapZoomEnabled: Boolean, foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float?, onRatio: (Float) -> Unit,
+    onTap: () -> Unit, onRetry: () -> Unit, preview: ReaderPagePreview?) {
     val imageDescription = stringResource(
         if (doubleTapZoomEnabled) R.string.image_accessibility else R.string.image_accessibility_without_zoom,
         index + 1,
     )
-    val ratio = image?.let { it.intrinsicWidth.toFloat() / it.intrinsicHeight.coerceAtLeast(1) } ?: initialRatio ?: .70f
+    val ratio = image?.let { it.intrinsicWidth.toFloat() / it.intrinsicHeight.coerceAtLeast(1) } ?: initialRatio ?: preview?.ratio ?: .70f
     LaunchedEffect(image) { if (image != null) onRatio(ratio) }
     val layout = if (vertical) Modifier.fillMaxWidth().aspectRatio(ratio.coerceAtLeast(.03f)) else Modifier.fillMaxSize()
     Box(layout, contentAlignment = Alignment.Center) {
@@ -472,6 +680,8 @@ private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, ve
                     TextButton(onClick = onTap) { Text(stringResource(R.string.show_reader_controls)) }
                 }
             }
+        } else if (preview != null) {
+            ReaderPreviewImage(preview, Modifier.fillMaxSize(), contentScale = ContentScale.FillWidth)
         } else CircularProgressIndicator(Modifier.size(28.dp), color = foreground)
     }
 }

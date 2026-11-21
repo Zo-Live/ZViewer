@@ -1,5 +1,6 @@
 package dev.zolive.zviewer.reader
 
+import android.graphics.Bitmap
 import android.graphics.ImageDecoder
 import android.graphics.drawable.Drawable
 import android.util.Size
@@ -17,6 +18,15 @@ import kotlin.math.sqrt
 object ImageLoader {
     private const val MAX_ANIMATION_PIXELS = 4_000_000
     private const val MAX_SOURCE_PIXELS = 100_000_000L
+
+    fun loadPreview(source: ImageDecoder.Source, width: Int, maxPixels: Int): Bitmap =
+        ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+            val size = info.size
+            validateSize(size.width, size.height)
+            val scale = targetScale(size.width, size.height, width, maxPixels)
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+            decoder.setTargetSize(scaled(size.width, scale), scaled(size.height, scale))
+        }
 
     fun load(file: File, width: Int, animationWidth: Int = width): Drawable {
         val apngSize = apngSize(file)

@@ -80,6 +80,9 @@ class BookRepository(private val context: Context) : Closeable {
 
     private fun requestTrim() { trimRequests.trySend(Unit) }
 
+    internal fun previewDirectory(session: BookSession, width: Int): File =
+        File(File(cache, session.book.cacheKey), "previews-v1-$width")
+
     override fun close() { maintenance.cancel(); trimRequests.close() }
 
     suspend fun close(session: BookSession) = withContext(NonCancellable + Dispatchers.IO) {

@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.first
 internal fun rememberPdfReaderPages(
     session: BookSession,
     active: Boolean,
+    priorityPage: Int?,
     visibleAndAdjacentPages: () -> List<Int>,
 ): SnapshotStateMap<Int, Result<Bitmap>> {
     val pdf = checkNotNull(session.pdf)
@@ -34,14 +35,15 @@ internal fun rememberPdfReaderPages(
     }
     val results = remember(pdf, width) { mutableStateMapOf<Int, Result<Bitmap>>() }
     val requestedPages by rememberUpdatedState(visibleAndAdjacentPages)
-    LaunchedEffect(pdf, width, active) {
+    LaunchedEffect(pdf, width, active, priorityPage) {
         if (!active) return@LaunchedEffect
         while (true) {
             val (_, nextPage) = snapshotFlow {
-                val pages = requestedPages()
+                val pages = priorityPage?.let(::listOf) ?: requestedPages()
                 pages to pages.firstOrNull { it !in results }
             }.first { (pages, missingPage) ->
-                results.keys.retainAll(pages.toSet())
+                val retained = if (priorityPage == null) pages else requestedPages() + priorityPage
+                results.keys.retainAll(retained.toSet())
                 missingPage != null
             }
             val index = checkNotNull(nextPage)
@@ -57,7 +59,8 @@ internal fun rememberPdfReaderPages(
                 Result.failure(error)
             }
             // 滚动或跳页后重新读取视口，跳过已经离开预载范围的任务。
-            if (index in requestedPages()) results[index] = result else result.getOrNull()?.recycle()
+            if (index == priorityPage || index in requestedPages()) results[index] = result
+            else result.getOrNull()?.recycle()
         }
     }
     return results

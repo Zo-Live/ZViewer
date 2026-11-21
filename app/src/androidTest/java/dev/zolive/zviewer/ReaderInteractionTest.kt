@@ -27,6 +27,7 @@ import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
 import java.io.File
+import kotlin.math.roundToInt
 
 class ReaderInteractionTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
@@ -481,6 +482,117 @@ class ReaderInteractionTest {
         toggleControls(visible = false)
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).assertDoesNotExist()
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.next_page)).assertDoesNotExist()
+    }
+
+    @Test fun draggingPageProgressShowsTheTargetBeforeSavingIt() {
+        open(video = false, vertical = false, loop = false, names = List(360) {
+            listOf("page1.png", "page2.png", "page10.png")[it % 3]
+        })
+        rule.onRoot().performTouchInput { click(Offset(centerX, height * .35f)) }
+        rule.waitUntil(5_000) {
+            rule.onAllNodesWithContentDescription(rule.activity.getString(R.string.reader_settings))
+                .fetchSemanticsNodes().isNotEmpty()
+        }
+        rule.waitForIdle()
+        val slider = rule.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo))
+        var targetPage = 0
+        sliderDrag(slider, listOf(.5f, .99f, .5f, .99f)) { fraction, position ->
+            assertEquals(fraction * session.pages.lastIndex, position, 12f)
+            targetPage = position.roundToInt()
+            val page = targetPage + 1
+            val description = rule.activity.getString(R.string.image_accessibility, page)
+            val thumbnail = rule.onNodeWithContentDescription(
+                rule.activity.getString(R.string.image_accessibility_without_zoom, page)
+            )
+            rule.waitUntil(5_000) {
+                !thumbnail.isDisplayed() && rule.runOnIdle {
+                    descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>().any {
+                        it.drawable != null && it.contentDescription == description && it.getGlobalVisibleRect(Rect())
+                    }
+                }
+            }
+            assertEquals(0, rule.runOnIdle { currentPage })
+        }
+        rule.waitUntil(5_000) { rule.runOnIdle { currentPage } == targetPage }
+        rule.waitUntil(5_000) {
+            rule.runOnIdle {
+                val description = rule.activity.getString(R.string.image_accessibility, targetPage + 1)
+                descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>().any {
+                    it.drawable != null && it.contentDescription == description && it.getGlobalVisibleRect(Rect())
+                }
+            }
+        }
+    }
+
+    @Test fun releasingPageProgressStartsTheDistantVideoAfterPreviewingIt() {
+        open(preview = false, loop = false, names = listOf(
+            "moving-video/moving.mp4", "video-folder/video2.mp4", "page1.png", "page2.png", "rotated.mp4",
+        ), mixed = true)
+        toggleControls()
+        val slider = rule.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo) and
+            !hasContentDescription(rule.activity.getString(R.string.video_playback_progress)))
+        sliderDrag(slider, listOf(.99f)) { _, position ->
+            assertEquals(4, position.roundToInt())
+            val description = rule.activity.getString(R.string.video_accessibility, 5)
+            rule.waitUntil(10_000) {
+                rule.runOnIdle {
+                    videoViews().any {
+                        it.contentDescription == description && it.getGlobalVisibleRect(Rect()) &&
+                            it.playerView.player?.videoSize?.width ?: 0 > 0
+                    }
+                }
+            }
+            rule.runOnIdle {
+                val path = session.pages[4].filePath
+                val player = videoViews().first { it.playerView.player?.currentMediaItem?.localConfiguration?.uri?.path == path }
+                    .playerView.player!!
+                assertFalse(player.playWhenReady)
+            }
+            assertEquals(0, rule.runOnIdle { currentPage })
+        }
+        rule.waitUntil(10_000) { rule.runOnIdle { currentPage } == 4 }
+        waitForVideo()
+        rule.waitUntil(10_000) {
+            rule.runOnIdle { currentVideoView().playerView.player?.isPlaying == true }
+        }
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).assertIsEnabled()
+    }
+
+    @Test fun draggingContinuousPageProgressShowsTheFollowingPage() {
+        open(video = false, names = List(8) { index ->
+            listOf("page1.png", "page2.png", "page10.png")[index % 3]
+        })
+        rule.onRoot().performTouchInput { click(Offset(centerX, height * .35f)) }
+        val slider = rule.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.ProgressBarRangeInfo))
+        rule.waitUntil(5_000) { slider.isDisplayed() }
+        var targetPage = 0
+        sliderDrag(slider, listOf(.5f, .99f, .4f)) { fraction, position ->
+            targetPage = position.roundToInt()
+            if (fraction == .99f) assertEquals(session.pages.lastIndex, targetPage)
+            val followingPage = (targetPage + 1) % session.pages.size
+            val firstDescription = rule.activity.getString(R.string.image_accessibility, targetPage + 1)
+            val nextDescription = rule.activity.getString(R.string.image_accessibility, followingPage + 1)
+            rule.waitUntil(5_000) {
+                rule.runOnIdle {
+                    val images = descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>()
+                    val first = Rect()
+                    val next = Rect()
+                    images.any { it.contentDescription == firstDescription && it.drawable != null && it.getGlobalVisibleRect(first) } &&
+                        images.any { it.contentDescription == nextDescription && it.drawable != null && it.getGlobalVisibleRect(next) } &&
+                        next.top >= first.bottom
+                }
+            }
+            assertEquals(0, rule.runOnIdle { currentPage })
+        }
+        rule.waitUntil(5_000) { rule.runOnIdle { currentPage } == targetPage }
+        rule.waitUntil(5_000) {
+            rule.runOnIdle {
+                val nextDescription = rule.activity.getString(R.string.image_accessibility, targetPage + 2)
+                descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>().any {
+                    it.contentDescription == nextDescription && it.drawable != null && it.getGlobalVisibleRect(Rect())
+                }
+            }
+        }
     }
 
     @Test fun horizontalImageLoopHasAdjacentPagesInBothDirections() {

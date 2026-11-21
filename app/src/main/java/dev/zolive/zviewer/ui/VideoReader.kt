@@ -208,7 +208,7 @@ internal fun createVideoPlaybackState(context: Context): VideoPlaybackState =
 internal class VideoPlaybackPool(private val context: Context) {
     private class Entry(val state: VideoPlaybackState) { var refs = 0 }
 
-    private val entries = mutableMapOf<Int, Entry>()
+    private val entries = mutableStateMapOf<Int, Entry>()
 
     val size: Int get() = entries.size
 
