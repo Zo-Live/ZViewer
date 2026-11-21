@@ -74,6 +74,7 @@ data class ReaderSettings(
     val language: AppLanguage = AppLanguage.SIMPLIFIED_CHINESE,
     val dynamicColor: Boolean = false,
     val verifyOnStartup: Boolean = false,
+    val hideRecentPreview: Boolean = false,
     val verifyAfterBackground: Boolean = false,
     val autoLockInterval: AutoLockInterval = AutoLockInterval.FifteenSeconds,
 )

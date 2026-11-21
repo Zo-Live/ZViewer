@@ -73,8 +73,10 @@ class SettingsMenuTest {
     @Test fun securityDefaultsAndAutoLockIntervalArePersisted() {
         setting("安全与隐私").performClick()
         setting("启动时验证").assertIsOff()
+        setting("模糊预览").assertIsOff().performClick().assertIsOn()
         setting("切换至后台后重新验证").assertIsOff()
         rule.onNodeWithText("自动锁定间隔").assertDoesNotExist()
+        assertTrue(store.settings().hideRecentPreview)
         assertEquals(AutoLockInterval.FifteenSeconds, store.settings().autoLockInterval)
 
         store.saveSettings(store.settings().copy(verifyAfterBackground = true))

@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.SystemClock
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -47,6 +48,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         DiagnosticLog.installCrashHandler()
         enableEdgeToEdge()
+        setRecentPreviewHidden(model.state.value.settings.hideRecentPreview)
         val taskPreparation = TaskRemovalCleanup.track(application, taskId)
         lifecycleScope.launch {
             taskPreparation.join()
@@ -63,6 +65,9 @@ class MainActivity : ComponentActivity() {
                         pageState.SaveableStateProvider("app") { ZViewerApp(model, state) }
                     }
                 }
+            }
+            launch {
+                model.state.map { it.settings.hideRecentPreview }.distinctUntilChanged().collect(::setRecentPreviewHidden)
             }
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
                 model.state.map { it.settings.clearCacheOnTaskRemoval || it.settings.clearProgressOnTaskRemoval }
@@ -111,6 +116,14 @@ class MainActivity : ComponentActivity() {
         DiagnosticLog.log("App", "onDestroy changingConfigurations=$isChangingConfigurations")
         super.onDestroy()
         if (isFinishing) TaskRemovalCleanup.onTaskRemoved(application)
+    }
+
+    private fun setRecentPreviewHidden(hidden: Boolean) {
+        if (hidden) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            setRecentsScreenshotEnabled(!hidden)
+        }
     }
 
     @Suppress("DEPRECATION")

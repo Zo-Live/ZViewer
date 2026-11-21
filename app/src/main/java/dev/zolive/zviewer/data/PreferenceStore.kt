@@ -42,6 +42,7 @@ class PreferenceStore(context: Context) {
         clearProgressOnTaskRemoval = preferences.getBoolean("clear_progress_on_task_removal", false),
         language = language,
         verifyOnStartup = preferences.getBoolean("verify_on_startup", false),
+        hideRecentPreview = preferences.getBoolean("hide_recent_preview", false),
         verifyAfterBackground = preferences.getBoolean("verify_after_background", false),
         autoLockInterval = preferences.getInt("auto_lock_seconds", AutoLockInterval.FifteenSeconds.seconds).let { seconds ->
             AutoLockInterval.entries.firstOrNull { it.seconds == seconds } ?: AutoLockInterval.FifteenSeconds
@@ -69,6 +70,7 @@ class PreferenceStore(context: Context) {
             .putBoolean("clear_progress_on_task_removal", settings.clearProgressOnTaskRemoval)
             .putString("language", settings.language.tag)
             .putBoolean("verify_on_startup", settings.verifyOnStartup)
+            .putBoolean("hide_recent_preview", settings.hideRecentPreview)
             .putBoolean("verify_after_background", settings.verifyAfterBackground)
             .putInt("auto_lock_seconds", settings.autoLockInterval.seconds)
             .putInt("cache_limit_mib", CacheLimits.normalize(settings.cacheLimitMiB)).apply()
