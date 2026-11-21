@@ -32,7 +32,7 @@ Android usually does not allow granting access to the internal storage root, the
 | Reading         | Continuous vertical / horizontal / right-to-left paging, mixed images and videos, looping, auto-saved progress |
 
 - Long-press any comic cover to manage favorites in bulk.
-- Use Settings → Appearance to choose a light or dark theme, customize the accent color, or change the number of cover columns.
+- Use Settings → Appearance to choose a light or dark theme, set the accent color manually or follow the system palette on Android 12 and later, and change the number of cover columns.
 - The interface defaults to Simplified Chinese. Choose Traditional Chinese, English, or Japanese under Settings → Preferences → Language.
 - If something goes wrong, enable "Diagnostic log" in Settings and pick a log folder, then share the log file with the developer after reproducing the issue.
 
