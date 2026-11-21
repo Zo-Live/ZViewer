@@ -47,6 +47,7 @@ class PreferenceStore(context: Context) {
         autoLockInterval = preferences.getInt("auto_lock_seconds", AutoLockInterval.FifteenSeconds.seconds).let { seconds ->
             AutoLockInterval.entries.firstOrNull { it.seconds == seconds } ?: AutoLockInterval.FifteenSeconds
         },
+        hideGalleryImages = preferences.getBoolean("hide_gallery_images", false),
     )
 
     fun saveSettings(settings: ReaderSettings) {
@@ -73,8 +74,15 @@ class PreferenceStore(context: Context) {
             .putBoolean("hide_recent_preview", settings.hideRecentPreview)
             .putBoolean("verify_after_background", settings.verifyAfterBackground)
             .putInt("auto_lock_seconds", settings.autoLockInterval.seconds)
+            .putBoolean("hide_gallery_images", settings.hideGalleryImages)
             .putInt("cache_limit_mib", CacheLimits.normalize(settings.cacheLimitMiB)).apply()
     }
+
+    internal fun galleryMarkers(): Set<String> =
+        preferences.getStringSet("gallery_markers", emptySet()).orEmpty().toSet()
+
+    internal fun saveGalleryMarkers(markers: Set<String>): Boolean =
+        preferences.edit().putStringSet("gallery_markers", markers.toSet()).commit()
 
     fun progress(bookId: String): ReadingProgress = ReadingProgress(
         preferences.getInt("page_$bookId", 0), preferences.getInt("total_$bookId", 0),

@@ -255,6 +255,9 @@ private fun AppPreferences(settings: ReaderSettings, onSettings: (ReaderSettings
 private fun SecuritySettings(state: LibraryState, model: LibraryViewModel) {
     val context = LocalContext.current
     val settings = state.settings
+    val galleryPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri != null) model.authorizeGalleryAccess(uri)
+    }
     fun canEnableVerification(enabled: Boolean): Boolean {
         if (!enabled || context.getSystemService(KeyguardManager::class.java).isDeviceSecure) return true
         Toast.makeText(context, R.string.verification_needs_screen_lock, Toast.LENGTH_SHORT).show()
@@ -283,6 +286,18 @@ private fun SecuritySettings(state: LibraryState, model: LibraryViewModel) {
                 AutoLockInterval.FiveMinutes to stringResource(R.string.auto_lock_five_minutes),
             ),
         ) { model.settings(settings.copy(autoLockInterval = it)) }
+    }
+    PreferenceSwitch(
+        stringResource(R.string.hide_gallery_images), stringResource(R.string.hide_gallery_images_hint),
+        settings.hideGalleryImages,
+    ) { enabled ->
+        val tree = state.treeUri?.let(Uri::parse)
+        if (enabled && tree != null && model.galleryNeedsWriteAccess(tree)) {
+            Toast.makeText(context, R.string.gallery_select_current_library, Toast.LENGTH_LONG).show()
+            galleryPicker.launch(tree)
+        } else {
+            model.settings(settings.copy(hideGalleryImages = enabled))
+        }
     }
 }
 

@@ -235,7 +235,11 @@
     <string name="auto_lock_fifteen_seconds">15 秒</string>
     <string name="auto_lock_one_minute">1 分鐘</string>
     <string name="auto_lock_five_minutes">5 分鐘</string>
+    <string name="hide_gallery_images">在系統相簿中隱藏圖片</string>
+    <string name="hide_gallery_images_hint">需要重新啟動裝置</string>
     <string name="verify_to_access">請驗證以存取</string>
     <string name="verify">進行驗證</string>
     <string name="verification_needs_screen_lock">請先在系統設定中設定螢幕鎖定</string>
+    <string name="gallery_select_current_library">請重新選擇目前的書庫目錄以授予寫入權限</string>
+    <string name="gallery_visibility_error">無法更新系統相簿中的圖片可見性，請檢查書庫目錄的寫入權限</string>
 </resources>

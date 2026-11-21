@@ -75,6 +75,7 @@ class SettingsMenuTest {
         setting("启动时验证").assertIsOff()
         setting("模糊预览").assertIsOff().performClick().assertIsOn()
         setting("切换至后台后重新验证").assertIsOff()
+        setting("在系统相册中隐藏图片").assertIsOff()
         rule.onNodeWithText("自动锁定间隔").assertDoesNotExist()
         assertTrue(store.settings().hideRecentPreview)
         assertEquals(AutoLockInterval.FifteenSeconds, store.settings().autoLockInterval)

@@ -77,6 +77,7 @@ data class ReaderSettings(
     val hideRecentPreview: Boolean = false,
     val verifyAfterBackground: Boolean = false,
     val autoLockInterval: AutoLockInterval = AutoLockInterval.FifteenSeconds,
+    val hideGalleryImages: Boolean = false,
 )
 
 data class PageSource(
