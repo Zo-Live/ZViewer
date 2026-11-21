@@ -306,7 +306,6 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     val pagerState = rememberPagerState { titles.size }
     val gridStates = titles.map { rememberLazyGridState() }
     val currentGrid = gridStates[pagerState.currentPage]
-    val scope = rememberCoroutineScope()
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
     var filter by rememberSaveable { mutableIntStateOf(0) }
@@ -342,7 +341,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                 val icons = listOf(Icons.Outlined.CollectionsBookmark, Icons.Outlined.BookmarkBorder, Icons.Outlined.History)
                 titles.forEachIndexed { index, title ->
                     NavigationBarItem(selected = pagerState.currentPage == index,
-                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                        onClick = { pagerState.requestScrollToPage(index) },
                         icon = { Icon(icons[index], null) }, label = { Text(title) })
                 }
             }

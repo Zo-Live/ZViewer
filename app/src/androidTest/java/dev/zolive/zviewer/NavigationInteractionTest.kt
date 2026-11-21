@@ -150,6 +150,22 @@ class NavigationInteractionTest {
         rule.onNodeWithText("选择书库目录").assertIsDisplayed()
     }
 
+    @Test fun bottomNavigationJumpsStraightToTheRequestedPage() {
+        store.clearProgress()
+        launch()
+        rule.mainClock.autoAdvance = false
+
+        tab("最近阅读").performClick()
+        rule.mainClock.advanceTimeBy(32)
+        tab("最近阅读").assertIsSelected()
+        rule.onNodeWithText("暂无最近阅读的漫画").assertIsDisplayed()
+
+        tab("书库").performClick()
+        rule.mainClock.advanceTimeBy(32)
+        tab("书库").assertIsSelected()
+        rule.onNodeWithText(book.title).assertIsDisplayed()
+    }
+
     @Test fun emptyIconsAlignAcrossTabsWithEnglishFiltersAndMessages() {
         store.saveFavorites(emptySet())
         store.saveSettings(store.settings().copy(language = AppLanguage.ENGLISH))
