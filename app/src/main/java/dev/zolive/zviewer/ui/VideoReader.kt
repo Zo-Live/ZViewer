@@ -407,7 +407,7 @@ internal fun VideoPage(
     state: VideoPlaybackState?, index: Int, session: BookSession, cover: Bitmap?,
     settings: ReaderSettings,
     videoPosition: (Int) -> Long, onProgress: (Int, Long) -> Unit,
-    foreground: Color, active: Boolean,
+    foreground: Color, active: Boolean, allowPlayback: Boolean = active,
     zoomSequence: Int, zoomAction: Int, onTap: () -> Unit, onEnded: (VideoPlaybackState) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -417,7 +417,7 @@ internal fun VideoPage(
         index + 1,
     )
     if (state != null) {
-        rememberVideoPlayback(state, session, index, active, active, settings, videoPosition, onProgress) {
+        rememberVideoPlayback(state, session, index, active, allowPlayback, settings, videoPosition, onProgress) {
             onEnded(state)
         }
     }

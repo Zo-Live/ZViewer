@@ -78,6 +78,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import dev.zolive.zviewer.LibraryState
 import dev.zolive.zviewer.LibraryViewModel
 import dev.zolive.zviewer.R
@@ -88,6 +89,7 @@ import dev.zolive.zviewer.data.ReadingProgress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.core.view.WindowCompat
 import java.util.Locale
@@ -158,9 +160,29 @@ private fun Modifier.pageBackSwipe(
 @Composable
 fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     val activity = LocalActivity.current
+    val session = state.session
+    val startsOnVideo = remember(session, state.initialPage) {
+        session?.pages?.getOrNull(state.initialPage)?.isVideo == true
+    }
+    var videoEntryReady by remember(session) { mutableStateOf(!startsOnVideo) }
+    val waitingForVideo = session != null && !videoEntryReady
+    LaunchedEffect(waitingForVideo) {
+        if (waitingForVideo) {
+            delay(3_000)
+            videoEntryReady = true
+        }
+    }
+    val openingRequest = state.openingRequest
+    var showOpening by remember(openingRequest) { mutableStateOf(false) }
+    LaunchedEffect(openingRequest) {
+        if (openingRequest != null) {
+            delay(250)
+            showOpening = true
+        }
+    }
     val lightBars = MaterialTheme.colorScheme.surface.luminance() > .5f
     SideEffect {
-        if (state.session == null && activity != null) {
+        if ((session == null || waitingForVideo) && activity != null) {
             WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
                 isAppearanceLightStatusBars = lightBars
                 isAppearanceLightNavigationBars = lightBars
@@ -202,15 +224,22 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     }
     val chooseLibrary = { picker.launch(state.treeUri?.let(Uri::parse)) }
     Surface(Modifier.fillMaxSize()) {
-        when {
-            state.session != null -> ReaderScreen(state.session, state.initialPage, state.settings,
-                model.repository, model::settings, { page -> model.saveProgress(state.session, page) },
-                { page -> model.videoPosition(state.session, page) },
-                { page, position -> model.saveVideoProgress(state.session, page, position) }, model::closeBook)
-            else -> {
+        Box(Modifier.fillMaxSize()) {
+            if (session != null) {
+                key(session) {
+                    ReaderScreen(session, state.initialPage, state.settings,
+                        model.repository, model::settings, { index -> model.saveProgress(session, index) },
+                        { index -> model.videoPosition(session, index) },
+                        { index, position -> model.saveVideoProgress(session, index, position) },
+                        onBack = model::closeBook,
+                        visible = !waitingForVideo,
+                        onVideoEntryReady = { videoEntryReady = true })
+                }
+            }
+            if (session == null || waitingForVideo) {
                 val motion = transition
                 val layers = if (motion == null) listOf(page) else listOf(motion.parent, motion.child)
-                Box(Modifier.fillMaxSize().clipToBounds().background(MaterialTheme.colorScheme.background)
+                Box(Modifier.fillMaxSize().zIndex(1f).clipToBounds().background(MaterialTheme.colorScheme.background)
                     .onSizeChanged { viewportWidth = it.width.toFloat().coerceAtLeast(1f) }) {
                     layers.forEach { layer ->
                         key(layer) {
@@ -273,7 +302,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                             }
                         }
                     }
-                    if (motion != null && dragProgress == null) {
+                    if (waitingForVideo || motion != null && dragProgress == null) {
                         Box(Modifier.matchParentSize().pointerInput(Unit) {
                             awaitPointerEventScope {
                                 while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
@@ -281,12 +310,13 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                         })
                     }
                 }
-                BackHandler(enabled = page != AppPage.Library, onBack = ::goBack)
+                BackHandler(enabled = page != AppPage.Library && !waitingForVideo, onBack = ::goBack)
             }
+            BackHandler(enabled = waitingForVideo, onBack = model::closeBook)
         }
         UpdateFeedback(state, model)
     }
-    if (state.opening != null) {
+    if (showOpening && state.opening != null) {
         AlertDialog(onDismissRequest = model::cancelOpen, icon = { CircularProgressIndicator(Modifier.size(36.dp)) },
             title = { Text(stringResource(R.string.opening_reader)) }, text = { Text(state.opening) },
             confirmButton = { TextButton(onClick = model::cancelOpen) { Text(stringResource(R.string.cancel)) } })

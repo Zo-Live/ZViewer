@@ -89,12 +89,39 @@ class NavigationInteractionTest {
             rule.waitUntil(10_000) {
                 !firstCache.exists() && resolver.call(authority, "enteredOpen", secondId, null)?.getBoolean("entered") == true
             }
-            rule.onNodeWithText("正在准备 PDF", substring = true).assertExists()
+            rule.waitUntil(5_000) {
+                rule.onAllNodesWithText("正在准备 PDF", substring = true).fetchSemanticsNodes().isNotEmpty()
+            }
             resolver.call(authority, "releaseOpen", secondId, null)
             rule.waitUntil(10_000) { model.state.value.session?.book == second }
         } finally {
             resolver.call(authority, "releaseOpen", firstId, null)
             resolver.call(authority, "releaseOpen", secondId, null)
+        }
+    }
+
+    @Test fun openingVideoKeepsTheLibraryUntilTheFirstFrame() {
+        val authority = "dev.zolive.zviewer.test.documents"
+        val tree = DocumentsContract.buildTreeDocumentUri(authority, "root/formats")
+        val folderId = "root/formats/video-folder"
+        val firstVideoId = "$folderId/video2.mp4"
+        val folder = Book("video-entry", DocumentsContract.buildDocumentUriUsingTree(tree, folderId).toString(),
+            "视频首帧测试", "video-folder", 0, 0)
+        val resolver = context.contentResolver
+        resolver.call(authority, "blockOpen", firstVideoId, null)
+        try {
+            launch()
+            scenario.onActivity { ViewModelProvider(it)[LibraryViewModel::class.java].open(folder) }
+            rule.waitUntil(5_000) {
+                resolver.call(authority, "enteredOpen", firstVideoId, null)?.getBoolean("entered") == true
+            }
+            rule.onNodeWithTag("library-screen").assertIsDisplayed()
+            resolver.call(authority, "releaseOpen", firstVideoId, null)
+            rule.waitUntil(10_000) {
+                rule.onAllNodesWithTag("library-screen").fetchSemanticsNodes().isEmpty()
+            }
+        } finally {
+            resolver.call(authority, "releaseOpen", firstVideoId, null)
         }
     }
 

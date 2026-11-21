@@ -43,6 +43,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.hideFromAccessibility
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -75,7 +77,8 @@ import kotlin.math.roundToInt
 @Composable
 fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSettings, repository: BookRepository,
     onSettings: (ReaderSettings) -> Unit, onProgress: (Int) -> Unit,
-    videoPosition: (Int) -> Long = { 0L }, onVideoProgress: (Int, Long) -> Unit = { _, _ -> }, onBack: () -> Unit) {
+    videoPosition: (Int) -> Long = { 0L }, onVideoProgress: (Int, Long) -> Unit = { _, _ -> }, onBack: () -> Unit,
+    visible: Boolean = true, onVideoEntryReady: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
     var currentPage by rememberSaveable(session.book.id) { mutableIntStateOf(initialPage.coerceIn(session.pages.indices)) }
     var controls by rememberSaveable(session.book.id) { mutableStateOf(false) }
@@ -126,7 +129,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             "loop=${settings.loopMode} preview=${settings.videoPreview}")
     }
 
-    PredictiveBackHandler(enabled = !preferences && !jumpDialog) { events ->
+    PredictiveBackHandler(enabled = visible && !preferences && !jumpDialog) { events ->
         try {
             events.collect { backProgress = it.progress }
             onProgress(currentPage)
@@ -134,19 +137,21 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         } catch (error: CancellationException) { backProgress = 0f }
     }
 
-    DisposableEffect(settings.keepScreenOn) {
-        if (settings.keepScreenOn) activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    DisposableEffect(visible, settings.keepScreenOn) {
+        if (visible && settings.keepScreenOn) activity.window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         else activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         onDispose { activity.window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
     }
     val lightSystemBars = if (controls) MaterialTheme.colorScheme.surface.luminance() > .5f else !settings.readerDark
-    DisposableEffect(controls, lightSystemBars) {
-        val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        controller.isAppearanceLightStatusBars = lightSystemBars
-        controller.isAppearanceLightNavigationBars = lightSystemBars
-        if (controls) controller.show(WindowInsetsCompat.Type.systemBars()) else controller.hide(WindowInsetsCompat.Type.systemBars())
-        onDispose { controller.show(WindowInsetsCompat.Type.systemBars()) }
+    if (visible) {
+        DisposableEffect(controls, lightSystemBars) {
+            val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.isAppearanceLightStatusBars = lightSystemBars
+            controller.isAppearanceLightNavigationBars = lightSystemBars
+            if (controls) controller.show(WindowInsetsCompat.Type.systemBars()) else controller.hide(WindowInsetsCompat.Type.systemBars())
+            onDispose { controller.show(WindowInsetsCompat.Type.systemBars()) }
+        }
     }
 
     LaunchedEffect(pagerReading, paging) {
@@ -187,9 +192,9 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             jump(currentPage + direction)
         }
     }
-    DisposableEffect(activity, active, settings.volumeKeyPaging, preferences, jumpDialog) {
+    DisposableEffect(activity, active, visible, settings.volumeKeyPaging, preferences, jumpDialog) {
         val mainActivity = activity as? MainActivity
-        if (active && settings.volumeKeyPaging && !preferences && !jumpDialog) {
+        if (visible && active && settings.volumeKeyPaging && !preferences && !jumpDialog) {
             mainActivity?.onVolumePage = { volumePage(it) }
         }
         onDispose { mainActivity?.onVolumePage = null }
@@ -206,7 +211,8 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         }
     }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)
+        .then(if (visible) Modifier else Modifier.semantics { hideFromAccessibility() })) {
         Box(Modifier.fillMaxSize().graphicsLayer {
             translationX = size.width * backProgress * .24f
             scaleX = 1f - backProgress * .08f
@@ -216,7 +222,9 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             if (videoBook) {
                 val itemContent: @Composable (Int) -> Unit = { item ->
                     VideoPagerPage(item, session, paging, pagerState, repository, videoPool!!, videoCovers,
-                        active, settings, foreground, videoPosition, onVideoProgress, zoomSequence, zoomAction, zoomPage,
+                        active, allowPlayback = visible, settings, foreground,
+                        videoPosition, onVideoProgress, zoomSequence, zoomAction, zoomPage,
+                        onEntryReady = if (visible) null else onVideoEntryReady,
                         onTap = { controls = !controls }, onEnded = onVideoEnded)
                 }
                 if (verticalReading) {
@@ -359,9 +367,10 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
 private fun VideoPagerPage(
     item: Int, session: BookSession, paging: ReaderPaging, pagerState: PagerState, repository: BookRepository,
     pool: VideoPlaybackPool, covers: VideoCoverCache,
-    active: Boolean, settings: ReaderSettings, foreground: Color,
+    active: Boolean, allowPlayback: Boolean, settings: ReaderSettings, foreground: Color,
     videoPosition: (Int) -> Long, onVideoProgress: (Int, Long) -> Unit,
-    zoomSequence: Int, zoomAction: Int, zoomPage: Int, onTap: () -> Unit, onEnded: (VideoPlaybackState) -> Unit,
+    zoomSequence: Int, zoomAction: Int, zoomPage: Int, onEntryReady: (() -> Unit)?,
+    onTap: () -> Unit, onEnded: (VideoPlaybackState) -> Unit,
 ) {
     val index = paging.pageAt(item)
     val page = session.pages[index]
@@ -373,8 +382,16 @@ private fun VideoPagerPage(
         val cover = rememberVideoCover(session, index, repository, covers)
         val state = if (neighbor) remember(item) { pool.acquire(item) } else null
         DisposableEffect(state) { onDispose { if (state != null) pool.release(item) } }
+        val frameReady = settled && state != null && (state.failed || state.firstFrameReady && state.surfaceAttached)
+        val entryReady = onEntryReady != null && frameReady
+        LaunchedEffect(entryReady) {
+            if (entryReady) {
+                withFrameNanos { }
+                onEntryReady?.invoke()
+            }
+        }
         VideoPage(state, index, session, cover, settings,
-            videoPosition, onVideoProgress, foreground, active && settled,
+            videoPosition, onVideoProgress, foreground, active && settled, allowPlayback,
             sequence, zoomAction, onTap = onTap, onEnded = onEnded)
     } else {
         ReaderPage(session, index, repository, vertical = false, active = active && settled,
