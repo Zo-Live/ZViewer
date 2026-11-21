@@ -101,6 +101,7 @@
     <string name="reader_rtl">右から左にページをめくる</string>
     <string name="keep_screen_on">閲覧中は画面を点灯</string>
     <string name="volume_key_paging">音量キーでページをめくる</string>
+    <string name="double_tap_zoom">ダブルタップで拡大・縮小</string>
     <string name="loop_single_video">動画を個別にループ再生</string>
     <string name="loop_single_video_hint">再生が終わると同じ動画を最初から再生します</string>
     <string name="video_preview">動画をプレビューで表示</string>
@@ -173,7 +174,9 @@
     <string name="jump">移動</string>
     <string name="image_error">このページをデコードできません。画像が破損していないことと、端末が形式に対応していることを確認してください。</string>
     <string name="image_accessibility">%1$d ページ。タップで操作ボタンを表示、ダブルタップで拡大・縮小します。</string>
+    <string name="image_accessibility_without_zoom">%1$d ページ。タップで操作ボタンを表示します。</string>
     <string name="video_accessibility">動画 %1$d。タップで操作ボタンを表示、ダブルタップで拡大・縮小します。</string>
+    <string name="video_accessibility_without_zoom">動画 %1$d。タップで操作ボタンを表示します。</string>
     <string name="retry">再試行</string>
     <string name="show_reader_controls">閲覧操作ボタンを表示</string>
     <string name="video_error">動画を再生できません。ファイルを読み込めないか、端末がコーデックに対応していない可能性があります。</string>

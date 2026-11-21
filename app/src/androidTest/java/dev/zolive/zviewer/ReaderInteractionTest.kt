@@ -33,7 +33,8 @@ class ReaderInteractionTest {
 
     private fun open(video: Boolean = true, vertical: Boolean = true, loop: Boolean = true,
         rightToLeft: Boolean = false, preview: Boolean = true, initialPage: Int = 0, archive: Boolean = false,
-        mixed: Boolean = false, mixedVideos: Boolean = false, names: List<String>? = null) {
+        mixed: Boolean = false, mixedVideos: Boolean = false, names: List<String>? = null,
+        doubleTapZoom: Boolean = true) {
         val context = rule.activity
         val assets = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().context.assets
         val names = names ?: if (mixed && mixedVideos) listOf("page1.png", "video-folder/video2.mp4", "video-folder/video10.mp4", "page2.png")
@@ -55,7 +56,7 @@ class ReaderInteractionTest {
         currentPage = initialPage
         rule.setContent {
             var settings by remember { mutableStateOf(ReaderSettings(vertical = vertical, loopMode = loop,
-                rightToLeft = rightToLeft, videoPreview = preview)) }
+                rightToLeft = rightToLeft, videoPreview = preview, doubleTapZoom = doubleTapZoom)) }
             ReaderScreen(session, initialPage, settings, repository,
                 onSettings = { settings = it }, onProgress = { currentPage = it },
                 videoPosition = { saved[it] ?: 0L }, onVideoProgress = { page, position -> saved[page] = position }, onBack = {})
@@ -376,6 +377,18 @@ class ReaderInteractionTest {
             rule.runOnUiThread { reached = kotlin.math.abs(currentVideoView().playerView.scaleX - scale) < .01f }
             reached
         }
+    }
+
+    @Test fun disablingDoubleTapZoomStillAllowsVideoToolbarZoom() {
+        open(doubleTapZoom = false)
+        rule.onRoot().performTouchInput { doubleClick(Offset(centerX, height * .35f)) }
+        Thread.sleep(300)
+        rule.runOnIdle { assertEquals(1f, currentVideoView().playerView.scaleX, .01f) }
+        toggleControls()
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.zoom_in_video)).performClick()
+        waitForVideoZoom(1.5f)
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.zoom_out_video)).performClick()
+        waitForVideoZoom(1f)
     }
 
     @Test fun progressControlsSeekAndHideTogether() {

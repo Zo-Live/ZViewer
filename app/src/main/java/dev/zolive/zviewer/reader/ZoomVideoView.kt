@@ -65,8 +65,10 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         override fun onDown(event: MotionEvent): Boolean = true
         override fun onSingleTapConfirmed(event: MotionEvent): Boolean { performClick(); return true }
         override fun onDoubleTap(event: MotionEvent): Boolean {
-            multiTouch = true
-            animateZoom(if ((zoomAnimator.target ?: zoom) > 1.1f) 1f else 2.5f, event.x, event.y)
+            if (doubleTapZoomEnabled) {
+                multiTouch = true
+                animateZoom(if ((zoomAnimator.target ?: zoom) > 1.1f) 1f else 2.5f, event.x, event.y)
+            }
             return true
         }
         override fun onScroll(first: MotionEvent?, second: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
@@ -79,6 +81,12 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
             return true
         }
     })
+    var doubleTapZoomEnabled = true
+        set(value) {
+            if (field == value) return
+            field = value
+            scaleDetector.isQuickScaleEnabled = value
+        }
 
     init {
         addView(coverView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
@@ -100,7 +108,6 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         offsetX = 0f
         offsetY = 0f
         updateTransform()
-        contentDescription = context.getString(R.string.video_accessibility, index + 1)
     }
 
     /** 设置或清除首帧封面；同一 Bitmap 重复设置时不做无谓刷新。 */

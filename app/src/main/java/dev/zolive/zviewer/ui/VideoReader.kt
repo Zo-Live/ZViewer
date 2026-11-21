@@ -372,6 +372,10 @@ internal fun VideoPage(
     modifier: Modifier = Modifier,
 ) {
     val viewRef = remember { mutableStateOf<ZoomVideoView?>(null) }
+    val description = stringResource(
+        if (settings.doubleTapZoom) R.string.video_accessibility else R.string.video_accessibility_without_zoom,
+        index + 1,
+    )
     if (state != null) {
         rememberVideoPlayback(state, session, index, active, active, settings, videoPosition, onProgress) {
             onEnded(state)
@@ -392,6 +396,8 @@ internal fun VideoPage(
                 view.bindPage(index)
                 view.bindCover(cover)
                 view.onTap = onTap
+                view.doubleTapZoomEnabled = settings.doubleTapZoom
+                view.contentDescription = description
                 if (state != null) {
                     state.bindOwner(view, active = active)
                     view.onLayoutReady = { ready -> state.surfaceStateChanged(view, ready) }

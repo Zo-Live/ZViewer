@@ -234,6 +234,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         val current by remember(item) { derivedStateOf { item == listState.firstVisibleItemIndex } }
                         val zoomTarget = if (index == zoomPage && !paging.looping) visible else current && index == zoomPage
                         ReaderPage(session, index, repository, vertical = true, active = active && visible,
+                            doubleTapZoomEnabled = settings.doubleTapZoom,
                             foreground = foreground, zoomSequence = if (zoomTarget) zoomSequence else 0,
                             zoomAction = zoomAction, initialRatio = ratios[index], onRatio = { ratios[index] = it },
                             loadEnabled = initialImageLoaded || current, onLoaded = onInitialImageLoaded, pdfPages = pdfPages,
@@ -245,6 +246,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                     beyondViewportPageCount = 1, key = { "${session.book.cacheKey}-$it" }) { item ->
                     val index = paging.pageAt(item)
                     ReaderPage(session, index, repository, vertical = false, active = active && pagerState.currentPage == item,
+                        doubleTapZoomEnabled = settings.doubleTapZoom,
                         foreground = foreground, zoomSequence = if (item == pagerState.currentPage && index == zoomPage) zoomSequence else 0,
                         zoomAction = zoomAction, loadEnabled = initialImageLoaded || pagerState.currentPage == item,
                         onLoaded = onInitialImageLoaded, pdfPages = pdfPages, onTap = { controls = !controls })
@@ -376,6 +378,7 @@ private fun VideoPagerPage(
             sequence, zoomAction, onTap = onTap, onEnded = onEnded)
     } else {
         ReaderPage(session, index, repository, vertical = false, active = active && settled,
+            doubleTapZoomEnabled = settings.doubleTapZoom,
             foreground = foreground, zoomSequence = sequence,
             zoomAction = zoomAction, onTap = onTap)
     }
@@ -385,6 +388,7 @@ private val imageDecodeDispatcher = Dispatchers.IO.limitedParallelism(2)
 
 @Composable
 private fun ReaderPage(session: BookSession, index: Int, repository: BookRepository, vertical: Boolean, active: Boolean,
+    doubleTapZoomEnabled: Boolean,
     foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float? = null,
     onRatio: (Float) -> Unit = {}, loadEnabled: Boolean = true, onLoaded: () -> Unit = {},
     pdfPages: SnapshotStateMap<Int, Result<Bitmap>>? = null, onTap: () -> Unit) {
@@ -393,7 +397,7 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
         val resources = LocalContext.current.resources
         val image = remember(bitmap, resources) { bitmap?.let { BitmapDrawable(resources, it) } }
         ReaderPageContent(index, image, pdfPages[index]?.isFailure == true, vertical, active,
-            foreground, zoomSequence, zoomAction, initialRatio, onRatio, onTap, onRetry = { pdfPages.remove(index) })
+            doubleTapZoomEnabled, foreground, zoomSequence, zoomAction, initialRatio, onRatio, onTap, onRetry = { pdfPages.remove(index) })
         return
     }
     val viewportWidth = LocalWindowInfo.current.containerSize.width
@@ -416,15 +420,19 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
     LaunchedEffect(drawable, failure) {
         if (drawable != null || failure) onLoaded()
     }
-    ReaderPageContent(index, drawable, failure, vertical, active, foreground, zoomSequence, zoomAction,
+    ReaderPageContent(index, drawable, failure, vertical, active, doubleTapZoomEnabled, foreground, zoomSequence, zoomAction,
         initialRatio, onRatio, onTap, onRetry = { retry++ })
 }
 
 @Composable
 private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, vertical: Boolean, active: Boolean,
+    doubleTapZoomEnabled: Boolean,
     foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float?, onRatio: (Float) -> Unit,
     onTap: () -> Unit, onRetry: () -> Unit) {
-    val imageDescription = stringResource(R.string.image_accessibility, index + 1)
+    val imageDescription = stringResource(
+        if (doubleTapZoomEnabled) R.string.image_accessibility else R.string.image_accessibility_without_zoom,
+        index + 1,
+    )
     val ratio = image?.let { it.intrinsicWidth.toFloat() / it.intrinsicHeight.coerceAtLeast(1) } ?: initialRatio ?: .70f
     LaunchedEffect(image) { if (image != null) onRatio(ratio) }
     val layout = if (vertical) Modifier.fillMaxWidth().aspectRatio(ratio.coerceAtLeast(.03f)) else Modifier.fillMaxSize()
@@ -434,6 +442,7 @@ private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, ve
                 onRelease = ZoomImageView::clearImage,
                 update = { view ->
                     view.onTap = onTap
+                    view.doubleTapZoomEnabled = doubleTapZoomEnabled
                     view.bind(image, imageDescription, active)
                     if (zoomSequence > 0) view.command(zoomSequence, zoomAction)
                 })

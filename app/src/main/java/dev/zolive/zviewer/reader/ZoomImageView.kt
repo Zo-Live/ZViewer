@@ -41,10 +41,18 @@ class ZoomImageView(context: Context) : ImageView(context) {
         override fun onDown(event: MotionEvent): Boolean = true
         override fun onSingleTapConfirmed(event: MotionEvent): Boolean { performClick(); return true }
         override fun onDoubleTap(event: MotionEvent): Boolean {
-            animateZoom(if ((zoomAnimator.target ?: zoom) > 1.1f) 1f else 2.5f, event.x, event.y)
+            if (doubleTapZoomEnabled) {
+                animateZoom(if ((zoomAnimator.target ?: zoom) > 1.1f) 1f else 2.5f, event.x, event.y)
+            }
             return true
         }
     })
+    var doubleTapZoomEnabled = true
+        set(value) {
+            if (field == value) return
+            field = value
+            scaleDetector.isQuickScaleEnabled = value
+        }
 
     init {
         scaleType = ScaleType.MATRIX

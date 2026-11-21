@@ -165,6 +165,36 @@ class SettingsMenuTest {
         awaitSetting("语言", "简体中文")
     }
 
+    @Test fun readingSettingsFollowModeAndPersistSwitches() {
+        setting("阅读").performClick()
+        val mode = setting("阅读模式")
+        val direction = setting("从右向左翻页")
+        val volume = setting("使用音量键翻页")
+        val zoom = setting("双击以放缩")
+        direction.assertDoesNotExist()
+        volume.assertIsOff()
+        zoom.assertIsOn()
+        mode.performClick()
+        option("水平翻页").performClick()
+        direction.assertIsOff()
+        val rows = listOf(mode, direction, setting("阅读时屏幕常亮"), volume, zoom,
+            setting("深色阅读背景")).map { it.fetchSemanticsNode().boundsInRoot }
+        rows.zipWithNext().forEach { (upper, lower) -> assertTrue(upper.bottom <= lower.top) }
+        rule.onNodeWithText("适用于右开本的水平阅读模式").assertDoesNotExist()
+        rule.onNodeWithText("离开阅读器后恢复系统设置").assertDoesNotExist()
+        direction.performClick().assertIsOn()
+        volume.performClick().assertIsOn()
+        zoom.performClick().assertIsOff()
+        mode.performClick()
+        option("垂直连续").performClick()
+        direction.assertDoesNotExist()
+        mode.performClick()
+        option("水平翻页").performClick()
+        direction.assertIsOn()
+        assertTrue(store.settings().volumeKeyPaging)
+        assertFalse(store.settings().doubleTapZoom)
+    }
+
     @Test fun customThemeColorControlsStayInSyncAndOnlyApplySaves() {
         setting("外观").performClick()
         setting("应用主题").performClick()

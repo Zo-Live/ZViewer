@@ -26,6 +26,7 @@ class PreferenceStore(context: Context) {
         rightToLeft = preferences.getBoolean("rtl", false),
         keepScreenOn = preferences.getBoolean("keep_screen", true),
         volumeKeyPaging = preferences.getBoolean("volume_key_paging", false),
+        doubleTapZoom = preferences.getBoolean("double_tap_zoom", true),
         gridColumns = preferences.getInt("columns", 3).coerceIn(2, 5),
         showFileType = preferences.getBoolean("show_file_type", false),
         showFavoriteIcon = preferences.getBoolean("show_favorite_icon", true),
@@ -57,6 +58,7 @@ class PreferenceStore(context: Context) {
             .putBoolean("reader_dark", settings.readerDark).putBoolean("vertical", settings.vertical)
             .putBoolean("rtl", settings.rightToLeft).putBoolean("keep_screen", settings.keepScreenOn)
             .putBoolean("volume_key_paging", settings.volumeKeyPaging)
+            .putBoolean("double_tap_zoom", settings.doubleTapZoom)
             .putInt("columns", settings.gridColumns)
             .putBoolean("show_file_type", settings.showFileType)
             .putBoolean("show_favorite_icon", settings.showFavoriteIcon)

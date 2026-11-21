@@ -101,6 +101,7 @@
     <string name="reader_rtl">從右向左翻頁</string>
     <string name="keep_screen_on">閱讀時保持螢幕開啟</string>
     <string name="volume_key_paging">使用音量鍵翻頁</string>
+    <string name="double_tap_zoom">點兩下以縮放</string>
     <string name="loop_single_video">單部影片循環播放</string>
     <string name="loop_single_video_hint">影片播放結束後停留在目前影片並重新播放</string>
     <string name="video_preview">影片預設僅預覽</string>
@@ -173,7 +174,9 @@
     <string name="jump">跳轉</string>
     <string name="image_error">暫時無法解碼這一頁。請確認圖片完整，且裝置支援此編碼。</string>
     <string name="image_accessibility">第 %1$d 頁，輕點顯示閱讀控制，點兩下縮放</string>
+    <string name="image_accessibility_without_zoom">第 %1$d 頁，輕點顯示閱讀控制</string>
     <string name="video_accessibility">第 %1$d 部影片，輕點顯示閱讀控制，點兩下縮放</string>
+    <string name="video_accessibility_without_zoom">第 %1$d 部影片，輕點顯示閱讀控制</string>
     <string name="retry">重試</string>
     <string name="show_reader_controls">顯示閱讀控制</string>
     <string name="video_error">無法播放影片，檔案可能無法讀取，或裝置不支援此編碼。</string>
