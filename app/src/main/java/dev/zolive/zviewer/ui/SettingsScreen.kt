@@ -631,9 +631,11 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
         selectedValue = settings.vertical,
         options = listOf(true to stringResource(R.string.reading_vertical), false to stringResource(R.string.reading_horizontal)),
     ) { onSettings(settings.copy(vertical = it)) }
+    if (!settings.vertical) {
+        PreferenceSwitch(stringResource(R.string.reader_rtl), checked = settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }
+    }
+    PreferenceSwitch(stringResource(R.string.keep_screen_on), checked = settings.keepScreenOn) { onSettings(settings.copy(keepScreenOn = it)) }
     PreferenceSwitch(stringResource(R.string.reader_dark), stringResource(R.string.reader_dark_hint), settings.readerDark) { onSettings(settings.copy(readerDark = it)) }
-    PreferenceSwitch(stringResource(R.string.reader_rtl), stringResource(R.string.reader_rtl_hint), settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }
-    PreferenceSwitch(stringResource(R.string.keep_screen_on), stringResource(R.string.keep_screen_on_hint), settings.keepScreenOn) { onSettings(settings.copy(keepScreenOn = it)) }
     PreferenceSwitch(stringResource(R.string.loop_single_video), stringResource(R.string.loop_single_video_hint), settings.videoLoopSingle) { onSettings(settings.copy(videoLoopSingle = it)) }
     PreferenceSwitch(stringResource(R.string.video_preview), stringResource(R.string.video_preview_hint), settings.videoPreview) { onSettings(settings.copy(videoPreview = it)) }
     PreferenceSwitch(stringResource(R.string.loop_mode), stringResource(R.string.loop_mode_hint), settings.loopMode) { onSettings(settings.copy(loopMode = it)) }
