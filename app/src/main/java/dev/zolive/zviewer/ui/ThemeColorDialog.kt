@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -67,10 +68,18 @@ import kotlin.math.sin
 private val PickerWidth = 192.dp
 
 @Composable
-internal fun ThemeColorDialog(accent: Long, dark: Boolean, onDismiss: () -> Unit, onApply: (Long) -> Unit) {
-    var rgb by remember { mutableIntStateOf(accent.toInt()) }
-    var hsv by remember { mutableStateOf(Hsv.fromRgb(rgb)) }
-    var hex by remember { mutableStateOf(rgb.toHex()) }
+internal fun ThemeColorDialog(
+    accent: Long,
+    dark: Boolean,
+    dynamicColor: Boolean,
+    onDismiss: () -> Unit,
+    onApply: (Long) -> Unit,
+) {
+    val systemScheme = if (dynamicColor) MaterialTheme.colorScheme else null
+    val initialRgb = systemScheme?.primary?.toArgb() ?: accent.toInt()
+    var rgb by remember(initialRgb) { mutableIntStateOf(initialRgb) }
+    var hsv by remember(initialRgb) { mutableStateOf(Hsv.fromRgb(initialRgb)) }
+    var hex by remember(initialRgb) { mutableStateOf(initialRgb.toHex()) }
     val valid = hex.length == 6
     val seed = rgb.toLong() and 0xFFFFFFFFL
 
@@ -93,7 +102,8 @@ internal fun ThemeColorDialog(accent: Long, dark: Boolean, onDismiss: () -> Unit
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    val scheme = remember(seed, dark) { themeColorScheme(seed, dark) }
+                    val scheme = if (systemScheme != null && rgb == initialRgb) systemScheme
+                        else remember(seed, dark) { themeColorScheme(seed, dark) }
                     PalettePreview(scheme, stringResource(if (dark) R.string.theme_dark else R.string.theme_light))
                     ColorWheel(hsv, rgb) { next ->
                         hsv = next
@@ -128,7 +138,9 @@ internal fun ThemeColorDialog(accent: Long, dark: Boolean, onDismiss: () -> Unit
             }
         },
         confirmButton = {
-            TextButton(enabled = valid, onClick = { onApply(seed) }) { Text(stringResource(R.string.apply)) }
+            TextButton(enabled = valid, onClick = {
+                if (dynamicColor && rgb == initialRgb) onDismiss() else onApply(seed)
+            }) { Text(stringResource(R.string.apply)) }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }

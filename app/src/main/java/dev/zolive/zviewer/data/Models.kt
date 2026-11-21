@@ -68,6 +68,7 @@ data class ReaderSettings(
     val clearCacheOnTaskRemoval: Boolean = false,
     val clearProgressOnTaskRemoval: Boolean = false,
     val language: AppLanguage = AppLanguage.SIMPLIFIED_CHINESE,
+    val dynamicColor: Boolean = false,
 )
 
 data class PageSource(

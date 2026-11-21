@@ -7,6 +7,7 @@
     <string name="theme_system">跟隨系統</string>
     <string name="theme_light">淺色</string>
     <string name="theme_dark">深色</string>
+    <string name="dynamic_color">動態取色</string>
     <string name="theme_color">主題色彩</string>
     <string name="color_moss">苔綠</string>
     <string name="color_mist">霧藍</string>

@@ -7,6 +7,7 @@
     <string name="theme_system">システムに合わせる</string>
     <string name="theme_light">ライト</string>
     <string name="theme_dark">ダーク</string>
+    <string name="dynamic_color">ダイナミックカラー</string>
     <string name="theme_color">テーマカラー</string>
     <string name="color_moss">モスグリーン</string>
     <string name="color_mist">ミストブルー</string>

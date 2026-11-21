@@ -1,7 +1,14 @@
 package dev.zolive.zviewer
 
 import android.content.Context
+import android.os.Build
+import androidx.compose.material3.ColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -168,6 +175,137 @@ class SettingsMenuTest {
         rule.onNodeWithContentDescription("浅色").assertDoesNotExist()
         rule.onNodeWithContentDescription("深色").assertIsDisplayed()
     }
+
+    @Test fun presetsStaySelectableWithDynamicColor() {
+        setting("外观").performClick()
+        val toggle = setting("动态取色").assertIsOff()
+        val presets = listOf(
+            0xFF49684D to "苔绿", 0xFF476A8A to "雾蓝", 0xFF79618C to "藤紫",
+            0xFF9A5357 to "蔷薇", 0xFF8B683E to "琥珀",
+        ).associate { (color, name) -> color to rule.onNodeWithContentDescription("主题颜色：$name") }
+        presets.getValue(0xFF49684D).assertIsSelected()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            toggle.assertIsNotEnabled()
+            presets.getValue(0xFF476A8A).performClick().assertIsSelected()
+            return
+        }
+
+        setting("应用主题").performClick()
+        option("浅色").performClick()
+        val primary = dynamicLightColorScheme(context).primary.toArgb().toLong() and 0xFFFFFFFFL
+        val (manualColor, manualPreset) = presets.entries.first { it.key != primary }
+        manualPreset.performClick()
+        toggle.performClick().assertIsOn()
+        presets.forEach { (color, preset) ->
+            preset.assertIsEnabled().assert(SemanticsMatcher.expectValue(SemanticsProperties.Selected, color == primary))
+        }
+        assertEquals(manualColor, store.settings().accent)
+        toggle.performClick().assertIsOff()
+        manualPreset.assertIsSelected()
+
+        presets[primary]?.let { matchingPreset ->
+            matchingPreset.performClick().assertIsSelected()
+            toggle.assertIsOff().performClick().assertIsOn()
+            matchingPreset.assertIsSelected()
+            toggle.performClick().assertIsOff()
+            matchingPreset.assertIsSelected()
+
+            manualPreset.performClick()
+            toggle.performClick().assertIsOn()
+            matchingPreset.performClick().assertIsSelected()
+            toggle.assertIsOn().performClick().assertIsOff()
+            matchingPreset.assertIsSelected()
+        }
+
+        val (overrideColor, overridePreset) = presets.entries.first { it.key != primary && it.key != manualColor }
+        toggle.performClick().assertIsOn()
+        overridePreset.performClick().assertIsSelected()
+        toggle.assertIsOff()
+        assertEquals(overrideColor, store.settings().accent)
+        assertFalse(store.settings().dynamicColor)
+    }
+
+    @Test fun dynamicColorPickerStartsFromTheSystemSchemeAndOnlyAppliesChangedColors() {
+        setting("外观").performClick()
+        val toggle = setting("动态取色").assertIsOff()
+        val custom = rule.onNodeWithContentDescription("自定义主题颜色")
+        val mist = rule.onNodeWithContentDescription("主题颜色：雾蓝")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            toggle.assertIsNotEnabled()
+            custom.assertIsDisplayed()
+            return
+        }
+
+        mist.performClick().assertIsSelected()
+        val manualAccent = store.settings().accent
+        setting("应用主题").performClick()
+        option("浅色").performClick()
+        toggle.performClick().assertIsOn()
+        assertTrue(store.settings().dynamicColor)
+        custom.performClick()
+        assertSystemPalette("浅色", dynamicLightColorScheme(context))
+        val hex = rule.onNode(hasSetTextAction())
+        val apply = rule.onNodeWithText("应用")
+        val cancel = rule.onNodeWithText("取消")
+        hex.performTextReplacement("123456")
+        cancel.performClick()
+        toggle.assertIsOn()
+        assertEquals(manualAccent, store.settings().accent)
+
+        custom.performClick()
+        apply.performClick()
+        toggle.assertIsOn()
+        assertEquals(manualAccent, store.settings().accent)
+
+        setting("应用主题").performClick()
+        option("深色").performClick()
+        val dark = dynamicDarkColorScheme(context)
+        custom.performClick()
+        assertSystemPalette("深色", dark)
+        hex.performTextReplacement("123456")
+        hex.performTextReplacement(colorHex(dark.primary.toArgb()).lowercase())
+        apply.performClick()
+        toggle.assertIsOn()
+        assertEquals(manualAccent, store.settings().accent)
+
+        scenario.close()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        rule.onNodeWithContentDescription("设置").performClick()
+        setting("外观").performClick()
+        toggle.assertIsOn().performClick().assertIsOff()
+        mist.assertIsSelected()
+        assertEquals(manualAccent, store.settings().accent)
+
+        toggle.performClick()
+        custom.performClick()
+        hex.performTextReplacement("ABCDEF")
+        apply.performClick()
+        toggle.assertIsOff()
+        assertFalse(store.settings().dynamicColor)
+        assertEquals(0xFFABCDEF, store.settings().accent)
+        custom.performClick()
+        hex.assertTextContains("ABCDEF")
+    }
+
+    private fun assertSystemPalette(label: String, scheme: ColorScheme) {
+        val preview = rule.onNodeWithContentDescription(label).captureToImage().toPixelMap()
+        listOf(scheme.primary, scheme.secondary, scheme.primaryContainer, scheme.surface).forEachIndexed { index, color ->
+            assertEquals(color.toArgb(), preview[preview.width * (2 * index + 1) / 8, preview.height / 2].toArgb())
+        }
+        val primary = scheme.primary.toArgb()
+        val hex = colorHex(primary)
+        rule.onNode(hasSetTextAction()).assertTextContains(hex)
+        rule.onNodeWithContentDescription("色轮")
+            .assert(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, hex))
+        listOf("R" to 16, "G" to 8, "B" to 0).forEach { (channel, shift) ->
+            val value = ((primary shr shift) and 0xFF).toFloat()
+            rule.onNodeWithContentDescription(channel).assert(SemanticsMatcher.expectValue(
+                SemanticsProperties.ProgressBarRangeInfo, ProgressBarRangeInfo(value, 0f..255f),
+            ))
+        }
+    }
+
+    private fun colorHex(rgb: Int) = (rgb and 0xFFFFFF).toString(16).uppercase().padStart(6, '0')
 
     @Test fun licenseIntroductionUsesTheSelectedLanguage() {
         setting("偏好").performClick()

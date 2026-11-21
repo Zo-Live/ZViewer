@@ -7,6 +7,7 @@
     <string name="theme_system">System default</string>
     <string name="theme_light">Light</string>
     <string name="theme_dark">Dark</string>
+    <string name="dynamic_color">Dynamic color</string>
     <string name="theme_color">Theme color</string>
     <string name="color_moss">Moss green</string>
     <string name="color_mist">Mist blue</string>

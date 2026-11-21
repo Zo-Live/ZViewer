@@ -20,6 +20,7 @@ class PreferenceStore(context: Context) {
     fun settings() = ReaderSettings(
         theme = preferences.getString("theme", "system") ?: "system",
         accent = preferences.getLong("accent", 0xFF49684D),
+        dynamicColor = preferences.getBoolean("dynamic_color", false),
         readerDark = preferences.getBoolean("reader_dark", true),
         vertical = preferences.getBoolean("vertical", true),
         rightToLeft = preferences.getBoolean("rtl", false),
@@ -44,6 +45,7 @@ class PreferenceStore(context: Context) {
 
     fun saveSettings(settings: ReaderSettings) {
         preferences.edit().putString("theme", settings.theme).putLong("accent", settings.accent)
+            .putBoolean("dynamic_color", settings.dynamicColor)
             .putBoolean("reader_dark", settings.readerDark).putBoolean("vertical", settings.vertical)
             .putBoolean("rtl", settings.rightToLeft).putBoolean("keep_screen", settings.keepScreenOn)
             .putInt("columns", settings.gridColumns)

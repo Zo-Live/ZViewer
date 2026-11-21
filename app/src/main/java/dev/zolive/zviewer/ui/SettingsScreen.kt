@@ -5,6 +5,7 @@ package dev.zolive.zviewer.ui
 import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.text.format.Formatter
 import android.widget.Toast
 import androidx.activity.compose.LocalActivity
@@ -33,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -182,6 +184,18 @@ private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSett
         selectedValue = settings.gridColumns,
         options = (2..5).map { it to it.toString() },
     ) { onSettings(settings.copy(gridColumns = it)) }
+    val supportsDynamicColor = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val useDynamicColor = supportsDynamicColor && settings.dynamicColor
+    val activeAccent = if (useDynamicColor) {
+        MaterialTheme.colorScheme.primary.toArgb().toLong() and 0xFFFFFFFFL
+    } else {
+        settings.accent
+    }
+    PreferenceSwitch(
+        title = stringResource(R.string.dynamic_color),
+        checked = useDynamicColor,
+        enabled = supportsDynamicColor,
+    ) { onSettings(settings.copy(dynamicColor = it)) }
     Text(stringResource(R.string.theme_color), Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodyLarge)
     FlowRow(
         Modifier.fillMaxWidth().padding(top = 12.dp),
@@ -190,14 +204,15 @@ private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSett
         val colors = listOf(0xFF49684D to stringResource(R.string.color_moss), 0xFF476A8A to stringResource(R.string.color_mist), 0xFF79618C to stringResource(R.string.color_wisteria), 0xFF9A5357 to stringResource(R.string.color_rose), 0xFF8B683E to stringResource(R.string.color_amber))
         colors.forEach { (color, name) ->
             val description = stringResource(R.string.theme_color_description, name)
+            val selected = activeAccent == color
             Box(Modifier.size(44.dp).semantics { contentDescription = description }
-                .selectable(selected = settings.accent == color, role = Role.RadioButton) {
-                    onSettings(settings.copy(accent = color))
+                .selectable(selected = selected, role = Role.RadioButton) {
+                    onSettings(settings.copy(accent = color, dynamicColor = useDynamicColor && selected))
                 }
                 .padding(4.dp).background(Color(color), CircleShape)
-                .then(if (settings.accent == color) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier),
+                .then(if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier),
                 contentAlignment = Alignment.Center) {
-                if (settings.accent == color) Icon(Icons.Outlined.Check, null, Modifier.size(20.dp), Color.White)
+                if (selected) Icon(Icons.Outlined.Check, null, Modifier.size(20.dp), Color.White)
             }
         }
         IconButton(onClick = { customColor = true }, Modifier.size(44.dp)) { Icon(Icons.Outlined.Palette, stringResource(R.string.custom_theme_color)) }
@@ -206,9 +221,10 @@ private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSett
         ThemeColorDialog(
             accent = settings.accent,
             dark = isDarkTheme(settings.theme),
+            dynamicColor = useDynamicColor,
             onDismiss = { customColor = false },
             onApply = {
-                onSettings(settings.copy(accent = it))
+                onSettings(settings.copy(accent = it, dynamicColor = false))
                 customColor = false
             },
         )
@@ -564,12 +580,18 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
 }
 
 @Composable
-private fun PreferenceSwitch(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun PreferenceSwitch(
+    title: String,
+    subtitle: String? = null,
+    checked: Boolean,
+    enabled: Boolean = true,
+    onChange: (Boolean) -> Unit,
+) {
     SettingsListItem(
         headlineContent = { Text(title) },
-        supportingContent = { Text(subtitle) },
-        trailingContent = { Switch(checked, onCheckedChange = null) },
-        modifier = Modifier.toggleable(value = checked, role = Role.Switch, onValueChange = onChange),
+        supportingContent = subtitle?.let { { Text(it) } },
+        trailingContent = { Switch(checked, onCheckedChange = null, enabled = enabled) },
+        modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
     )
 }
 
