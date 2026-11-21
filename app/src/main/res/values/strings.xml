@@ -101,6 +101,7 @@
     <string name="reader_dark_hint">关闭后使用浅色画布，与应用主题独立</string>
     <string name="reader_rtl">从右向左翻页</string>
     <string name="keep_screen_on">阅读时屏幕常亮</string>
+    <string name="volume_key_paging">使用音量键翻页</string>
     <string name="loop_single_video">单个视频循环播放</string>
     <string name="loop_single_video_hint">视频播放完后留在当前视频并重新开始</string>
     <string name="video_preview">视频默认仅预览</string>

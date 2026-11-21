@@ -100,6 +100,7 @@
     <string name="reader_dark_hint">オフにするとアプリのテーマにかかわらず明るい背景を使います</string>
     <string name="reader_rtl">右から左にページをめくる</string>
     <string name="keep_screen_on">閲覧中は画面を点灯</string>
+    <string name="volume_key_paging">音量キーでページをめくる</string>
     <string name="loop_single_video">動画を個別にループ再生</string>
     <string name="loop_single_video_hint">再生が終わると同じ動画を最初から再生します</string>
     <string name="video_preview">動画をプレビューで表示</string>

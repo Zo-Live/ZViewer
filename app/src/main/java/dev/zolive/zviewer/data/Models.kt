@@ -56,6 +56,7 @@ data class ReaderSettings(
     val vertical: Boolean = true,
     val rightToLeft: Boolean = false,
     val keepScreenOn: Boolean = true,
+    val volumeKeyPaging: Boolean = false,
     val gridColumns: Int = 3,
     val showFileType: Boolean = false,
     val showFavoriteIcon: Boolean = true,

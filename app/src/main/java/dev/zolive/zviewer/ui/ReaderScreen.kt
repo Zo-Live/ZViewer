@@ -52,6 +52,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.zolive.zviewer.MainActivity
 import dev.zolive.zviewer.R
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
@@ -180,6 +181,18 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             onProgress(page)
             jumpJob = scope.launch { pagerState.scrollToPage(paging.nearestItem(page, pagerState.currentPage)) }
         }
+    }
+    val volumePage by rememberUpdatedState<(Int) -> Unit> { direction ->
+        if (paging.looping || currentPage + direction in session.pages.indices) {
+            jump(currentPage + direction)
+        }
+    }
+    DisposableEffect(activity, active, settings.volumeKeyPaging, preferences, jumpDialog) {
+        val mainActivity = activity as? MainActivity
+        if (active && settings.volumeKeyPaging && !preferences && !jumpDialog) {
+            mainActivity?.onVolumePage = { volumePage(it) }
+        }
+        onDispose { mainActivity?.onVolumePage = null }
     }
     val currentPageIsVideo = session.pages.getOrNull(currentPage)?.isVideo == true
     val toolbarVideoState = if (currentPageIsVideo) videoPool?.get(pagerState.settledPage) else null

@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.SystemClock
+import android.view.KeyEvent
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -38,6 +39,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var appliedLanguage: AppLanguage
     private var verification: CancellationSignal? = null
     private var pausedAt = 0L
+    internal var onVolumePage: ((Int) -> Unit)? = null
 
     override fun attachBaseContext(newBase: Context) {
         appliedLanguage = PreferenceStore(newBase).language
@@ -92,6 +94,24 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         DiagnosticLog.log("App", "onResume")
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        val turnPage = onVolumePage ?: return super.onKeyDown(keyCode, event)
+        val direction = when (keyCode) {
+            KeyEvent.KEYCODE_VOLUME_UP -> -1
+            KeyEvent.KEYCODE_VOLUME_DOWN -> 1
+            else -> return super.onKeyDown(keyCode, event)
+        }
+        if (event.repeatCount == 0) turnPage(direction)
+        return true
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (onVolumePage != null && (keyCode == KeyEvent.KEYCODE_VOLUME_UP || keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
     }
 
     override fun onPause() {

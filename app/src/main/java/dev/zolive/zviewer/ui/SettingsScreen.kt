@@ -635,6 +635,7 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
         PreferenceSwitch(stringResource(R.string.reader_rtl), checked = settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }
     }
     PreferenceSwitch(stringResource(R.string.keep_screen_on), checked = settings.keepScreenOn) { onSettings(settings.copy(keepScreenOn = it)) }
+    PreferenceSwitch(stringResource(R.string.volume_key_paging), checked = settings.volumeKeyPaging) { onSettings(settings.copy(volumeKeyPaging = it)) }
     PreferenceSwitch(stringResource(R.string.reader_dark), stringResource(R.string.reader_dark_hint), settings.readerDark) { onSettings(settings.copy(readerDark = it)) }
     PreferenceSwitch(stringResource(R.string.loop_single_video), stringResource(R.string.loop_single_video_hint), settings.videoLoopSingle) { onSettings(settings.copy(videoLoopSingle = it)) }
     PreferenceSwitch(stringResource(R.string.video_preview), stringResource(R.string.video_preview_hint), settings.videoPreview) { onSettings(settings.copy(videoPreview = it)) }
