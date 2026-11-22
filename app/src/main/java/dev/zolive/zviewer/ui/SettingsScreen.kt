@@ -366,7 +366,13 @@ private fun LibraryStorageSettings(state: LibraryState, model: LibraryViewModel,
             val step = (it / CacheLimits.STEP_MIB).roundToInt() * CacheLimits.STEP_MIB
             if (step != cacheLimitMiB) {
                 cacheLimitMiB = step
-                haptic(HapticFeedbackConstantsCompat.SEGMENT_FREQUENT_TICK)
+                haptic(
+                    if (step == CacheLimits.MIN_MIB || step == CacheLimits.MAX_MIB) {
+                        HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_ACTIVATE
+                    } else {
+                        HapticFeedbackConstantsCompat.SEGMENT_FREQUENT_TICK
+                    },
+                )
             }
         },
         onValueChangeFinished = { model.settings(settings.copy(cacheLimitMiB = cacheLimitMiB)) },
