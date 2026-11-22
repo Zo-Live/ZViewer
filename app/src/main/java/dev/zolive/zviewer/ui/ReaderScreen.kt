@@ -214,7 +214,8 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         beyondViewportPageCount = 1, key = { "${session.book.cacheKey}-$it" }) { item -> itemContent(item) }
                 }
             } else if (verticalReading) {
-                LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                LazyColumn(state = listState, modifier = Modifier.fillMaxSize(),
+                    verticalArrangement = Arrangement.spacedBy(if (settings.seamlessVertical) 0.dp else VerticalPageGap)) {
                     items(paging.itemCount, key = { "${session.book.cacheKey}-$it" }) { item ->
                         val index = paging.pageAt(item)
                         val visible by remember(item) { derivedStateOf { listState.layoutInfo.visibleItemsInfo.any { it.index == item } } }
@@ -368,6 +369,9 @@ private fun VideoPagerPage(
 }
 
 private val imageDecodeDispatcher = Dispatchers.IO.limitedParallelism(2)
+
+/** 垂直连续模式下相邻两页之间的留白；选择「无缝垂直连续」时为 0。 */
+private val VerticalPageGap = 4.dp
 
 @Composable
 private fun ReaderPage(session: BookSession, index: Int, repository: BookRepository, vertical: Boolean, active: Boolean,

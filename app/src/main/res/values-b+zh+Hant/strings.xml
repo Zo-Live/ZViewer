@@ -95,6 +95,7 @@
     <string name="close">關閉</string>
     <string name="reading_mode">閱讀模式</string>
     <string name="reading_vertical">垂直連續</string>
+    <string name="reading_seamless_vertical">無縫垂直連續</string>
     <string name="reading_horizontal">水平翻頁</string>
     <string name="reader_dark">深色閱讀背景</string>
     <string name="reader_dark_hint">關閉後使用淺色背景，與應用程式主題無關</string>

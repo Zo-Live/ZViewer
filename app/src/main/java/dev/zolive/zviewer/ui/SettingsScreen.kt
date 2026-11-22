@@ -566,11 +566,23 @@ private fun <T> PreferenceMenu(
 
 @Composable
 fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> Unit) {
+    val mode = when {
+        !settings.vertical -> ReadingMode.Horizontal
+        settings.seamlessVertical -> ReadingMode.SeamlessVertical
+        else -> ReadingMode.Vertical
+    }
     PreferenceMenu(
         title = stringResource(R.string.reading_mode),
-        selectedValue = settings.vertical,
-        options = listOf(true to stringResource(R.string.reading_vertical), false to stringResource(R.string.reading_horizontal)),
-    ) { onSettings(settings.copy(vertical = it)) }
+        selectedValue = mode,
+        options = listOf(
+            ReadingMode.Vertical to stringResource(R.string.reading_vertical),
+            ReadingMode.SeamlessVertical to stringResource(R.string.reading_seamless_vertical),
+            ReadingMode.Horizontal to stringResource(R.string.reading_horizontal),
+        ),
+    ) { selected ->
+        onSettings(settings.copy(vertical = selected != ReadingMode.Horizontal,
+            seamlessVertical = selected == ReadingMode.SeamlessVertical))
+    }
     PreferenceSwitch(stringResource(R.string.reader_dark), stringResource(R.string.reader_dark_hint), settings.readerDark) { onSettings(settings.copy(readerDark = it)) }
     PreferenceSwitch(stringResource(R.string.reader_rtl), stringResource(R.string.reader_rtl_hint), settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }
     PreferenceSwitch(stringResource(R.string.keep_screen_on), stringResource(R.string.keep_screen_on_hint), settings.keepScreenOn) { onSettings(settings.copy(keepScreenOn = it)) }
@@ -578,6 +590,8 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
     PreferenceSwitch(stringResource(R.string.video_preview), stringResource(R.string.video_preview_hint), settings.videoPreview) { onSettings(settings.copy(videoPreview = it)) }
     PreferenceSwitch(stringResource(R.string.loop_mode), stringResource(R.string.loop_mode_hint), settings.loopMode) { onSettings(settings.copy(loopMode = it)) }
 }
+
+private enum class ReadingMode { Vertical, SeamlessVertical, Horizontal }
 
 @Composable
 private fun PreferenceSwitch(
