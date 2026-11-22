@@ -238,17 +238,18 @@ class SettingsMenuTest {
 
     @Test fun presetsStaySelectableWithDynamicColor() {
         setting("外观").performClick()
-        val toggle = setting("动态取色").assertIsOff()
+        val toggle = setting("动态取色")
         val presets = listOf(
             0xFF49684D to "苔绿", 0xFF476A8A to "雾蓝", 0xFF79618C to "藤紫",
             0xFF9A5357 to "蔷薇", 0xFF8B683E to "琥珀",
         ).associate { (color, name) -> color to rule.onNodeWithContentDescription("主题颜色：$name") }
         presets.getValue(0xFF49684D).assertIsSelected()
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            toggle.assertIsNotEnabled()
+            toggle.assertDoesNotExist()
             presets.getValue(0xFF476A8A).performClick().assertIsSelected()
             return
         }
+        toggle.assertIsOff()
 
         setting("应用主题").performClick()
         option("浅色").performClick()
@@ -287,14 +288,15 @@ class SettingsMenuTest {
 
     @Test fun dynamicColorPickerStartsFromTheSystemSchemeAndOnlyAppliesChangedColors() {
         setting("外观").performClick()
-        val toggle = setting("动态取色").assertIsOff()
+        val toggle = setting("动态取色")
         val custom = rule.onNodeWithContentDescription("自定义主题颜色")
         val mist = rule.onNodeWithContentDescription("主题颜色：雾蓝")
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            toggle.assertIsNotEnabled()
+            toggle.assertDoesNotExist()
             custom.assertIsDisplayed()
             return
         }
+        toggle.assertIsOff()
 
         mist.performClick().assertIsSelected()
         val manualAccent = store.settings().accent

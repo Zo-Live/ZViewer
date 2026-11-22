@@ -195,11 +195,11 @@ private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSett
     } else {
         settings.accent
     }
-    PreferenceSwitch(
-        title = stringResource(R.string.dynamic_color),
-        checked = useDynamicColor,
-        enabled = supportsDynamicColor,
-    ) { onSettings(settings.copy(dynamicColor = it)) }
+    if (supportsDynamicColor) {
+        PreferenceSwitch(stringResource(R.string.dynamic_color), checked = useDynamicColor) {
+            onSettings(settings.copy(dynamicColor = it))
+        }
+    }
     Text(stringResource(R.string.theme_color), Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodyLarge)
     FlowRow(
         Modifier.fillMaxWidth().padding(top = 12.dp),
