@@ -509,12 +509,14 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             }
         }
     }
-    if (preferences) ModalBottomSheet(onDismissRequest = { preferences = false }) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
-            Text(stringResource(R.string.reader_settings), style = MaterialTheme.typography.headlineSmall)
-            Spacer(Modifier.height(24.dp))
-            ReaderPreferences(settings, onSettings)
-            Spacer(Modifier.height(20.dp))
+    if (preferences) WithAnimationSpeed(speed) {
+        ModalBottomSheet(onDismissRequest = { preferences = false }) {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
+                Text(stringResource(R.string.reader_settings), style = MaterialTheme.typography.headlineSmall)
+                Spacer(Modifier.height(24.dp))
+                ReaderPreferences(settings, onSettings)
+                Spacer(Modifier.height(20.dp))
+            }
         }
     }
     if (jumpDialog) {
