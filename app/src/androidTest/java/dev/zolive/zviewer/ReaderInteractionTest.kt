@@ -595,6 +595,33 @@ class ReaderInteractionTest {
         }
     }
 
+    @Test fun continuousToolbarZoomUsesThePageNearestTheViewportCenter() {
+        open(video = false, loop = false)
+        rule.onRoot().performTouchInput {
+            swipe(Offset(centerX, height * .72f), Offset(centerX, height * .38f), 850)
+        }
+        rule.onRoot().performTouchInput { click(Offset(centerX, height * .35f)) }
+        val zoomIn = rule.onNodeWithContentDescription(rule.activity.getString(R.string.zoom_in_image))
+        rule.waitUntil(5_000) { zoomIn.isDisplayed() }
+        rule.runOnIdle { assertEquals(0, currentPage) }
+        val first = rule.activity.getString(R.string.image_accessibility, 1)
+        val second = rule.activity.getString(R.string.image_accessibility, 2)
+        fun imageViews() = descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>()
+        rule.waitUntil(5_000) { rule.runOnIdle { imageViews().any { it.contentDescription == second } } }
+        fun scale(description: String): Float = rule.runOnIdle {
+            val values = FloatArray(9)
+            imageViews().single { it.contentDescription == description }.imageMatrix.getValues(values)
+            values[android.graphics.Matrix.MSCALE_X]
+        }
+        val firstScale = scale(first)
+        val secondScale = scale(second)
+        zoomIn.performClick()
+        rule.waitUntil(5_000) { scale(second) > secondScale * 1.45f }
+        assertEquals(firstScale, scale(first), .001f)
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.zoom_out_image)).performClick()
+        rule.waitUntil(5_000) { kotlin.math.abs(scale(second) - secondScale) < .001f }
+    }
+
     @Test fun horizontalImageLoopHasAdjacentPagesInBothDirections() {
         open(video = false, vertical = false, initialPage = 2)
         rule.onRoot().performTouchInput {
