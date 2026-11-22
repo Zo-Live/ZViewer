@@ -14,6 +14,10 @@ class PreferenceStore(context: Context) {
         preferences.edit().putString("library_uri", treeUri).remove("books").apply()
     }
 
+    internal fun logDirectories(): Set<String> =
+        preferences.getStringSet("log_directories", emptySet()).orEmpty() +
+            listOfNotNull(preferences.getString("log_directory", null))
+
     val language: AppLanguage
         get() = AppLanguage.fromTag(preferences.getString("language", null))
 
@@ -72,6 +76,7 @@ class PreferenceStore(context: Context) {
             .putBoolean("video_preview", settings.videoPreview)
             .putBoolean("loop_mode", settings.loopMode)
             .putBoolean("diagnostic_log", settings.diagnosticLog)
+            .putStringSet("log_directories", logDirectories() + listOfNotNull(settings.logDirectory))
             .putString("log_directory", settings.logDirectory)
             .putBoolean("check_updates_on_startup", settings.checkUpdatesOnStartup)
             .putBoolean("clear_covers", settings.clearCovers)

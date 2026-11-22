@@ -167,7 +167,9 @@ object DiagnosticLog {
                 .map { LogFile(Uri.fromFile(it), it.name, it.length()) }
         }
         val resolver = context.contentResolver
-        val custom = resolver.persistedUriPermissions.filter { it.isReadPermission && it.isWritePermission }
+        val logDirectories = PreferenceStore(context).logDirectories()
+        val custom = resolver.persistedUriPermissions
+            .filter { it.isReadPermission && it.isWritePermission && it.uri.toString() in logDirectories }
             .flatMap { grant -> readDirectory { filesInTree(resolver, grant.uri) } }
             .distinctBy { it.uri.authority to DocumentsContract.getDocumentId(it.uri) }
         return LogListing((local + custom).sortedByDescending { it.name }, error)
