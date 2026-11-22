@@ -127,6 +127,58 @@ class NavigationInteractionTest {
         }
     }
 
+    @Test fun recreatingOnAnImageDoesNotRepeatVideoEntry() {
+        val tree = DocumentsContract.buildTreeDocumentUri("dev.zolive.zviewer.test.documents", "root/formats")
+        val entry = runBlocking {
+            BookRepository(context).use { repository ->
+                val book = repository.scan(tree).first { it.kind == "mixed-folder" }
+                val session = repository.open(book)
+                try {
+                    val videoPage = session.pages.zipWithNext().indexOfFirst { (current, next) ->
+                        current.isVideo && !next.isVideo
+                    }
+                    check(videoPage >= 0)
+                    store.saveProgress(session, videoPage)
+                    book to videoPage
+                } finally {
+                    repository.close(session)
+                }
+            }
+        }
+        val (book, videoPage) = entry
+        val imagePage = videoPage + 1
+        store.saveSettings(store.settings().copy(videoPreview = true, volumeKeyPaging = true))
+        launch()
+        openVideoBook(book)
+        pressVolumeDown(1)
+        rule.waitUntil(10_000) { store.progress(book.id).page == imagePage }
+        scenario.recreate()
+        rule.onNodeWithTag("library-screen").assertDoesNotExist()
+        assertEquals(imagePage, store.progress(book.id).page)
+    }
+
+    private fun openVideoBook(book: Book) {
+        lateinit var model: LibraryViewModel
+        scenario.onActivity {
+            model = ViewModelProvider(it)[LibraryViewModel::class.java]
+            model.open(book)
+        }
+        rule.waitUntil(15_000) {
+            model.state.value.session?.book == book &&
+                rule.onAllNodesWithTag("library-screen").fetchSemanticsNodes().isEmpty()
+        }
+    }
+
+    private fun pressVolumeDown(count: Int) {
+        scenario.onActivity { activity ->
+            repeat(count) {
+                val key = android.view.KeyEvent.KEYCODE_VOLUME_DOWN
+                assertTrue(activity.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, key)))
+                activity.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, key))
+            }
+        }
+    }
+
     private fun swipe(left: Boolean) {
         rule.onNodeWithTag("library-pager").performTouchInput {
             if (left) swipeLeft() else swipeRight()

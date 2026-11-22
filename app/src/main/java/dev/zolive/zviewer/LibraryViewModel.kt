@@ -49,6 +49,7 @@ data class LibraryState(
     val opening: String? = null,
     val session: BookSession? = null,
     val initialPage: Int = 0,
+    internal val waitingForVideoEntry: Boolean = false,
     val settings: ReaderSettings = ReaderSettings(),
     val favorites: Set<String> = emptySet(),
     val progress: Map<String, ReadingProgress> = emptyMap(),
@@ -326,7 +327,10 @@ class LibraryViewModel(
                     val page = store.resumePage(session)
                     val previous = mutable.value.session
                     store.saveProgress(session, page)
-                    mutable.update { it.copy(session = session, initialPage = page, opening = null, openingRequest = null) }
+                    mutable.update {
+                        it.copy(session = session, initialPage = page, waitingForVideoEntry = session.pages[page].isVideo,
+                            opening = null, openingRequest = null)
+                    }
                     previous?.let(::releaseSession)
                     DiagnosticLog.log("Library", "打开完成 book=${book.id.take(8)} pages=${session.pages.size} page=${page + 1} elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
                 } finally {
@@ -354,10 +358,14 @@ class LibraryViewModel(
     fun closeBook() {
         val session = mutable.value.session
         DiagnosticLog.log("Reader", "关闭 book=${session?.book?.id?.take(8)}")
-        mutable.update { it.copy(session = null) }
+        mutable.update { it.copy(session = null, waitingForVideoEntry = false) }
         refreshProgress()
         if (session != null) releaseSession(session)
         else viewModelScope.launch { repository.trimCache() }
+    }
+
+    internal fun finishVideoEntry(session: BookSession) {
+        mutable.update { if (it.session === session) it.copy(waitingForVideoEntry = false) else it }
     }
 
     private fun releaseSession(session: BookSession) {

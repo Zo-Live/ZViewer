@@ -166,15 +166,11 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     val activity = LocalActivity.current
     val speed = state.settings.animationSpeed
     val session = state.session
-    val startsOnVideo = remember(session, state.initialPage) {
-        session?.pages?.getOrNull(state.initialPage)?.isVideo == true
-    }
-    var videoEntryReady by remember(session) { mutableStateOf(!startsOnVideo) }
-    val waitingForVideo = session != null && !videoEntryReady
-    LaunchedEffect(waitingForVideo) {
-        if (waitingForVideo) {
+    val waitingForVideo = session != null && state.waitingForVideoEntry
+    LaunchedEffect(session, waitingForVideo) {
+        if (session != null && waitingForVideo) {
             delay(3_000)
-            videoEntryReady = true
+            model.finishVideoEntry(session)
         }
     }
     val openingRequest = state.openingRequest
@@ -252,7 +248,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                         { index, position -> model.saveVideoProgress(session, index, position) },
                         onBack = model::closeBook,
                         visible = !waitingForVideo,
-                        onVideoEntryReady = { videoEntryReady = true })
+                        onVideoEntryReady = { model.finishVideoEntry(session) })
                 }
             }
             if (session == null || waitingForVideo) {
