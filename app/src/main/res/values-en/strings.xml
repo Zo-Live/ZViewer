@@ -231,7 +231,7 @@
     <string name="verify_on_startup">Verify on startup</string>
     <string name="verify_on_startup_hint">Use biometrics or your screen lock to access this app</string>
     <string name="hide_recent_preview">Blur preview</string>
-    <string name="hide_recent_preview_hint">Hide app content in Recents. Screenshots are disabled while this is on.</string>
+    <string name="hide_recent_preview_hint">Hide app content in Recents. Screenshots and screen recording are disabled while this is on.</string>
     <string name="verify_after_background">Verify again after leaving the app</string>
     <string name="auto_lock_interval">Auto-lock interval</string>
     <string name="auto_lock_interval_hint">Choose how long the app can stay in the background before verification is required again</string>

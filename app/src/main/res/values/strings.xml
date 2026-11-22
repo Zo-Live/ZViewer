@@ -231,7 +231,7 @@
     <string name="verify_on_startup">启动时验证</string>
     <string name="verify_on_startup_hint">使用生物识别技术或屏幕解锁方式以访问此应用</string>
     <string name="hide_recent_preview">模糊预览</string>
-    <string name="hide_recent_preview_hint">在最近任务界面中隐藏应用内容，开启后无法截屏</string>
+    <string name="hide_recent_preview_hint">在最近任务界面中隐藏应用内容，开启后无法截屏或录屏</string>
     <string name="verify_after_background">切换至后台后重新验证</string>
     <string name="auto_lock_interval">自动锁定间隔</string>
     <string name="auto_lock_interval_hint">设定切换至后台后间隔多久需重新验证</string>
