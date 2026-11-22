@@ -157,6 +157,19 @@ class NavigationInteractionTest {
         assertEquals(imagePage, store.progress(book.id).page)
     }
 
+    @Test fun rapidVolumePressesAccumulateDuringVideoPaging() {
+        val tree = DocumentsContract.buildTreeDocumentUri("dev.zolive.zviewer.test.documents", "root/formats/video-folder")
+        val book = runBlocking { BookRepository(context).use { it.scan(tree).single() } }
+        store.saveSettings(store.settings().copy(videoPreview = true, loopMode = true, volumeKeyPaging = true))
+        launch()
+        openVideoBook(book)
+        pressVolumeDown(2)
+        rule.waitForIdle()
+        assertEquals(0, store.progress(book.id).page)
+        pressVolumeDown(3)
+        rule.waitUntil(10_000) { store.progress(book.id).page == 1 }
+    }
+
     private fun openVideoBook(book: Book) {
         lateinit var model: LibraryViewModel
         scenario.onActivity {

@@ -129,6 +129,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     val pagerState = rememberPagerState(initialPage = paging.anchor(currentPage)) { paging.itemCount }
     val flingBehavior = pageFlingBehavior(pagerState, speed)
     var jumpJob by remember { mutableStateOf<Job?>(null) }
+    var pendingVolumeItem by remember(paging, settings.vertical) { mutableStateOf<Int?>(null) }
     val ratios = remember(session.book.cacheKey) { mutableStateMapOf<Int, Float>() }
     var initialImageLoaded by remember(session) { mutableStateOf(false) }
     val onInitialImageLoaded = { initialImageLoaded = true }
@@ -261,9 +262,9 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             }
         }
     }
-    suspend fun scrollToReaderPage(page: Int, animate: Boolean) {
+    suspend fun scrollToReaderPage(page: Int, animate: Boolean, videoItem: Int? = null) {
         if (pagerReading) {
-            val item = paging.nearestItem(page, pagerState.currentPage)
+            val item = videoItem ?: paging.nearestItem(page, pagerState.currentPage)
             if (animate) {
                 pagerState.animateScrollToPage(item, animationSpec = spring(stiffness = speed.stiffness(Spring.StiffnessMedium)))
             } else {
@@ -291,11 +292,12 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             if (!showingRenderedPreview) scrollToReaderPage(target, animate = false)
         }
     }
-    fun jump(target: Int) {
+    fun jump(target: Int, volumeItem: Int? = null) {
         val page = paging.destination(target)
         pendingPreviewPage = null
         pageSliderVideoState = null
         jumpJob?.cancel()
+        pendingVolumeItem = volumeItem
         if (videoBook) {
             DiagnosticLog.log("Reader", "跳转到第 ${page + 1} 项")
             // 视频统一交给 Pager 平滑过渡：跟手拖动、动画期间当前视频继续播放，停靠后切换播放器。
@@ -303,10 +305,15 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             currentPage = page
             onProgress(page)
         }
-        jumpJob = scope.launch { scrollToReaderPage(page, animate = videoBook) }
+        jumpJob = scope.launch { scrollToReaderPage(page, animate = videoBook, videoItem = volumeItem) }
     }
-    val volumePage by rememberUpdatedState<(Int) -> Unit> { direction ->
-        if (!scrubbing && (paging.looping || currentPage + direction in session.pages.indices)) {
+    val volumePage by rememberUpdatedState<(Int) -> Unit> turn@{ direction ->
+        if (scrubbing) return@turn
+        if (videoBook) {
+            val origin = pendingVolumeItem?.takeIf { jumpJob?.isActive == true } ?: pagerState.settledPage
+            val item = origin + direction
+            if (item in 0 until paging.itemCount) jump(paging.pageAt(item), volumeItem = item)
+        } else if (paging.looping || currentPage + direction in session.pages.indices) {
             jump(currentPage + direction)
         }
     }
