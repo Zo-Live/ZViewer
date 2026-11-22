@@ -3,12 +3,16 @@ package dev.zolive.zviewer
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.view.ViewGroup
+import android.widget.ScrollView
 import androidx.activity.BackEventCompat
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.compose.ui.unit.dp
+import androidx.core.view.descendants
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.ViewModelProvider
@@ -404,7 +408,19 @@ class NavigationInteractionTest {
     @Test fun swipingRightOnSettingsReturnsToLibrary() {
         launch()
         rule.onNodeWithContentDescription("设置").performClick()
-        rule.onNodeWithTag("settings-screen").assertIsDisplayed().performTouchInput { swipeRight() }
+        val settings = rule.onNodeWithTag("settings-screen").assertIsDisplayed()
+        val original = settings.fetchSemanticsNode().boundsInRoot
+        settings.performTouchInput {
+            down(Offset(centerX, 48.dp.toPx()))
+            moveBy(Offset(30.dp.toPx(), 25.dp.toPx()))
+        }
+        assertEquals(original, settings.fetchSemanticsNode().boundsInRoot)
+        settings.performTouchInput {
+            moveBy(Offset(120.dp.toPx(), 0f))
+            up()
+        }
+        assertEquals(original, settings.fetchSemanticsNode().boundsInRoot)
+        settings.performTouchInput { swipeRight() }
         rule.waitForIdle()
         rule.onNodeWithTag("library-screen").assertIsDisplayed()
         rule.onNodeWithTag("settings-screen").assertDoesNotExist()
@@ -491,6 +507,55 @@ class NavigationInteractionTest {
         diagnostics.assertIsDisplayed().performTouchInput { swipeRight() }
         settings.assertIsDisplayed()
         diagnostics.assertDoesNotExist()
+    }
+
+    @Test fun logScrollWithSidewaysDriftKeepsThePageStill() {
+        val directory = File(context.getExternalFilesDir(null), "logs").apply { mkdirs() }
+        val file = File(directory, "zviewer-20991231-235959.log")
+        file.writeText(List(300) { "诊断日志 ${it + 1}" }.joinToString("\n"))
+        try {
+            launch()
+            rule.onNodeWithContentDescription("设置").performClick()
+            rule.onNodeWithText("诊断").performClick()
+            rule.onNodeWithText("查看日志").performClick()
+            rule.waitUntil(5_000) { rule.onAllNodesWithText(file.name).fetchSemanticsNodes().isNotEmpty() }
+            rule.onNodeWithText(file.name).performClick()
+            var scroll: ScrollView? = null
+            rule.waitUntil(5_000) {
+                scenario.onActivity { activity ->
+                    (activity.window.decorView as ViewGroup).descendants.filterIsInstance<ScrollView>()
+                        .firstOrNull()?.let { scroll = it }
+                }
+                scroll != null
+            }
+
+            val detail = rule.onNodeWithTag("log-detail-screen")
+            val original = detail.fetchSemanticsNode().boundsInRoot
+            detail.performTouchInput {
+                down(center)
+                moveBy(Offset(13.dp.toPx(), -7.dp.toPx()))
+            }
+            assertEquals(original, detail.fetchSemanticsNode().boundsInRoot)
+            detail.performTouchInput {
+                moveBy(Offset(8.dp.toPx(), -45.dp.toPx()))
+                moveBy(Offset(8.dp.toPx(), -45.dp.toPx()))
+            }
+            assertEquals(original, detail.fetchSemanticsNode().boundsInRoot)
+            scenario.onActivity { assertTrue(checkNotNull(scroll).scrollY > 0) }
+            detail.performTouchInput {
+                moveBy(Offset(160.dp.toPx(), -20.dp.toPx()))
+                moveBy(Offset(0f, -1f), delayMillis = 160)
+                up()
+            }
+            detail.assertIsDisplayed()
+            assertEquals(original, detail.fetchSemanticsNode().boundsInRoot)
+
+            detail.performTouchInput { swipeRight() }
+            rule.onNodeWithTag("log-list-screen").assertIsDisplayed()
+            detail.assertDoesNotExist()
+        } finally {
+            file.delete()
+        }
     }
 
     @Test fun gridPositionSurvivesTabSwitchSettingsAndRecreation() {

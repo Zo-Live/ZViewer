@@ -24,7 +24,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -64,6 +66,7 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -145,19 +148,39 @@ private fun Modifier.pageBackSwipe(
     onCancel: () -> Unit,
 ): Modifier {
     val start by rememberUpdatedState(onStart)
-    val drag by rememberUpdatedState(onDrag)
+    val dragBy by rememberUpdatedState(onDrag)
     val end by rememberUpdatedState(onEnd)
     val cancel by rememberUpdatedState(onCancel)
     return pointerInput(Unit) {
-        detectHorizontalDragGestures(
-            onDragStart = { start() },
-            onHorizontalDrag = { change, amount ->
-                drag(amount)
+        val touchSlop = viewConfiguration.touchSlop
+        val startThreshold = maxOf(touchSlop, 16.dp.toPx())
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            var displacement = Offset.Zero
+            while (true) {
+                val change = awaitPointerEvent().changes.singleOrNull() ?: return@awaitEachGesture
+                if (change.id != down.id || !change.pressed || change.isConsumed) return@awaitEachGesture
+
+                displacement += change.positionChange()
+                val verticalDistance = abs(displacement.y)
+                val mostlyRightward = displacement.x >= verticalDistance * 1.5f
+                // 锁定已经开始的纵向或向左手势，直到松手。
+                if (displacement.x <= -touchSlop || (!mostlyRightward && verticalDistance >= touchSlop)) {
+                    return@awaitEachGesture
+                }
+                if (!mostlyRightward || displacement.x < startThreshold) continue
+
                 change.consume()
-            },
-            onDragEnd = { end() },
-            onDragCancel = { cancel() },
-        )
+                start()
+                dragBy(displacement.x - startThreshold)
+                val completed = drag(down.id) { movement ->
+                    dragBy(movement.positionChange().x)
+                    movement.consume()
+                }
+                if (completed) end() else cancel()
+                break
+            }
+        }
     }
 }
 
