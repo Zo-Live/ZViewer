@@ -3,4 +3,5 @@
 - 除了单元测试，还需通过 Android Emulator 进行功能测试与端到端测试。验证时使用 emulator-5554 以便用户实时预览。
 - 开发构建目录为 app/build/outputs/apk/release，dist 为正式构建目录。
 - Commit 时将不同功能分开提交，遵循原子化原则。
-- 默认的构建与发布流程如下：将项目内版本号更新至 vx.x.x，检查 llms.txt 的内容是否正确反映项目状况，打 vx.x.x 的 Tag，构建正式 Release，最后发布。Release Notes 格式照常，内容简明扼要。
+- 默认的构建与发布流程如下：将项目内版本号更新至 vx.x.x，检查 llms.txt 的内容是否正确反映项目状况，打 vx.x.x 的 Tag，构建正式 Release，最后发布。
+- Release Notes 先列中文条目，再按相同顺序列出英文条目，末尾保留 Full Changelog 链接。相关改动可以合为一条，内容简明扼要。
