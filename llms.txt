@@ -2,7 +2,7 @@
 
 > ZViewer is an offline native Android comic reader for local archives (ZIP/CBZ, RAR/CBR, 7Z), PDF, image folders, and video folders, built with Kotlin 2.1.21 and Jetpack Compose (Material 3).
 
-Package `dev.zolive.zviewer`, MIT license. The latest stable release is [2.0.0](https://github.com/Zo-Live/ZViewer/releases/tag/v2.0.0) (`versionCode 33`). The app supports Android 10 and later (minSdk 29, compile and target SDK 36). The universal APK covers `arm64-v8a` and `x86_64`. Reading runs on-device through a persisted Storage Access Framework (SAF) grant. The interface defaults to Simplified Chinese and also supports Traditional Chinese, English, and Japanese.
+Package `dev.zolive.zviewer`, MIT license. The latest stable release is [2.0.1](https://github.com/Zo-Live/ZViewer/releases/tag/v2.0.1) (`versionCode 34`). The app supports Android 10 and later (minSdk 29, compile and target SDK 36). The universal APK covers `arm64-v8a` and `x86_64`. Reading runs on-device through a persisted Storage Access Framework (SAF) grant. The interface defaults to Simplified Chinese and also supports Traditional Chinese, English, and Japanese.
 
 ## Features
 
@@ -31,7 +31,7 @@ Not supported: encrypted or multi-volume archives, password-protected PDFs, PDFs
 
 Source root: `app/src/main/java/dev/zolive/zviewer/`.
 
-- `MainActivity.kt` is the edge-to-edge Compose host, handles volume paging, launches Android authentication with `AppLock.kt`, and applies the secure window setting.
+- `MainActivity.kt` is the edge-to-edge Compose host, handles volume paging, launches Android authentication with `AppLock.kt`, and applies the preview and Recents card settings. `ui/AppLockScreen.kt` uses the current theme for the unlock screen.
 - `LibraryViewModel.kt`: app state, SAF folder selection, scan/open jobs, error mapping, settings, and progress.
 - `data/Models.kt`: `Book`, `BookSession`, media-aware `PageSource`, `ReadingProgress`, `ReaderSettings`, `ReaderException`.
 - `data/NaturalOrder.kt`: natural numbers, Latin letters, phrase-aware Chinese pinyin and Japanese collation for names containing kana. The library, pages and covers use the same ordering.
@@ -63,7 +63,7 @@ After the user picks a folder, the app persists the SAF read grant, scans the fo
 ## Privacy and Security
 
 - The app uses `INTERNET` for GitHub update checks and APK downloads. The repository link opens in another app. There are no accounts, ads, telemetry, or external-storage permissions. Reading files stay on the device, and diagnostic logs leave it only through a user-initiated share or export.
-- Reading files are accessed within the granted library directory. Security and privacy settings can require Android biometric or screen-lock verification on startup or after the app has been in the background. A separate secure window setting hides app content in Recents and restricts screenshots and screen recording.
+- Reading files are accessed within the granted library directory. Security and privacy settings can require Android biometric or screen-lock verification on startup or after the app has been in the background. Blur preview hides app content in Recents and blocks screenshots and screen recording. Hide app card in Recents is off by default and hides the card when the app is sent to the background before opening Recents. Opening Recents directly from ZViewer may still show the current card.
 - Gallery hiding requests a SAF write grant and creates `.nomedia` markers in image collection folders. It removes markers it created when disabled or when the library is changed. Library grants and log-directory selections serve separate purposes.
 - Backup and device-to-device transfer are disabled, so URI grants don't move with app data.
 - Archive members are written under generated sequential filenames. Hidden files, `__MACOSX`, symlinks, and unsupported entries are skipped. Member names are decoded as UTF-8 (`Archive.setCharset`) so Chinese names work.
@@ -106,4 +106,4 @@ Kotlin `2.1.21`, Compose BOM `2025.05.01`, `activity-compose:1.10.1`, `lifecycle
 ## Optional
 
 - [License (MIT)](LICENSE)
-- [Release 2.0.0](https://github.com/Zo-Live/ZViewer/releases/tag/v2.0.0)
+- [Release 2.0.1](https://github.com/Zo-Live/ZViewer/releases/tag/v2.0.1)
