@@ -78,7 +78,7 @@ class SettingsMenuTest {
             .assertIsOff().performClick().assertIsOn()
         setting("切换至后台后重新验证").assertIsOff()
         val recentCard = setting("隐藏后台卡片")
-        recentCard.assert(hasText("从最近任务列表中隐藏应用卡片"))
+        recentCard.assert(hasText("从最近任务列表隐藏应用卡片。需要先将应用切换至后台。"))
             .assertIsOff().performClick().assertIsOn()
         setting("在系统相册中隐藏图片").assertIsOff()
         rule.onNodeWithText("自动锁定间隔").assertDoesNotExist()

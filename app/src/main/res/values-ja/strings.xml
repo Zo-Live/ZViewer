@@ -243,7 +243,7 @@
     <string name="auto_lock_one_minute">1 分</string>
     <string name="auto_lock_five_minutes">5 分</string>
     <string name="hide_recent_card">アプリカードを非表示にする</string>
-    <string name="hide_recent_card_hint">最近使ったアプリの一覧にこのアプリのカードを表示しない</string>
+    <string name="hide_recent_card_hint">最近使ったアプリの一覧でこのアプリのカードを非表示にします。先にアプリをバックグラウンドに移動する必要があります。</string>
     <string name="hide_gallery_images">システムのギャラリーで画像を非表示にする</string>
     <string name="hide_gallery_images_hint">端末の再起動が必要</string>
     <string name="verify_to_access">認証してアクセス</string>
