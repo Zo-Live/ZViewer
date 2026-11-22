@@ -50,6 +50,8 @@ data class ReaderSettings(
     val accent: Long = 0xFF49684D,
     val readerDark: Boolean = true,
     val vertical: Boolean = true,
+    /** 垂直连续时去掉页间留白，相邻页图片首尾相接。 */
+    val seamlessVertical: Boolean = false,
     val rightToLeft: Boolean = false,
     val keepScreenOn: Boolean = true,
     val gridColumns: Int = 3,

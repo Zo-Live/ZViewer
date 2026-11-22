@@ -108,6 +108,31 @@ class SettingsMenuTest {
         assertFalse(store.settings().vertical)
     }
 
+    @Test fun seamlessVerticalIsAReadingModeAndPersists() {
+        setting("阅读").performClick()
+        val reading = setting("阅读模式").performScrollTo().performClick()
+        option("无缝垂直连续").assertIsNotSelected().performClick()
+        reading.assert(hasText("无缝垂直连续"))
+        assertTrue(store.settings().vertical)
+        assertTrue(store.settings().seamlessVertical)
+
+        reading.performClick()
+        option("水平翻页").performClick()
+        reading.assert(hasText("水平翻页"))
+        assertFalse(store.settings().vertical)
+        assertFalse(store.settings().seamlessVertical)
+
+        reading.performClick()
+        option("无缝垂直连续").performClick()
+        scenario.close()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        rule.onNodeWithContentDescription("设置").performClick()
+        setting("阅读").performClick()
+        setting("阅读模式").performScrollTo().assert(hasText("无缝垂直连续"))
+        assertTrue(store.settings().vertical)
+        assertTrue(store.settings().seamlessVertical)
+    }
+
     @Test fun switchingLanguagesKeepsSettingsOpenAndPersists() {
         setting("偏好").performClick()
         setting("语言").performScrollTo().assert(hasText("简体中文")).performClick()

@@ -95,6 +95,7 @@
     <string name="close">Close</string>
     <string name="reading_mode">Reading mode</string>
     <string name="reading_vertical">Continuous vertical</string>
+    <string name="reading_seamless_vertical">Seamless continuous vertical</string>
     <string name="reading_horizontal">Horizontal paging</string>
     <string name="reader_dark">Dark reading background</string>
     <string name="reader_dark_hint">Turn off for a light reading background regardless of the app theme</string>

@@ -23,6 +23,7 @@ class PreferenceStore(context: Context) {
         dynamicColor = preferences.getBoolean("dynamic_color", false),
         readerDark = preferences.getBoolean("reader_dark", true),
         vertical = preferences.getBoolean("vertical", true),
+        seamlessVertical = preferences.getBoolean("seamless_vertical", false),
         rightToLeft = preferences.getBoolean("rtl", false),
         keepScreenOn = preferences.getBoolean("keep_screen", true),
         gridColumns = preferences.getInt("columns", 3).coerceIn(2, 5),
@@ -47,6 +48,7 @@ class PreferenceStore(context: Context) {
         preferences.edit().putString("theme", settings.theme).putLong("accent", settings.accent)
             .putBoolean("dynamic_color", settings.dynamicColor)
             .putBoolean("reader_dark", settings.readerDark).putBoolean("vertical", settings.vertical)
+            .putBoolean("seamless_vertical", settings.seamlessVertical)
             .putBoolean("rtl", settings.rightToLeft).putBoolean("keep_screen", settings.keepScreenOn)
             .putInt("columns", settings.gridColumns)
             .putBoolean("show_file_type", settings.showFileType)

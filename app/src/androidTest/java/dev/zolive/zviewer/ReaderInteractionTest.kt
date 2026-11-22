@@ -438,6 +438,47 @@ class ReaderInteractionTest {
         rule.waitUntil(15_000) { currentPage == 2 }
     }
 
+    /** 无缝垂直连续：页间不出现任何画布像素。窄页宽（599 / 601）让取整后的视口高度与图片高度
+     * 相差不到 1 像素，能暴露「适应」缩放留下的亚像素留白。 */
+    @Test fun seamlessVerticalRendersPagesWithoutAnyGap() {
+        val context = rule.activity
+        val folder = File(context.cacheDir, "seamless-pages").apply { mkdirs() }
+        val pageColors = listOf(Color.rgb(0x33, 0x66, 0xCC), Color.rgb(0xCC, 0x33, 0x66))
+        val pages = pageColors.mapIndexed { index, color ->
+            val file = File(folder, "page${index + 1}.png")
+            val bitmap = Bitmap.createBitmap(listOf(599, 601)[index], 900, Bitmap.Config.ARGB_8888)
+            bitmap.eraseColor(color)
+            file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+            bitmap.recycle()
+            PageSource(file.name, filePath = file.absolutePath)
+        }
+        session = BookSession(Book("seamless-test", "test", "无缝阅读测试", "folder", 0, 0), pages)
+        val repository = BookRepository(context)
+        rule.setContent {
+            ReaderScreen(session, 0,
+                ReaderSettings(vertical = true, seamlessVertical = true, loopMode = false, readerDark = false),
+                repository, onSettings = {}, onProgress = { currentPage = it }, onBack = {})
+        }
+        rule.waitUntil(20_000) {
+            var pagesLoaded = 0
+            rule.runOnUiThread {
+                pagesLoaded = descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>()
+                    .count { it.drawable != null }
+            }
+            pagesLoaded >= 2
+        }
+        val shot = screenshot("seamless-vertical")
+        val column = (shot.width * .25f).toInt()
+        val start = (shot.height * .10f).toInt()
+        val end = (shot.height * .90f).toInt()
+        val rows = (start until end).map { shot.getPixel(column, it) }
+        shot.recycle()
+        val seams = rows.withIndex().filter { (_, pixel) -> pixel !in pageColors }
+            .map { (offset, pixel) -> "${start + offset}=${Integer.toHexString(pixel)}" }
+        assertTrue("无缝模式下出现画布像素：${seams.take(8)}", seams.isEmpty())
+        assertTrue("扫描范围内应同时包含两页", rows.contains(pageColors[0]) && rows.contains(pageColors[1]))
+    }
+
     @Test fun videoBoundariesStopWithoutLoopAndResumeKeepsPausePosition() {
         open(loop = false)
         swipe(forward = false)
