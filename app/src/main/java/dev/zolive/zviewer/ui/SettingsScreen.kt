@@ -317,6 +317,10 @@ private fun SecuritySettings(state: LibraryState, model: LibraryViewModel) {
         ) { model.settings(settings.copy(autoLockInterval = it)) }
     }
     PreferenceSwitch(
+        stringResource(R.string.hide_recent_card), stringResource(R.string.hide_recent_card_hint),
+        settings.hideRecentCard,
+    ) { model.settings(settings.copy(hideRecentCard = it)) }
+    PreferenceSwitch(
         stringResource(R.string.hide_gallery_images), stringResource(R.string.hide_gallery_images_hint),
         settings.hideGalleryImages,
     ) { enabled ->

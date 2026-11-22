@@ -242,6 +242,8 @@
     <string name="auto_lock_fifteen_seconds">15 秒</string>
     <string name="auto_lock_one_minute">1 分鐘</string>
     <string name="auto_lock_five_minutes">5 分鐘</string>
+    <string name="hide_recent_card">隱藏背景卡片</string>
+    <string name="hide_recent_card_hint">從最近使用的應用程式清單中隱藏應用程式卡片</string>
     <string name="hide_gallery_images">在系統相簿中隱藏圖片</string>
     <string name="hide_gallery_images_hint">需要重新啟動裝置</string>
     <string name="verify_to_access">請驗證以存取</string>

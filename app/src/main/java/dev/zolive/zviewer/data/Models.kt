@@ -83,6 +83,7 @@ data class ReaderSettings(
     val hideRecentPreview: Boolean = false,
     val verifyAfterBackground: Boolean = false,
     val autoLockInterval: AutoLockInterval = AutoLockInterval.FifteenSeconds,
+    val hideRecentCard: Boolean = false,
     val hideGalleryImages: Boolean = false,
     val animationSpeed: AnimationSpeed = AnimationSpeed.Moderate,
     val hapticFeedback: Boolean = true,

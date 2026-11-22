@@ -1,5 +1,6 @@
 package dev.zolive.zviewer
 
+import android.app.ActivityManager
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.Intent
@@ -51,6 +52,9 @@ class MainActivity : ComponentActivity() {
         DiagnosticLog.installCrashHandler()
         enableEdgeToEdge()
         setRecentPreviewHidden(model.state.value.settings.hideRecentPreview)
+        lifecycleScope.launch {
+            model.state.map { it.settings.hideRecentCard }.distinctUntilChanged().collect(::setRecentCardHidden)
+        }
         val taskPreparation = TaskRemovalCleanup.track(application, taskId)
         lifecycleScope.launch {
             taskPreparation.join()
@@ -144,6 +148,12 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             setRecentsScreenshotEnabled(!hidden)
         }
+    }
+
+    private fun setRecentCardHidden(hidden: Boolean) {
+        getSystemService(ActivityManager::class.java).appTasks
+            .firstOrNull { it.taskInfo.taskId == taskId }
+            ?.setExcludeFromRecents(hidden)
     }
 
     @Suppress("DEPRECATION")

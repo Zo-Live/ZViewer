@@ -243,6 +243,8 @@
     <string name="auto_lock_fifteen_seconds">15 秒</string>
     <string name="auto_lock_one_minute">1 分钟</string>
     <string name="auto_lock_five_minutes">5 分钟</string>
+    <string name="hide_recent_card">隐藏后台卡片</string>
+    <string name="hide_recent_card_hint">从最近任务列表中隐藏应用卡片</string>
     <string name="hide_gallery_images">在系统相册中隐藏图片</string>
     <string name="hide_gallery_images_hint">需要重启设备</string>
     <string name="verify_to_access">请验证以访问</string>

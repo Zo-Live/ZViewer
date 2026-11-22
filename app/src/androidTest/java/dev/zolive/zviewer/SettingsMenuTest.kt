@@ -76,9 +76,13 @@ class SettingsMenuTest {
         setting("启动时验证").assertIsOff()
         setting("模糊预览").assertIsOff().performClick().assertIsOn()
         setting("切换至后台后重新验证").assertIsOff()
+        val recentCard = setting("隐藏后台卡片")
+        recentCard.assert(hasText("从最近任务列表中隐藏应用卡片"))
+            .assertIsOff().performClick().assertIsOn()
         setting("在系统相册中隐藏图片").assertIsOff()
         rule.onNodeWithText("自动锁定间隔").assertDoesNotExist()
         assertTrue(store.settings().hideRecentPreview)
+        assertTrue(store.settings().hideRecentCard)
         assertEquals(AutoLockInterval.FifteenSeconds, store.settings().autoLockInterval)
 
         store.saveSettings(store.settings().copy(verifyAfterBackground = true))
@@ -88,6 +92,11 @@ class SettingsMenuTest {
         setting("安全与隐私").performClick()
 
         val interval = setting("自动锁定间隔")
+        recentCard.assertIsOn()
+        val positions = listOf(interval, recentCard, setting("在系统相册中隐藏图片"))
+            .map { it.fetchSemanticsNode().boundsInRoot.top }
+        assertTrue(positions.zipWithNext().all { (above, below) -> above < below })
+        recentCard.performClick().assertIsOff()
         interval.assert(hasText("设定切换至后台后间隔多久需重新验证")).assert(hasText("15 秒")).performClick()
         option("立即").assertIsNotSelected()
         option("15 秒").assertIsSelected()
@@ -97,6 +106,7 @@ class SettingsMenuTest {
         setting("切换至后台后重新验证").performClick().assertIsOff()
         rule.onNodeWithText("自动锁定间隔").assertDoesNotExist()
         assertEquals(AutoLockInterval.FiveMinutes, store.settings().autoLockInterval)
+        assertFalse(store.settings().hideRecentCard)
     }
 
     @Test fun settingsExposeCurrentValuesAndMenuSelection() {

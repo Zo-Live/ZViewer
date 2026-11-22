@@ -243,6 +243,8 @@
     <string name="auto_lock_fifteen_seconds">15 seconds</string>
     <string name="auto_lock_one_minute">1 minute</string>
     <string name="auto_lock_five_minutes">5 minutes</string>
+    <string name="hide_recent_card">Hide app card in Recents</string>
+    <string name="hide_recent_card_hint">Hide the app card from the recent apps list</string>
     <string name="hide_gallery_images">Hide images from the system gallery</string>
     <string name="hide_gallery_images_hint">Device restart required</string>
     <string name="verify_to_access">Verify to access</string>

@@ -70,6 +70,7 @@ class PreferenceStore(context: Context) {
         autoLockInterval = preferences.getInt("auto_lock_seconds", AutoLockInterval.FifteenSeconds.seconds).let { seconds ->
             AutoLockInterval.entries.firstOrNull { it.seconds == seconds } ?: AutoLockInterval.FifteenSeconds
         },
+        hideRecentCard = preferences.getBoolean("hide_recent_card", false),
         hideGalleryImages = preferences.getBoolean("hide_gallery_images", false),
     )
 
@@ -102,6 +103,7 @@ class PreferenceStore(context: Context) {
             .putBoolean("hide_recent_preview", settings.hideRecentPreview)
             .putBoolean("verify_after_background", settings.verifyAfterBackground)
             .putInt("auto_lock_seconds", settings.autoLockInterval.seconds)
+            .putBoolean("hide_recent_card", settings.hideRecentCard)
             .putBoolean("hide_gallery_images", settings.hideGalleryImages)
             .putInt("cache_limit_mib", CacheLimits.normalize(settings.cacheLimitMiB)).apply()
     }
