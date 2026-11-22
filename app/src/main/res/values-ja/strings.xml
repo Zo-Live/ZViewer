@@ -234,7 +234,7 @@
     <string name="verify_on_startup">起動時に認証</string>
     <string name="verify_on_startup_hint">生体認証または画面ロックの解除方法でこのアプリにアクセス</string>
     <string name="hide_recent_preview">プレビューをぼかす</string>
-    <string name="hide_recent_preview_hint">最近使ったアプリの画面でアプリの内容を非表示にします。有効にするとスクリーンショットの撮影や画面録画ができません。</string>
+    <string name="hide_recent_preview_hint">最近使ったアプリの一覧でアプリのプレビューを非表示にします。有効にするとスクリーンショットの撮影や画面録画ができません。</string>
     <string name="verify_after_background">バックグラウンドに移動後に再認証</string>
     <string name="auto_lock_interval">自動ロックまでの時間</string>
     <string name="auto_lock_interval_hint">バックグラウンドに移動してから再認証が必要になるまでの時間を設定</string>

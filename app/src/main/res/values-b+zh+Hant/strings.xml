@@ -234,7 +234,7 @@
     <string name="verify_on_startup">啟動時驗證</string>
     <string name="verify_on_startup_hint">使用生物辨識技術或螢幕解鎖方式以存取此應用程式</string>
     <string name="hide_recent_preview">模糊預覽</string>
-    <string name="hide_recent_preview_hint">在最近使用的應用程式畫面中隱藏應用程式內容，開啟後無法擷取或錄製螢幕畫面</string>
+    <string name="hide_recent_preview_hint">在最近使用的應用程式清單中隱藏應用程式預覽，開啟後無法擷取或錄製螢幕畫面</string>
     <string name="verify_after_background">切換至背景後重新驗證</string>
     <string name="auto_lock_interval">自動鎖定間隔</string>
     <string name="auto_lock_interval_hint">設定切換至背景後間隔多久需重新驗證</string>
