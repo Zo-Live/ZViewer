@@ -66,7 +66,7 @@ class MainActivity : ComponentActivity() {
                 val pageState = rememberSaveableStateHolder()
                 ZViewerTheme(state.settings) {
                     if (appLock.locked) {
-                        AppLockScreen(state.settings.theme, ::verify)
+                        AppLockScreen(state.settings, ::verify)
                     } else {
                         pageState.SaveableStateProvider("app") { ZViewerApp(model, state) }
                     }
