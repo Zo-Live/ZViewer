@@ -63,7 +63,7 @@
     <string name="translate_log_selection">翻譯</string>
     <string name="log_selection_search_failed">無法開啟搜尋應用程式</string>
     <string name="log_selection_translate_failed">無法開啟翻譯應用程式</string>
-    <string name="log_selection_too_long">所選文字過長，請縮小選取範圍</string>
+    <string name="log_selection_too_long">所選文字過長，請縮小選取範圍。</string>
     <string name="export_logs">匯出所有記錄</string>
     <string name="log_exported">已匯出記錄</string>
     <string name="log_export_failed">無法匯出記錄</string>
@@ -102,7 +102,7 @@
     <string name="reading_vertical">垂直連續</string>
     <string name="reading_horizontal">水平翻頁</string>
     <string name="reader_dark">深色閱讀背景</string>
-    <string name="reader_dark_hint">關閉後使用淺色背景，與應用程式主題無關</string>
+    <string name="reader_dark_hint">關閉後使用淺色背景，與應用程式主題無關。</string>
     <string name="reader_rtl">從右向左翻頁</string>
     <string name="keep_screen_on">閱讀時保持螢幕開啟</string>
     <string name="volume_key_paging">使用音量鍵翻頁</string>
@@ -110,7 +110,7 @@
     <string name="loop_single_video">單部影片循環播放</string>
     <string name="loop_single_video_hint">影片播放結束後停留在目前影片並重新播放</string>
     <string name="video_preview">影片預設僅預覽</string>
-    <string name="video_preview_hint">切換影片時暫停，輕觸畫面開始播放</string>
+    <string name="video_preview_hint">切換影片時暫停，輕觸畫面開始播放。</string>
     <string name="loop_mode">循環模式</string>
     <string name="loop_mode_hint">讀到漫畫結尾後繼續翻頁即可回到第一頁</string>
     <string name="menu_expanded">已展開</string>
@@ -178,10 +178,10 @@
     <string name="item_number_range">內容編號（1–%1$d）</string>
     <string name="jump">跳轉</string>
     <string name="image_error">暫時無法解碼這一頁。請確認圖片完整，且裝置支援此編碼。</string>
-    <string name="image_accessibility">第 %1$d 頁，輕點顯示閱讀控制，點兩下縮放</string>
-    <string name="image_accessibility_without_zoom">第 %1$d 頁，輕點顯示閱讀控制</string>
-    <string name="video_accessibility">第 %1$d 部影片，輕點顯示閱讀控制，點兩下縮放</string>
-    <string name="video_accessibility_without_zoom">第 %1$d 部影片，輕點顯示閱讀控制</string>
+    <string name="image_accessibility">第 %1$d 頁，輕點顯示閱讀控制，點兩下縮放。</string>
+    <string name="image_accessibility_without_zoom">第 %1$d 頁，輕點顯示閱讀控制。</string>
+    <string name="video_accessibility">第 %1$d 部影片，輕點顯示閱讀控制，點兩下縮放。</string>
+    <string name="video_accessibility_without_zoom">第 %1$d 部影片，輕點顯示閱讀控制。</string>
     <string name="retry">重試</string>
     <string name="show_reader_controls">顯示閱讀控制</string>
     <string name="video_error">無法播放影片，檔案可能無法讀取，或裝置不支援此編碼。</string>
@@ -192,11 +192,11 @@
     <string name="update_later">稍後更新</string>
     <string name="update_now">Update</string>
     <string name="update_latest">目前已是最新版本</string>
-    <string name="update_check_failed">無法檢查更新，請檢查網路或稍後重試</string>
+    <string name="update_check_failed">無法檢查更新，請檢查網路或稍後重試。</string>
     <string name="update_background">更新將在背景下載</string>
-    <string name="update_cannot_download">無法下載更新，請稍後重試</string>
-    <string name="update_download_failed">更新下載失敗，可在設定中重試</string>
-    <string name="update_installer_failed">無法開啟系統安裝程式，可在設定中重試</string>
+    <string name="update_cannot_download">無法下載更新，請稍後重試。</string>
+    <string name="update_download_failed">更新下載失敗，可在設定中重試。</string>
+    <string name="update_installer_failed">無法開啟系統安裝程式，可在設定中重試。</string>
     <string name="update_download_description">下載完成後會在 ZViewer 中繼續安裝</string>
     <string name="opening_book">正在開啟《%1$s》…</string>
     <string name="log_directory_error">無法寫入所選資料夾。請選擇其他資料夾後再試。</string>
@@ -234,7 +234,7 @@
     <string name="verify_on_startup">啟動時驗證</string>
     <string name="verify_on_startup_hint">使用生物辨識技術或螢幕解鎖方式以存取此應用程式</string>
     <string name="hide_recent_preview">模糊預覽</string>
-    <string name="hide_recent_preview_hint">在最近使用的應用程式清單中隱藏應用程式預覽，開啟後無法擷取或錄製螢幕畫面</string>
+    <string name="hide_recent_preview_hint">在最近使用的應用程式清單中隱藏應用程式預覽，開啟後無法擷取或錄製螢幕畫面。</string>
     <string name="verify_after_background">切換至背景後重新驗證</string>
     <string name="auto_lock_interval">自動鎖定間隔</string>
     <string name="auto_lock_interval_hint">設定切換至背景後間隔多久需重新驗證</string>
@@ -250,5 +250,5 @@
     <string name="verify">進行驗證</string>
     <string name="verification_needs_screen_lock">請先在系統設定中設定螢幕鎖定</string>
     <string name="gallery_select_current_library">請重新選擇目前的書庫目錄以授予寫入權限</string>
-    <string name="gallery_visibility_error">無法更新系統相簿中的圖片可見性，請檢查書庫目錄的寫入權限</string>
+    <string name="gallery_visibility_error">無法更新系統相簿中的圖片可見性，請檢查書庫目錄的寫入權限。</string>
 </resources>

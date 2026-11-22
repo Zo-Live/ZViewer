@@ -46,7 +46,7 @@
     <string name="clear_history_on_removal">最近使ったアプリから削除時に閲覧履歴を消去</string>
     <string name="diagnostics">診断</string>
     <string name="write_diagnostic_logs">診断ログを出力</string>
-    <string name="write_diagnostic_logs_hint">端末情報、動作状況、エラーを記録します</string>
+    <string name="write_diagnostic_logs_hint">端末情報、動作状況、エラーを記録します。</string>
     <string name="log_directory">ログフォルダー</string>
     <string name="log_default_directory">既定：アプリ専用の logs/ フォルダー</string>
     <string name="restore_default_directory">既定のフォルダーに戻す</string>
@@ -110,7 +110,7 @@
     <string name="loop_single_video">動画を個別にループ再生</string>
     <string name="loop_single_video_hint">再生が終わると同じ動画を最初から再生します</string>
     <string name="video_preview">動画をプレビューで表示</string>
-    <string name="video_preview_hint">動画を切り替えると一時停止し、画面をタップすると再生します</string>
+    <string name="video_preview_hint">動画を切り替えると一時停止し、画面をタップすると再生します。</string>
     <string name="loop_mode">ループモード</string>
     <string name="loop_mode_hint">最終ページの先に進むと最初のページに戻ります</string>
     <string name="menu_expanded">展開済み</string>
@@ -136,7 +136,7 @@
     <string name="sort_modified">更新順</string>
     <string name="no_favorites">お気に入りはまだありません</string>
     <string name="no_recent_reads">最近読んだ漫画はありません</string>
-    <string name="favorite_management_hint">漫画の表紙を長押しして、お気に入りを&#8288;一括管理</string>
+    <string name="favorite_management_hint">漫画の表紙を長押しして、お気に入りを&#8288;一括管理。</string>
     <string name="start_reading_hint">表紙をタップして閲覧を始めます</string>
     <string name="exit_favorite_management">お気に入り管理を終了</string>
     <string name="scroll_to_top">先頭に戻る</string>
@@ -197,7 +197,7 @@
     <string name="update_cannot_download">更新をダウンロードできませんでした。後でもう一度お試しください。</string>
     <string name="update_download_failed">更新のダウンロードに失敗しました。設定から再試行できます。</string>
     <string name="update_installer_failed">システムのインストーラを開けませんでした。設定から再試行できます。</string>
-    <string name="update_download_description">ダウンロード完了後、ZViewer でインストールを続けます</string>
+    <string name="update_download_description">ダウンロード完了後、ZViewer でインストールを続けます。</string>
     <string name="opening_book">「%1$s」を開いています…</string>
     <string name="log_directory_error">選択したフォルダーに書き込めません。別のフォルダーを選んでください。</string>
     <string name="permission_error">読み取り権限がないか、ファイルがパスワードで保護されています。ライブラリを選び直すか、ファイルの保護を解除してください。</string>
@@ -249,6 +249,6 @@
     <string name="verify_to_access">認証してアクセス</string>
     <string name="verify">認証する</string>
     <string name="verification_needs_screen_lock">先にシステム設定で画面ロックを設定してください</string>
-    <string name="gallery_select_current_library">書き込みを許可するには、現在のライブラリフォルダをもう一度選択してください</string>
+    <string name="gallery_select_current_library">書き込みを許可するには、現在のライブラリフォルダをもう一度選択してください。</string>
     <string name="gallery_visibility_error">ギャラリーでの画像の表示を変更できません。ライブラリフォルダへの書き込み権限を確認してください。</string>
 </resources>

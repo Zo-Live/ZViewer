@@ -46,7 +46,7 @@
     <string name="clear_history_on_removal">Clear reading history when removed from Recents</string>
     <string name="diagnostics">Diagnostics</string>
     <string name="write_diagnostic_logs">Write diagnostic logs</string>
-    <string name="write_diagnostic_logs_hint">Log device information, app status, and errors</string>
+    <string name="write_diagnostic_logs_hint">Log device information, app status, and errors.</string>
     <string name="log_directory">Log folder</string>
     <string name="log_default_directory">Default: app-specific logs/ folder</string>
     <string name="restore_default_directory">Restore default folder</string>

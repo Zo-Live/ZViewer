@@ -74,7 +74,7 @@ class SettingsMenuTest {
     @Test fun securityDefaultsAndAutoLockIntervalArePersisted() {
         setting("安全与隐私").performClick()
         setting("启动时验证").assertIsOff()
-        setting("模糊预览").assert(hasText("在最近任务列表中隐藏应用预览，开启后无法截屏或录屏"))
+        setting("模糊预览").assert(hasText("在最近任务列表中隐藏应用预览，开启后无法截屏或录屏。"))
             .assertIsOff().performClick().assertIsOn()
         setting("切换至后台后重新验证").assertIsOff()
         val recentCard = setting("隐藏后台卡片")
