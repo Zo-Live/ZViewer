@@ -181,6 +181,7 @@ private fun SettingsPage(
 @Composable
 private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSettings) -> Unit) {
     var customColor by remember { mutableStateOf(false) }
+    val haptic = hapticFeedback()
     PreferenceMenu(
         title = stringResource(R.string.app_theme),
         selectedValue = settings.theme,
@@ -218,6 +219,7 @@ private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSett
             val selected = activeAccent == color
             Box(Modifier.size(44.dp).semantics { contentDescription = description }
                 .selectable(selected = selected, role = Role.RadioButton) {
+                    if (!selected) haptic(HapticFeedbackConstantsCompat.CONFIRM)
                     onSettings(settings.copy(accent = color, dynamicColor = useDynamicColor && selected))
                 }
                 .padding(4.dp).background(Color(color), CircleShape)

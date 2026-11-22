@@ -48,6 +48,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -59,6 +61,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
+import androidx.core.view.HapticFeedbackConstantsCompat
 import dev.zolive.zviewer.R
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -138,8 +141,14 @@ internal fun ThemeColorDialog(
             }
         },
         confirmButton = {
+            val haptic = hapticFeedback()
             TextButton(enabled = valid, onClick = {
-                if (dynamicColor && rgb == initialRgb) onDismiss() else onApply(seed)
+                if (rgb == initialRgb) {
+                    onDismiss()
+                } else {
+                    haptic(HapticFeedbackConstantsCompat.CONFIRM)
+                    onApply(seed)
+                }
             }) { Text(stringResource(R.string.apply)) }
         },
         dismissButton = {
@@ -182,6 +191,11 @@ private enum class ColorChannel(val shift: Int, val tint: Color) {
 @Composable
 private fun ColorSlider(channel: ColorChannel, value: Int, onValueChange: (Int) -> Unit) {
     val gradient = remember(channel) { Brush.horizontalGradient(listOf(Color.Black, channel.tint)) }
+    val haptic = hapticFeedback()
+    val feedback = remember { ColorPickerFeedback() }
+    val currentValue by rememberUpdatedState(value)
+    var dragFeedback by remember { mutableStateOf<ColorAxisFeedback?>(null) }
+    var released by remember { mutableStateOf(false) }
     val valueStyle = MaterialTheme.typography.bodyMedium
     val valueWidth = with(LocalDensity.current) { valueStyle.fontSize.toDp() * 2 }
     Row(
@@ -192,8 +206,32 @@ private fun ColorSlider(channel: ColorChannel, value: Int, onValueChange: (Int) 
         Text(channel.name, style = MaterialTheme.typography.labelLarge)
         Slider(
             value = value.toFloat(),
-            onValueChange = { onValueChange(it.roundToInt()) },
-            modifier = Modifier.weight(1f).semantics { contentDescription = channel.name },
+            onValueChange = {
+                val next = it.roundToInt()
+                dragFeedback?.let { axis -> feedback.play(axis.moveTo(next / 255f), haptic) }
+                onValueChange(next)
+            },
+            onValueChangeFinished = {
+                if (released) haptic(HapticFeedbackConstantsCompat.CONFIRM)
+                released = false
+            },
+            modifier = Modifier.weight(1f).semantics { contentDescription = channel.name }
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        released = false
+                        dragFeedback = ColorAxisFeedback(currentValue / 255f, colorChannelStops)
+                        try {
+                            var event = awaitPointerEvent(PointerEventPass.Initial)
+                            while (event.changes.any { it.pressed }) {
+                                event = awaitPointerEvent(PointerEventPass.Initial)
+                            }
+                            released = event.changes.any { it.changedToUp() }
+                        } finally {
+                            dragFeedback = null
+                        }
+                    }
+                },
             valueRange = 0f..255f,
             thumb = {
                 Box(Modifier.size(16.dp).background(Color.White, CircleShape).border(1.dp, Color.DarkGray, CircleShape))
@@ -243,6 +281,8 @@ private fun ColorWheel(hsv: Hsv, rgb: Int, onChange: (Hsv) -> Unit) {
     val selection by rememberUpdatedState(hsv)
     val selectedColor by rememberUpdatedState(Color(rgb))
     val updateColor by rememberUpdatedState(onChange)
+    val haptic by rememberUpdatedState(hapticFeedback())
+    val feedback = remember { ColorPickerFeedback() }
     val hueColor = Color.hsv(hsv.hue, 1f, 1f)
     Box(
         Modifier.widthIn(max = PickerWidth).fillMaxWidth().aspectRatio(1f)
@@ -258,8 +298,8 @@ private fun ColorWheel(hsv: Hsv, rgb: Int, onChange: (Hsv) -> Unit) {
                     if (distance > wheel.radius) return@awaitEachGesture
                     val adjustHue = distance >= wheel.ringRadius - wheel.ringWidth / 2
                     val start = selection
-                    fun select(position: Offset) {
-                        val next = if (adjustHue) {
+                    fun selectionAt(position: Offset): Hsv =
+                        if (adjustHue) {
                             start.copy(
                                 hue = wheel.hueAt(position),
                                 saturation = if (start.saturation == 0f) 1f else start.saturation,
@@ -269,14 +309,23 @@ private fun ColorWheel(hsv: Hsv, rgb: Int, onChange: (Hsv) -> Unit) {
                             val offset = (position - wheel.fieldStart) / wheel.fieldSize
                             start.copy(saturation = offset.x.coerceIn(0f, 1f), value = 1f - offset.y.coerceIn(0f, 1f))
                         }
-                        updateColor(next)
-                    }
                     down.consume()
-                    select(down.position)
-                    drag(down.id) {
-                        it.consume()
-                        select(it.position)
+                    val initial = selectionAt(down.position)
+                    updateColor(initial)
+                    val pulseFor = if (adjustHue) {
+                        val hue = ColorHueFeedback(initial.hue)
+                        fun(color: Hsv) = hue.moveTo(color.hue)
+                    } else {
+                        val field = ColorFieldFeedback(initial.saturation, initial.value)
+                        fun(color: Hsv) = field.moveTo(color.saturation, color.value)
                     }
+                    val released = drag(down.id) {
+                        it.consume()
+                        val next = selectionAt(it.position)
+                        updateColor(next)
+                        feedback.play(pulseFor(next), haptic)
+                    }
+                    if (released) haptic(HapticFeedbackConstantsCompat.CONFIRM)
                 }
             }
             .drawWithCache {
