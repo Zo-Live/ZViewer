@@ -119,6 +119,29 @@ class FavoriteManagementTest {
     @Test fun recentWithIcons() = verifyTab("最近阅读", true)
     @Test fun recentWithoutIcons() = verifyTab("最近阅读", false)
 
+    @Test fun longPressCoverOrFavoriteButtonTogglesManagementWithoutChangingFavorite() {
+        launch(true)
+        cover().performScrollTo()
+        val button = rule.onNodeWithContentDescription("取消收藏 ${book.title}")
+        val exit = rule.onNodeWithContentDescription("退出收藏管理")
+
+        button.performTouchInput { click() }
+        assertFalse(book.id in store.favorites())
+        rule.onNodeWithContentDescription("收藏 ${book.title}").performTouchInput { click() }
+        assertTrue(book.id in store.favorites())
+        exit.assertDoesNotExist()
+
+        longPressCover()
+        button.performTouchInput { longClick() }
+        exit.assertDoesNotExist()
+        assertTrue(book.id in store.favorites())
+        button.performTouchInput { longClick() }
+        exit.assertIsDisplayed()
+        cover().performTouchInput { longClick(Offset(centerX, height * .3f)) }
+        exit.assertDoesNotExist()
+        assertTrue(book.id in store.favorites())
+    }
+
     @Test fun searchSortFiltersAndTabsKeepManagementUntilBack() {
         launch(false)
         longPressCover()

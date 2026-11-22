@@ -70,6 +70,7 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.intl.LocaleList
@@ -93,6 +94,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.core.view.WindowCompat
+import androidx.core.view.HapticFeedbackConstantsCompat
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -351,6 +353,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
 private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: Boolean,
     onSettings: () -> Unit, onChooseLibrary: () -> Unit) {
     val speed = state.settings.animationSpeed
+    val haptic = hapticFeedback()
     val titles = listOf(stringResource(R.string.library), stringResource(R.string.favorites), stringResource(R.string.recent_reads))
     val pagerState = rememberPagerState { titles.size }
     val gridStates = titles.map { rememberLazyGridState() }
@@ -360,6 +363,16 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     var filter by rememberSaveable { mutableIntStateOf(0) }
     var sort by rememberSaveable { mutableIntStateOf(0) }
     var managingFavorites by rememberSaveable { mutableStateOf(false) }
+    fun changeFavoriteManagement(enabled: Boolean) {
+        if (managingFavorites == enabled) return
+        managingFavorites = enabled
+        haptic(if (enabled) HapticFeedbackConstantsCompat.LONG_PRESS else HapticFeedbackConstantsCompat.TOGGLE_OFF)
+    }
+    fun toggleFavorite(book: Book) {
+        val isFavorite = book.id in model.state.value.favorites
+        model.toggleFavorite(book)
+        haptic(if (isFavorite) HapticFeedbackConstantsCompat.TOGGLE_OFF else HapticFeedbackConstantsCompat.TOGGLE_ON)
+    }
     val contentInset = 24.dp
     val actionInset = contentInset - 12.dp
     val columns = state.settings.gridColumns
@@ -372,7 +385,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     }
     val coverSize = remember(coverWidth) { PixelSize(coverWidth, (coverWidth / BookCoverAspectRatio).roundToInt()) }
     BackHandler(enabled = active && (managingFavorites || searching)) {
-        if (managingFavorites) managingFavorites = false
+        if (managingFavorites) changeFavoriteManagement(false)
         else { searching = false; query = "" }
     }
     Scaffold(
@@ -382,7 +395,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                 Text("ZViewer", fontWeight = FontWeight.Bold, fontSize = 21.sp)
             }, actions = {
                 IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(Icons.Outlined.Search, stringResource(R.string.search_comics)) }
-                IconButton(onClick = { managingFavorites = false; onSettings() }) { Icon(Icons.Outlined.Settings, stringResource(R.string.settings)) }
+                IconButton(onClick = { changeFavoriteManagement(false); onSettings() }) { Icon(Icons.Outlined.Settings, stringResource(R.string.settings)) }
             })
         },
         bottomBar = {
@@ -397,7 +410,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
         },
         floatingActionButton = {
             LibraryActions(currentGrid, managingFavorites,
-                onExitManagement = { managingFavorites = false })
+                onExitManagement = { changeFavoriteManagement(false) })
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
@@ -461,7 +474,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                                     Text(pluralStringResource(R.plurals.comic_count, books.size, books.size), Modifier.padding(top = 5.dp),
                                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                IconButton(onClick = { managingFavorites = false; model.refresh() }, enabled = !state.scanning) { Icon(Icons.Outlined.Refresh, stringResource(R.string.refresh_library)) }
+                                IconButton(onClick = { changeFavoriteManagement(false); model.refresh() }, enabled = !state.scanning) { Icon(Icons.Outlined.Refresh, stringResource(R.string.refresh_library)) }
                                 EndAlignedDropdownMenu(
                                     expanded = sortMenu,
                                     onDismissRequest = { sortMenu = false },
@@ -493,9 +506,12 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                                 BookCard(book, state.progress[book.id] ?: ReadingProgress(), book.id in state.favorites,
                                     model.repository, coverSize, state.coverRevision, state.settings.showFileType,
                                     showFavoriteIcon = state.settings.showFavoriteIcon || managingFavorites,
-                                    onClick = { if (managingFavorites) model.toggleFavorite(book) else model.open(book) },
-                                    onLongClick = { managingFavorites = true },
-                                    onFavorite = { model.toggleFavorite(book) })
+                                    managingFavorites = managingFavorites,
+                                    onClick = {
+                                        if (managingFavorites) toggleFavorite(book) else model.open(book)
+                                    },
+                                    onLongClick = { changeFavoriteManagement(!managingFavorites) },
+                                    onFavorite = { toggleFavorite(book) })
                             }
                         }
                         if (books.isEmpty()) {
@@ -681,10 +697,12 @@ private const val BookCoverAspectRatio = .69f
 
 @Composable
 private fun BookCard(book: Book, progress: ReadingProgress, favorite: Boolean, repository: BookRepository,
-    coverSize: PixelSize, revision: Int, showFileType: Boolean, showFavoriteIcon: Boolean, onClick: () -> Unit,
-    onLongClick: () -> Unit, onFavorite: () -> Unit) {
+    coverSize: PixelSize, revision: Int, showFileType: Boolean, showFavoriteIcon: Boolean,
+    managingFavorites: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, onFavorite: () -> Unit) {
+    val managementLabel = stringResource(if (managingFavorites) R.string.exit_favorite_management else R.string.manage_favorites)
     Column(Modifier.clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onClick,
-        onLongClickLabel = stringResource(R.string.manage_favorites), onLongClick = onLongClick)) {
+        onLongClickLabel = managementLabel, onLongClick = onLongClick,
+        hapticFeedbackEnabled = false)) {
         Box(Modifier.fillMaxWidth().aspectRatio(BookCoverAspectRatio).clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceContainerHigh)) {
             BookCover(book, repository, coverSize, revision)
@@ -700,11 +718,20 @@ private fun BookCard(book: Book, progress: ReadingProgress, favorite: Boolean, r
                     Text(formatLabel, Modifier.padding(horizontal = 6.dp, vertical = 3.dp), style = MaterialTheme.typography.labelSmall)
                 }
             }
-            if (showFavoriteIcon) IconButton(onClick = onFavorite, modifier = Modifier.align(Alignment.BottomEnd).size(48.dp)) {
-                Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = .92f)) {
-                    Icon(if (favorite) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
-                        stringResource(if (favorite) R.string.remove_favorite else R.string.add_favorite, book.title), Modifier.padding(6.dp).size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary)
+            if (showFavoriteIcon) {
+                Box(Modifier.align(Alignment.BottomEnd).size(48.dp).clip(CircleShape)
+                    .combinedClickable(
+                        role = Role.Button,
+                        onClick = onFavorite,
+                        onLongClickLabel = managementLabel,
+                        onLongClick = onLongClick,
+                        hapticFeedbackEnabled = false,
+                    ), contentAlignment = Alignment.Center) {
+                    Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = .92f)) {
+                        Icon(if (favorite) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
+                            stringResource(if (favorite) R.string.remove_favorite else R.string.add_favorite, book.title),
+                            Modifier.padding(6.dp).size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                    }
                 }
             }
             if (progress.total > 0) LinearProgressIndicator(progress = { progress.fraction },
