@@ -10,4 +10,8 @@
         <item name="android:windowEnterAnimation">@anim/settings_dialog_enter</item>
         <item name="android:windowExitAnimation">@anim/settings_dialog_exit</item>
     </style>
+    <style name="FastDialogAnimation">
+        <item name="android:windowEnterAnimation">@anim/fast_dialog_enter</item>
+        <item name="android:windowExitAnimation">@anim/fast_dialog_exit</item>
+    </style>
 </resources>

@@ -18,6 +18,9 @@
     <string name="custom_theme_color">テーマカラーの設定</string>
     <string name="preferences">基本設定</string>
     <string name="language">言語</string>
+    <string name="animation_speed">アニメーション速度</string>
+    <string name="animation_speed_moderate">標準</string>
+    <string name="animation_speed_enhanced">高速</string>
     <string name="grid_columns">1行あたりの表紙数</string>
     <string name="show_file_type">ファイル形式を表示</string>
     <string name="show_file_type_hint">表紙の左上に形式を表示します</string>

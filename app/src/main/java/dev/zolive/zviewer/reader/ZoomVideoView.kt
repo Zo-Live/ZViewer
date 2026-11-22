@@ -18,6 +18,7 @@ import android.widget.ImageView
 import androidx.media3.ui.PlayerView
 import androidx.media3.common.Player
 import dev.zolive.zviewer.R
+import dev.zolive.zviewer.data.AnimationSpeed
 import dev.zolive.zviewer.data.DiagnosticLog
 import kotlin.math.abs
 
@@ -108,6 +109,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
             field = value
             scaleDetector.isQuickScaleEnabled = value
         }
+    internal var zoomAnimationSpeed = AnimationSpeed.Moderate
 
     init {
         addView(playerView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
@@ -165,7 +167,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     }
 
     private fun animateZoom(value: Float, focusX: Float, focusY: Float) {
-        zoomAnimator.animate(zoom, value) { setZoom(it, focusX, focusY) }
+        zoomAnimator.animate(zoom, value, zoomAnimationSpeed) { setZoom(it, focusX, focusY) }
     }
 
     private fun setZoom(value: Float, focusX: Float, focusY: Float) {

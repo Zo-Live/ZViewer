@@ -17,6 +17,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
@@ -55,7 +56,8 @@ internal fun LibraryFilters(
 ) {
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
-    val boundary = remember(scope) { FilterOverscroll(scope) }
+    val speed by rememberUpdatedState(LocalAnimationSpeed.current)
+    val boundary = remember(scope) { FilterOverscroll(scope) { speed.stiffness(600f) } }
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
     Row(
         Modifier.fillMaxWidth()
@@ -95,7 +97,10 @@ internal fun LibraryFilters(
     }
 }
 
-private class FilterOverscroll(private val scope: CoroutineScope) : NestedScrollConnection {
+private class FilterOverscroll(
+    private val scope: CoroutineScope,
+    private val stiffness: () -> Float,
+) : NestedScrollConnection {
     var pull by mutableFloatStateOf(0f)
         private set
     private var rebound: Job? = null
@@ -128,7 +133,7 @@ private class FilterOverscroll(private val scope: CoroutineScope) : NestedScroll
             rebound = scope.launch {
                 AnimationState(initialValue = pull, initialVelocity = velocity).animateTo(
                     targetValue = 0f,
-                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = 600f),
+                    animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = stiffness()),
                 ) {
                     pull = (value * direction).coerceAtLeast(0f) * direction
                 }

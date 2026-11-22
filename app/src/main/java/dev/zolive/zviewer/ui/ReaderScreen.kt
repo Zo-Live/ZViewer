@@ -9,6 +9,8 @@ import android.view.WindowManager
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -51,6 +53,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
@@ -99,6 +102,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     videoPosition: (Int) -> Long = { 0L }, onVideoProgress: (Int, Long) -> Unit = { _, _ -> }, onBack: () -> Unit,
     visible: Boolean = true, onVideoEntryReady: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
+    val speed = settings.animationSpeed
     var currentPage by rememberSaveable(session.book.id) { mutableIntStateOf(initialPage.coerceIn(session.pages.indices)) }
     var controls by rememberSaveable(session.book.id) { mutableStateOf(false) }
     var preferences by remember { mutableStateOf(false) }
@@ -123,6 +127,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     var zoomItem by remember(session, paging, settings.vertical) { mutableIntStateOf(-1) }
     val listState = rememberLazyListState(paging.anchor(currentPage))
     val pagerState = rememberPagerState(initialPage = paging.anchor(currentPage)) { paging.itemCount }
+    val flingBehavior = pageFlingBehavior(pagerState, speed)
     var jumpJob by remember { mutableStateOf<Job?>(null) }
     val ratios = remember(session.book.cacheKey) { mutableStateMapOf<Int, Float>() }
     var initialImageLoaded by remember(session) { mutableStateOf(false) }
@@ -259,7 +264,11 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     suspend fun scrollToReaderPage(page: Int, animate: Boolean) {
         if (pagerReading) {
             val item = paging.nearestItem(page, pagerState.currentPage)
-            if (animate) pagerState.animateScrollToPage(item) else pagerState.scrollToPage(item)
+            if (animate) {
+                pagerState.animateScrollToPage(item, animationSpec = spring(stiffness = speed.stiffness(Spring.StiffnessMedium)))
+            } else {
+                pagerState.scrollToPage(item)
+            }
         } else {
             listState.scrollToItem(paging.nearestItem(page, listState.firstVisibleItemIndex))
         }
@@ -352,9 +361,11 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 }
                 if (verticalReading) {
                     VerticalPager(state = pagerState, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1,
+                        flingBehavior = flingBehavior,
                         key = { "${session.book.cacheKey}-$it" }) { item -> itemContent(item) }
                 } else {
                     HorizontalPager(state = pagerState, reverseLayout = settings.rightToLeft, modifier = Modifier.fillMaxSize(),
+                        flingBehavior = flingBehavior,
                         beyondViewportPageCount = 1, key = { "${session.book.cacheKey}-$it" }) { item -> itemContent(item) }
                 }
             } else if (verticalReading) {
@@ -383,6 +394,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 }
             } else {
                 HorizontalPager(state = pagerState, reverseLayout = settings.rightToLeft, modifier = Modifier.fillMaxSize(),
+                    flingBehavior = flingBehavior,
                     beyondViewportPageCount = 1, key = { "${session.book.cacheKey}-$it" }) { item ->
                     val index = paging.pageAt(item)
                     ReaderPage(session, index, repository, vertical = false,
@@ -416,7 +428,9 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         style = MaterialTheme.typography.labelSmall)
                 }
             }
-            AnimatedVisibility(visible = controls, enter = fadeIn(), exit = fadeOut(), modifier = Modifier.align(Alignment.TopCenter)) {
+            val fadeSpec = spring<Float>(stiffness = speed.stiffness(Spring.StiffnessMediumLow))
+            AnimatedVisibility(visible = controls, enter = fadeIn(fadeSpec), exit = fadeOut(fadeSpec),
+                modifier = Modifier.align(Alignment.TopCenter)) {
                 TopAppBar(title = {
                     Text(session.book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 }, navigationIcon = {
@@ -424,8 +438,12 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 }, actions = { IconButton(onClick = { preferences = true }) { Icon(Icons.Outlined.Settings, stringResource(R.string.reader_settings)) } },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = .97f)))
             }
+            val slideSpec = spring(
+                stiffness = speed.stiffness(Spring.StiffnessMediumLow), visibilityThreshold = IntOffset(1, 1),
+            )
             AnimatedVisibility(visible = controls, modifier = Modifier.align(Alignment.BottomCenter),
-                enter = slideInVertically { it } + fadeIn(), exit = slideOutVertically { it } + fadeOut()) {
+                enter = slideInVertically(slideSpec) { it } + fadeIn(fadeSpec),
+                exit = slideOutVertically(slideSpec) { it } + fadeOut(fadeSpec)) {
                 Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .98f), tonalElevation = 3.dp,
                     shadowElevation = 8.dp, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
                     Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) {
@@ -505,7 +523,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             videoBook -> R.string.video_number_range
             else -> R.string.page_number_range
         }
-        AlertDialog(onDismissRequest = { jumpDialog = false }, title = { Text(stringResource(title)) }, text = {
+        AppAlertDialog(onDismissRequest = { jumpDialog = false }, title = { Text(stringResource(title)) }, text = {
             OutlinedTextField(text, { text = it.filter(Char::isDigit).take(6) },
                 label = { Text(stringResource(label, session.pages.size)) },
                 singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
@@ -683,6 +701,7 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
 private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, vertical: Boolean, active: Boolean,
     doubleTapZoomEnabled: Boolean, foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float?, onRatio: (Float) -> Unit,
     onTap: () -> Unit, onRetry: () -> Unit, preview: ReaderPagePreview?, clipPage: Boolean) {
+    val speed = LocalAnimationSpeed.current
     val imageDescription = stringResource(
         if (doubleTapZoomEnabled) R.string.image_accessibility else R.string.image_accessibility_without_zoom,
         index + 1,
@@ -697,6 +716,7 @@ private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, ve
                 update = { view ->
                     view.onTap = onTap
                     view.doubleTapZoomEnabled = doubleTapZoomEnabled
+                    view.zoomAnimationSpeed = speed
                     view.bind(image, imageDescription, active)
                     if (zoomSequence > 0) view.command(zoomSequence, zoomAction)
                 })

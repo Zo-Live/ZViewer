@@ -5,7 +5,6 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.widget.Toast
 import androidx.activity.compose.LocalActivity
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
@@ -39,7 +38,7 @@ fun UpdateFeedback(state: LibraryState, model: LibraryViewModel) {
         }
     }
     if (prompt != null) {
-        AlertDialog(onDismissRequest = model::dismissUpdate,
+        AppAlertDialog(onDismissRequest = model::dismissUpdate,
             text = { Text(stringResource(R.string.update_prompt, prompt.version)) },
             dismissButton = { TextButton(onClick = model::dismissUpdate) { Text(stringResource(R.string.update_later)) } },
             confirmButton = { TextButton(onClick = model::startUpdateDownload) { Text(stringResource(R.string.update_now)) } })

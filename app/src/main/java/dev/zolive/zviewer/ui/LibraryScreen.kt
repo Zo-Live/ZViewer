@@ -7,6 +7,7 @@ import android.net.Uri
 import android.util.Size as PixelSize
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -93,6 +94,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.core.view.WindowCompat
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private sealed class AppPage(val tag: String) {
@@ -160,6 +162,7 @@ private fun Modifier.pageBackSwipe(
 @Composable
 fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     val activity = LocalActivity.current
+    val speed = state.settings.animationSpeed
     val session = state.session
     val startsOnVideo = remember(session, state.initialPage) {
         session?.pages?.getOrNull(state.initialPage)?.isVideo == true
@@ -198,15 +201,18 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     val pageStates = rememberSaveableStateHolder()
     val density = LocalDensity.current
     val swipeThreshold = with(density) { 96.dp.toPx() }
-    fun finishTransition(motion: PageTransition, showChild: Boolean, startProgress: Float? = null) {
+    fun finishTransition(child: AppPage, showChild: Boolean, startProgress: Float) {
         navigationJob?.cancel()
+        val motion = PageTransition(child, startProgress)
+        val target = if (showChild) 1f else 0f
+        val duration = (abs(target - startProgress) * speed.duration(360)).roundToInt()
         page = if (showChild) motion.child else motion.parent
         transition = motion
+        dragProgress = null
         navigationJob = navigationScope.launch {
-            if (startProgress != null) motion.progress.snapTo(startProgress)
             motion.progress.animateTo(
-                if (showChild) 1f else 0f,
-                animationSpec = tween(360, easing = FastOutSlowInEasing)
+                target,
+                animationSpec = tween(duration, easing = FastOutSlowInEasing),
             )
             transition = null
             if (!showChild && motion.child != AppPage.Logs) pageStates.removeState(motion.child.tag)
@@ -214,10 +220,21 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     }
     fun goBack() {
         if (page == AppPage.Library) return
+        val start = dragProgress ?: transition?.takeIf { it.child == page }?.progress?.value ?: 1f
+        finishTransition(page, showChild = false, startProgress = start)
+    }
+    fun beginBackGesture(): Float {
+        navigationJob?.cancel()
         val motion = transition?.takeIf { it.child == page } ?: PageTransition(page, 1f)
-        val start = dragProgress
-        dragProgress = null
-        finishTransition(motion, showChild = false, startProgress = start)
+        val start = dragProgress ?: motion.progress.value
+        transition = motion
+        dragProgress = start
+        return start
+    }
+    fun finishBackGesture(showChild: Boolean) {
+        val start = dragProgress ?: return
+        val motion = transition ?: return
+        finishTransition(motion.child, showChild, start)
     }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) model.selectLibrary(uri)
@@ -259,42 +276,31 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                                 .testTag(layer.tag)
                                 .then(if (!active) Modifier.clearAndSetSemantics {} else Modifier)
                                 .then(if (active && layer != AppPage.Library) Modifier.pageBackSwipe(
-                                    onStart = {
-                                        navigationJob?.cancel()
-                                        val dragMotion = PageTransition(layer, 1f)
-                                        dragProgress = 1f
-                                        transition = dragMotion
-                                    },
+                                    onStart = { beginBackGesture() },
                                     onDrag = { dragAmount ->
                                         dragProgress = ((dragProgress ?: 1f) - dragAmount / viewportWidth).coerceIn(0f, 1f)
                                     },
                                     onEnd = {
                                         val start = dragProgress ?: 1f
                                         val distance = (1f - start) * viewportWidth
-                                        dragProgress = null
-                                        transition?.let { finishTransition(it, showChild = distance < swipeThreshold, start) }
+                                        finishBackGesture(showChild = distance < swipeThreshold)
                                     },
-                                    onCancel = {
-                                        dragProgress?.let { start ->
-                                            dragProgress = null
-                                            transition?.let { finishTransition(it, showChild = true, start) }
-                                        }
-                                    },
+                                    onCancel = { finishBackGesture(showChild = true) },
                                 ) else Modifier)
                             Box(layerModifier) {
                                 pageStates.SaveableStateProvider(layer.tag) {
                                     when (layer) {
                                         AppPage.Library -> LibraryScreen(state, model, active,
-                                            onSettings = { finishTransition(PageTransition(AppPage.Settings, 0f), true) },
+                                            onSettings = { finishTransition(AppPage.Settings, showChild = true, startProgress = 0f) },
                                             onChooseLibrary = chooseLibrary)
                                         AppPage.Settings -> SettingsScreen(::goBack) { section ->
-                                            finishTransition(PageTransition(AppPage.Section(section), 0f), true)
+                                            finishTransition(AppPage.Section(section), showChild = true, startProgress = 0f)
                                         }
                                         is AppPage.Section -> SettingsSectionScreen(
                                             layer.section, state, model, active, ::goBack, chooseLibrary,
-                                            onViewLogs = { finishTransition(PageTransition(AppPage.Logs, 0f), true) })
+                                            onViewLogs = { finishTransition(AppPage.Logs, showChild = true, startProgress = 0f) })
                                         AppPage.Logs -> LogListScreen(active, ::goBack) { file ->
-                                            finishTransition(PageTransition(AppPage.LogDetail(file), 0f), true)
+                                            finishTransition(AppPage.LogDetail(file), showChild = true, startProgress = 0f)
                                         }
                                         is AppPage.LogDetail -> LogDetailScreen(layer.file, ::goBack)
                                     }
@@ -310,19 +316,31 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                         })
                     }
                 }
-                BackHandler(enabled = page != AppPage.Library && !waitingForVideo, onBack = ::goBack)
+                PredictiveBackHandler(enabled = page != AppPage.Library && !waitingForVideo) { events ->
+                    var startProgress: Float? = null
+                    try {
+                        events.collect { event ->
+                            val start = startProgress ?: beginBackGesture().also { startProgress = it }
+                            dragProgress = start * (1f - event.progress)
+                        }
+                        goBack()
+                    } catch (cancelled: CancellationException) {
+                        if (startProgress != null) finishBackGesture(showChild = true)
+                        throw cancelled
+                    }
+                }
             }
             BackHandler(enabled = waitingForVideo, onBack = model::closeBook)
         }
         UpdateFeedback(state, model)
     }
     if (showOpening && state.opening != null) {
-        AlertDialog(onDismissRequest = model::cancelOpen, icon = { CircularProgressIndicator(Modifier.size(36.dp)) },
+        AppAlertDialog(onDismissRequest = model::cancelOpen, icon = { CircularProgressIndicator(Modifier.size(36.dp)) },
             title = { Text(stringResource(R.string.opening_reader)) }, text = { Text(state.opening) },
             confirmButton = { TextButton(onClick = model::cancelOpen) { Text(stringResource(R.string.cancel)) } })
     }
     if (state.error != null) {
-        AlertDialog(onDismissRequest = model::dismissError, icon = { Icon(Icons.Outlined.Info, null) },
+        AppAlertDialog(onDismissRequest = model::dismissError, icon = { Icon(Icons.Outlined.Info, null) },
             title = { Text(stringResource(R.string.read_error_title)) }, text = { Text(state.error) },
             confirmButton = { TextButton(onClick = model::dismissError) { Text(stringResource(R.string.ok)) } },
             dismissButton = { TextButton(onClick = { model.dismissError(); chooseLibrary() }) { Text(stringResource(R.string.choose_library)) } })
@@ -332,6 +350,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
 @Composable
 private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: Boolean,
     onSettings: () -> Unit, onChooseLibrary: () -> Unit) {
+    val speed = state.settings.animationSpeed
     val titles = listOf(stringResource(R.string.library), stringResource(R.string.favorites), stringResource(R.string.recent_reads))
     val pagerState = rememberPagerState { titles.size }
     val gridStates = titles.map { rememberLazyGridState() }
@@ -385,12 +404,12 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
             if (state.scanning) LinearProgressIndicator(Modifier.fillMaxWidth())
             AnimatedVisibility(
                 visible = searching,
-                enter = expandVertically(tween(280, easing = FastOutSlowInEasing), expandFrom = Alignment.Top) +
-                    slideInVertically(tween(280, easing = FastOutSlowInEasing)) { -it / 4 } +
-                    fadeIn(tween(180)),
-                exit = shrinkVertically(tween(220, easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) +
-                    slideOutVertically(tween(220, easing = FastOutSlowInEasing)) { -it / 4 } +
-                    fadeOut(tween(150))
+                enter = expandVertically(tween(speed.duration(280), easing = FastOutSlowInEasing), expandFrom = Alignment.Top) +
+                    slideInVertically(tween(speed.duration(280), easing = FastOutSlowInEasing)) { -it / 4 } +
+                    fadeIn(tween(speed.duration(180))),
+                exit = shrinkVertically(tween(speed.duration(220), easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) +
+                    slideOutVertically(tween(speed.duration(220), easing = FastOutSlowInEasing)) { -it / 4 } +
+                    fadeOut(tween(speed.duration(150)))
             ) {
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = contentInset, vertical = 8.dp),
                     placeholder = { Text(stringResource(R.string.search_title)) }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
@@ -398,6 +417,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                     shape = RoundedCornerShape(28.dp), singleLine = true)
             }
             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize().testTag("library-pager"),
+                flingBehavior = pageFlingBehavior(pagerState, speed),
                 key = { it }) { tab ->
                 var sortMenu by remember { mutableStateOf(false) }
                 val filterOptions = if (tab == 2) {
@@ -517,6 +537,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
 
 @Composable
 private fun LibraryActions(gridState: LazyGridState, managingFavorites: Boolean, onExitManagement: () -> Unit) {
+    val speed = LocalAnimationSpeed.current
     var returnAnimationDistance by remember(gridState) { mutableStateOf<Float?>(null) }
     val returningToTop = returnAnimationDistance != null
     val showScrollToTop = !returningToTop && gridState.canScrollBackward
@@ -536,7 +557,7 @@ private fun LibraryActions(gridState: LazyGridState, managingFavorites: Boolean,
     }
     LaunchedEffect(gridState, showScrollToTop, returningToTop) {
         if (!returningToTop) {
-            visibility.animateTo(if (showScrollToTop) 1f else 0f, tween(240, easing = FastOutSlowInEasing))
+            visibility.animateTo(if (showScrollToTop) 1f else 0f, tween(speed.duration(240), easing = FastOutSlowInEasing))
             return@LaunchedEffect
         }
         coroutineScope {

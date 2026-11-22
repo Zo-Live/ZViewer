@@ -7,6 +7,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.window.DialogWindowProvider
 import dev.zolive.zviewer.R
+import dev.zolive.zviewer.data.AnimationSpeed
 
 @Suppress("DEPRECATION")
 @Composable
@@ -18,15 +19,47 @@ internal fun SettingsAlertDialog(
     dismissButton: (@Composable () -> Unit)? = null,
     resizeForKeyboard: Boolean = false,
 ) {
+    AppAlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = confirmButton,
+        title = title,
+        text = text,
+        dismissButton = dismissButton,
+        resizeForKeyboard = resizeForKeyboard,
+        moderateAnimation = R.style.SettingsDialogAnimation,
+    )
+}
+
+@Suppress("DEPRECATION")
+@Composable
+internal fun AppAlertDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit,
+    title: (@Composable () -> Unit)? = null,
+    text: (@Composable () -> Unit)? = null,
+    icon: (@Composable () -> Unit)? = null,
+    dismissButton: (@Composable () -> Unit)? = null,
+    resizeForKeyboard: Boolean = false,
+    moderateAnimation: Int? = null,
+) {
+    val animation = if (LocalAnimationSpeed.current == AnimationSpeed.Enhanced) {
+        R.style.FastDialogAnimation
+    } else {
+        moderateAnimation
+    }
     AlertDialog(
         onDismissRequest = onDismissRequest,
-        title = {
-            val window = (LocalView.current.parent as? DialogWindowProvider)?.window
+        title = title,
+        text = text,
+        icon = icon,
+        confirmButton = {
+            val view = LocalView.current
+            val window = (view.parent as? DialogWindowProvider)?.window
             SideEffect {
                 if (window != null) {
                     val attributes = window.attributes
-                    if (attributes.windowAnimations != R.style.SettingsDialogAnimation) {
-                        window.setWindowAnimations(R.style.SettingsDialogAnimation)
+                    if (animation != null && attributes.windowAnimations != animation) {
+                        window.setWindowAnimations(animation)
                     }
                     if (resizeForKeyboard && attributes.softInputMode and WindowManager.LayoutParams.SOFT_INPUT_MASK_ADJUST
                         != WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE
@@ -36,10 +69,8 @@ internal fun SettingsAlertDialog(
                     }
                 }
             }
-            title()
+            confirmButton()
         },
-        text = text,
-        confirmButton = confirmButton,
         dismissButton = dismissButton,
     )
 }

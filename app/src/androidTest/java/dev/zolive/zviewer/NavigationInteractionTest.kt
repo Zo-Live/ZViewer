@@ -3,6 +3,7 @@ package dev.zolive.zviewer
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
+import androidx.activity.BackEventCompat
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -11,6 +12,7 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.ViewModelProvider
+import dev.zolive.zviewer.data.AnimationSpeed
 import dev.zolive.zviewer.data.AppLanguage
 import dev.zolive.zviewer.data.Book
 import dev.zolive.zviewer.data.BookRepository
@@ -341,6 +343,58 @@ class NavigationInteractionTest {
         rule.waitForIdle()
         rule.onNodeWithTag("library-screen").assertIsDisplayed()
         rule.onNodeWithTag("settings-screen").assertDoesNotExist()
+    }
+
+    @Test fun enhancedBackSwipeFinishesEarlierAfterRelease() {
+        for (speed in AnimationSpeed.entries) {
+            store.saveSettings(store.settings().copy(animationSpeed = speed))
+            launch()
+            rule.onNodeWithContentDescription("设置").performClick()
+            val settings = rule.onNodeWithTag("settings-screen").assertIsDisplayed()
+            rule.mainClock.autoAdvance = false
+            try {
+                settings.performTouchInput {
+                    swipe(Offset(width * .3f, centerY), Offset(width * .66f, centerY), durationMillis = 240)
+                }
+                rule.mainClock.advanceTimeBy(192)
+                if (speed == AnimationSpeed.Enhanced) settings.assertDoesNotExist() else settings.assertExists()
+                rule.mainClock.advanceTimeBy(400)
+                rule.onNodeWithTag("library-screen").assertIsDisplayed()
+            } finally {
+                rule.mainClock.autoAdvance = true
+                scenario.close()
+            }
+        }
+    }
+
+    @Test fun predictiveBackFollowsProgressAndSettlesOnCancellationOrCommit() {
+        store.saveSettings(store.settings().copy(animationSpeed = AnimationSpeed.Enhanced))
+        launch()
+        rule.onNodeWithContentDescription("设置").performClick()
+        val settings = rule.onNodeWithTag("settings-screen")
+        val original = settings.fetchSemanticsNode().boundsInRoot
+        rule.mainClock.autoAdvance = false
+        try {
+            repeat(2) { attempt ->
+                scenario.onActivity {
+                    val dispatcher = it.onBackPressedDispatcher
+                    dispatcher.dispatchOnBackStarted(BackEventCompat(0f, 300f, 0f, BackEventCompat.EDGE_LEFT))
+                    dispatcher.dispatchOnBackProgressed(BackEventCompat(300f, 300f, .4f, BackEventCompat.EDGE_LEFT))
+                }
+                rule.mainClock.advanceTimeBy(48)
+                val dragging = settings.fetchSemanticsNode().boundsInRoot
+                assertEquals(original.left + original.width * .4f, dragging.left, 2f)
+                scenario.onActivity {
+                    if (attempt == 0) it.onBackPressedDispatcher.dispatchOnBackCancelled()
+                    else it.onBackPressedDispatcher.onBackPressed()
+                }
+                rule.mainClock.advanceTimeBy(192)
+                if (attempt == 0) assertEquals(original, settings.fetchSemanticsNode().boundsInRoot)
+                else settings.assertDoesNotExist()
+            }
+        } finally {
+            rule.mainClock.autoAdvance = true
+        }
     }
 
     @Test fun diagnosticsUsesTheSameTransitionAndReturnsOnePageAtATime() {

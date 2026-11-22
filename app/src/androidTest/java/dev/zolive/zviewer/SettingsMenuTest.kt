@@ -16,6 +16,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.zolive.zviewer.data.AnimationSpeed
 import dev.zolive.zviewer.data.AutoLockInterval
 import dev.zolive.zviewer.data.PreferenceStore
 import org.junit.After
@@ -136,6 +137,30 @@ class SettingsMenuTest {
         option("水平翻页").performClick()
         reading.assert(hasText("水平翻页"))
         assertFalse(store.settings().vertical)
+    }
+
+    @Test fun interactionPreferencesFollowLanguageAndPersist() {
+        setting("偏好").performClick()
+        val language = setting("语言")
+        val speed = setting("动画速度")
+        val rows = listOf(language, speed, setting("显示文件类型"))
+            .map { it.fetchSemanticsNode().boundsInRoot }
+        rows.zipWithNext().forEach { (upper, lower) -> assertEquals(upper.bottom, lower.top, 1f) }
+        speed.assert(hasText("适中")).performClick()
+        option("适中").assertIsSelected()
+        option("增强").assertIsNotSelected().performClick()
+        speed.assert(hasText("增强"))
+        assertEquals(AnimationSpeed.Enhanced, store.settings().animationSpeed)
+
+        scenario.close()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        rule.onNodeWithContentDescription("设置").performClick()
+        setting("偏好").performClick()
+        speed.assert(hasText("增强"))
+        speed.performClick()
+        option("增强").assertIsSelected()
+        option("适中").performClick()
+        assertEquals(AnimationSpeed.Moderate, store.settings().animationSpeed)
     }
 
     @Test fun switchingLanguagesKeepsSettingsOpenAndPersists() {

@@ -10,6 +10,7 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.ViewConfiguration
 import android.widget.ImageView
+import dev.zolive.zviewer.data.AnimationSpeed
 
 class ZoomImageView(context: Context) : ImageView(context) {
     var onTap: () -> Unit = {}
@@ -53,6 +54,7 @@ class ZoomImageView(context: Context) : ImageView(context) {
             field = value
             scaleDetector.isQuickScaleEnabled = value
         }
+    internal var zoomAnimationSpeed = AnimationSpeed.Moderate
 
     init {
         scaleType = ScaleType.MATRIX
@@ -94,7 +96,7 @@ class ZoomImageView(context: Context) : ImageView(context) {
     }
 
     private fun animateZoom(value: Float, focusX: Float, focusY: Float) {
-        zoomAnimator.animate(zoom, value) { setZoom(it, focusX, focusY) }
+        zoomAnimator.animate(zoom, value, zoomAnimationSpeed) { setZoom(it, focusX, focusY) }
     }
 
     private fun setZoom(value: Float, focusX: Float, focusY: Float) {

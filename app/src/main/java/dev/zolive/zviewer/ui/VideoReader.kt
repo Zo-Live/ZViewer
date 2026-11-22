@@ -449,6 +449,7 @@ internal fun VideoPage(
                 view.setCoverBackground(background.toArgb())
                 view.onTap = onTap
                 view.doubleTapZoomEnabled = settings.doubleTapZoom
+                view.zoomAnimationSpeed = settings.animationSpeed
                 view.contentDescription = description
                 if (state != null) {
                     state.bindOwner(view, active = active)

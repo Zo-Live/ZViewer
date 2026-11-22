@@ -55,6 +55,7 @@ import dev.zolive.zviewer.BuildConfig
 import dev.zolive.zviewer.LibraryState
 import dev.zolive.zviewer.LibraryViewModel
 import dev.zolive.zviewer.R
+import dev.zolive.zviewer.data.AnimationSpeed
 import dev.zolive.zviewer.data.AppLanguage
 import dev.zolive.zviewer.data.AutoLockInterval
 import dev.zolive.zviewer.data.ReaderSettings
@@ -243,6 +244,14 @@ private fun AppPreferences(settings: ReaderSettings, onSettings: (ReaderSettings
         options = AppLanguage.entries.map { it to it.endonym },
         titleIcon = Icons.Outlined.Language,
     ) { onSettings(settings.copy(language = it)) }
+    PreferenceMenu(
+        title = stringResource(R.string.animation_speed),
+        selectedValue = settings.animationSpeed,
+        options = listOf(
+            AnimationSpeed.Moderate to stringResource(R.string.animation_speed_moderate),
+            AnimationSpeed.Enhanced to stringResource(R.string.animation_speed_enhanced),
+        ),
+    ) { onSettings(settings.copy(animationSpeed = it)) }
     PreferenceSwitch(stringResource(R.string.show_file_type), stringResource(R.string.show_file_type_hint), settings.showFileType) {
         onSettings(settings.copy(showFileType = it))
     }

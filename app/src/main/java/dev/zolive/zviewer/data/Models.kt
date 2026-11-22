@@ -49,6 +49,10 @@ enum class AutoLockInterval(val seconds: Int) {
     Immediately(0), FifteenSeconds(15), OneMinute(60), FiveMinutes(300),
 }
 
+enum class AnimationSpeed(val durationScale: Float) {
+    Moderate(1f), Enhanced(0.6f),
+}
+
 data class ReaderSettings(
     val theme: String = "system",
     val accent: Long = 0xFF49684D,
@@ -80,6 +84,7 @@ data class ReaderSettings(
     val verifyAfterBackground: Boolean = false,
     val autoLockInterval: AutoLockInterval = AutoLockInterval.FifteenSeconds,
     val hideGalleryImages: Boolean = false,
+    val animationSpeed: AnimationSpeed = AnimationSpeed.Moderate,
 )
 
 data class PageSource(

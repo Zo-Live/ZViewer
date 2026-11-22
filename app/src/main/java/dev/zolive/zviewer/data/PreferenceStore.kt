@@ -43,6 +43,11 @@ class PreferenceStore(context: Context) {
         clearCacheOnTaskRemoval = preferences.getBoolean("clear_cache_on_task_removal", false),
         clearProgressOnTaskRemoval = preferences.getBoolean("clear_progress_on_task_removal", false),
         language = language,
+        animationSpeed = if (preferences.getBoolean("fast_animations", false)) {
+            AnimationSpeed.Enhanced
+        } else {
+            AnimationSpeed.Moderate
+        },
         verifyOnStartup = preferences.getBoolean("verify_on_startup", false),
         hideRecentPreview = preferences.getBoolean("hide_recent_preview", false),
         verifyAfterBackground = preferences.getBoolean("verify_after_background", false),
@@ -74,6 +79,7 @@ class PreferenceStore(context: Context) {
             .putBoolean("clear_cache_on_task_removal", settings.clearCacheOnTaskRemoval)
             .putBoolean("clear_progress_on_task_removal", settings.clearProgressOnTaskRemoval)
             .putString("language", settings.language.tag)
+            .putBoolean("fast_animations", settings.animationSpeed == AnimationSpeed.Enhanced)
             .putBoolean("verify_on_startup", settings.verifyOnStartup)
             .putBoolean("hide_recent_preview", settings.hideRecentPreview)
             .putBoolean("verify_after_background", settings.verifyAfterBackground)
