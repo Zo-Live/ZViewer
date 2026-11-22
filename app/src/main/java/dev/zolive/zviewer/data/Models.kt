@@ -85,6 +85,7 @@ data class ReaderSettings(
     val autoLockInterval: AutoLockInterval = AutoLockInterval.FifteenSeconds,
     val hideGalleryImages: Boolean = false,
     val animationSpeed: AnimationSpeed = AnimationSpeed.Moderate,
+    val hapticFeedback: Boolean = true,
 )
 
 data class PageSource(

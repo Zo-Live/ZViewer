@@ -13,10 +13,13 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -38,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
@@ -48,6 +52,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.view.HapticFeedbackConstantsCompat
+import androidx.core.view.ViewCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -238,6 +244,7 @@ private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSett
 
 @Composable
 private fun AppPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> Unit) {
+    val view = LocalView.current
     PreferenceMenu(
         title = stringResource(R.string.language),
         selectedValue = settings.language,
@@ -252,6 +259,17 @@ private fun AppPreferences(settings: ReaderSettings, onSettings: (ReaderSettings
             AnimationSpeed.Enhanced to stringResource(R.string.animation_speed_enhanced),
         ),
     ) { onSettings(settings.copy(animationSpeed = it)) }
+    PreferenceSwitch(
+        title = stringResource(R.string.haptic_feedback),
+        checked = settings.hapticFeedback,
+        feedbackOnToggle = false,
+    ) { enabled ->
+        onSettings(settings.copy(hapticFeedback = enabled))
+        view.isHapticFeedbackEnabled = enabled
+        if (enabled) {
+            ViewCompat.performHapticFeedback(view, HapticFeedbackConstantsCompat.TOGGLE_ON)
+        }
+    }
     PreferenceSwitch(stringResource(R.string.show_file_type), stringResource(R.string.show_file_type_hint), settings.showFileType) {
         onSettings(settings.copy(showFileType = it))
     }
@@ -314,6 +332,7 @@ private fun SecuritySettings(state: LibraryState, model: LibraryViewModel) {
 private fun LibraryStorageSettings(state: LibraryState, model: LibraryViewModel, onChooseLibrary: () -> Unit) {
     val settings = state.settings
     val context = LocalContext.current
+    val haptic = hapticFeedback()
     var cacheLimitMiB by remember(settings.cacheLimitMiB) { mutableIntStateOf(settings.cacheLimitMiB) }
     val cacheSize by produceState(0L, state.cacheRevision) { value = model.repository.cacheSize() }
     SettingsListItem(headlineContent = { Text(stringResource(R.string.library_directory)) }, supportingContent = {
@@ -330,12 +349,10 @@ private fun LibraryStorageSettings(state: LibraryState, model: LibraryViewModel,
         ))
     },
         trailingContent = { Text(Formatter.formatShortFileSize(context, cacheSize)) },
-        modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearCache))
-    SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_covers)) },
-        trailingContent = { Switch(checked = settings.clearCovers, onCheckedChange = null) },
-        modifier = Modifier.toggleable(value = settings.clearCovers, role = Role.Switch) {
-            model.settings(settings.copy(clearCovers = it))
-        })
+        modifier = Modifier.doubleClickToClear(onClear = model::clearCache))
+    PreferenceSwitch(stringResource(R.string.clear_covers), checked = settings.clearCovers) {
+        model.settings(settings.copy(clearCovers = it))
+    }
     PreferenceSwitch(stringResource(R.string.rebuild_library_covers),
         stringResource(R.string.rebuild_library_covers_hint), settings.rebuildLibraryCovers) {
         model.settings(settings.copy(rebuildLibraryCovers = it))
@@ -345,25 +362,27 @@ private fun LibraryStorageSettings(state: LibraryState, model: LibraryViewModel,
             else "${(cacheLimitMiB / 1024f).toString().removeSuffix(".0")} GiB") })
     val cacheLimitDescription = stringResource(R.string.cache_limit)
     Slider(value = cacheLimitMiB.toFloat(),
-        onValueChange = { cacheLimitMiB = (it / CacheLimits.STEP_MIB).roundToInt() * CacheLimits.STEP_MIB },
+        onValueChange = {
+            val step = (it / CacheLimits.STEP_MIB).roundToInt() * CacheLimits.STEP_MIB
+            if (step != cacheLimitMiB) {
+                cacheLimitMiB = step
+                haptic(HapticFeedbackConstantsCompat.SEGMENT_FREQUENT_TICK)
+            }
+        },
         onValueChangeFinished = { model.settings(settings.copy(cacheLimitMiB = cacheLimitMiB)) },
         valueRange = CacheLimits.MIN_MIB.toFloat()..CacheLimits.MAX_MIB.toFloat(),
         steps = (CacheLimits.MAX_MIB - CacheLimits.MIN_MIB) / CacheLimits.STEP_MIB - 1,
         modifier = Modifier.fillMaxWidth().semantics { contentDescription = cacheLimitDescription })
-    SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_cache_on_removal)) },
-        trailingContent = { Switch(checked = settings.clearCacheOnTaskRemoval, onCheckedChange = null) },
-        modifier = Modifier.toggleable(value = settings.clearCacheOnTaskRemoval, role = Role.Switch) {
-            model.settings(settings.copy(clearCacheOnTaskRemoval = it))
-        })
+    PreferenceSwitch(stringResource(R.string.clear_cache_on_removal), checked = settings.clearCacheOnTaskRemoval) {
+        model.settings(settings.copy(clearCacheOnTaskRemoval = it))
+    }
     SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_reading_history)) }, supportingContent = {
         Text(stringResource(R.string.clear_reading_history_hint))
     },
-        modifier = Modifier.combinedClickable(onClick = {}, onDoubleClick = model::clearReadingProgress))
-    SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_history_on_removal)) },
-        trailingContent = { Switch(checked = settings.clearProgressOnTaskRemoval, onCheckedChange = null) },
-        modifier = Modifier.toggleable(value = settings.clearProgressOnTaskRemoval, role = Role.Switch) {
-            model.settings(settings.copy(clearProgressOnTaskRemoval = it))
-        })
+        modifier = Modifier.doubleClickToClear(onClear = model::clearReadingProgress))
+    PreferenceSwitch(stringResource(R.string.clear_history_on_removal), checked = settings.clearProgressOnTaskRemoval) {
+        model.settings(settings.copy(clearProgressOnTaskRemoval = it))
+    }
 }
 
 @Composable
@@ -440,17 +459,35 @@ private fun DiagnosticsSettings(
     SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_logs)) },
         supportingContent = { Text(stringResource(R.string.clear_logs_hint)) },
         trailingContent = { Text(Formatter.formatShortFileSize(context, logSize)) },
-        modifier = Modifier.combinedClickable(
-            enabled = !logOperationRunning,
-            role = Role.Button,
-            onClick = {},
-            onDoubleClick = {
-                runLogOperation(R.string.log_clear_failed) {
-                    check(DiagnosticLog.clear(context))
-                    null
-                }
-            },
-        ))
+        modifier = Modifier.doubleClickToClear(enabled = !logOperationRunning, role = Role.Button) {
+            runLogOperation(R.string.log_clear_failed) {
+                check(DiagnosticLog.clear(context))
+                null
+            }
+        })
+}
+
+@Composable
+private fun Modifier.doubleClickToClear(
+    enabled: Boolean = true,
+    role: Role? = null,
+    onClear: () -> Unit,
+): Modifier {
+    val interactionSource = remember { MutableInteractionSource() }
+    val haptic by rememberUpdatedState(hapticFeedback())
+    LaunchedEffect(interactionSource) {
+        interactionSource.interactions.collect { interaction ->
+            if (interaction is PressInteraction.Release) haptic(HapticFeedbackConstantsCompat.CONTEXT_CLICK)
+        }
+    }
+    return combinedClickable(
+        interactionSource = interactionSource,
+        indication = LocalIndication.current,
+        enabled = enabled,
+        role = role,
+        onClick = {},
+        onDoubleClick = onClear,
+    )
 }
 
 @Composable
@@ -485,11 +522,9 @@ private fun ApplicationSettings(state: LibraryState, model: LibraryViewModel) {
                 if (activity != null) openUpdateInstaller(activity, model, download)
             } else model.checkForUpdates()
         })
-    SettingsListItem(headlineContent = { Text(stringResource(R.string.update_check_on_start)) },
-        trailingContent = { Switch(checked = settings.checkUpdatesOnStartup, onCheckedChange = null) },
-        modifier = Modifier.toggleable(value = settings.checkUpdatesOnStartup, role = Role.Switch) {
-            model.settings(settings.copy(checkUpdatesOnStartup = it))
-        })
+    PreferenceSwitch(stringResource(R.string.update_check_on_start), checked = settings.checkUpdatesOnStartup) {
+        model.settings(settings.copy(checkUpdatesOnStartup = it))
+    }
     SettingsListItem(headlineContent = { Text(stringResource(R.string.about)) },
         modifier = Modifier.clickable(role = Role.Button) { about = true })
     SettingsListItem(headlineContent = { Text(stringResource(R.string.view_on_github)) },
@@ -573,6 +608,7 @@ private fun <T> PreferenceMenu(
     onSelect: (T) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val haptic = hapticFeedback()
     val current = options.firstOrNull { it.first == selectedValue } ?: options.first()
     val action = stringResource(if (expanded) R.string.menu_collapse else R.string.menu_expand)
     val menuState = stringResource(if (expanded) R.string.menu_expanded else R.string.menu_collapsed)
@@ -622,7 +658,10 @@ private fun <T> PreferenceMenu(
                 text = { Text(option.second) },
                 onClick = {
                     expanded = false
-                    if (!isSelected) onSelect(option.first)
+                    if (!isSelected) {
+                        haptic(HapticFeedbackConstantsCompat.SEGMENT_TICK)
+                        onSelect(option.first)
+                    }
                 },
                 modifier = Modifier.semantics {
                     role = Role.RadioButton
@@ -660,14 +699,20 @@ private fun PreferenceSwitch(
     title: String,
     subtitle: String? = null,
     checked: Boolean,
-    enabled: Boolean = true,
+    feedbackOnToggle: Boolean = true,
     onChange: (Boolean) -> Unit,
 ) {
+    val haptic = hapticFeedback()
     SettingsListItem(
         headlineContent = { Text(title) },
         supportingContent = subtitle?.let { { Text(it) } },
-        trailingContent = { Switch(checked, onCheckedChange = null, enabled = enabled) },
-        modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange),
+        trailingContent = { Switch(checked, onCheckedChange = null) },
+        modifier = Modifier.toggleable(value = checked, role = Role.Switch) {
+            if (feedbackOnToggle) {
+                haptic(if (it) HapticFeedbackConstantsCompat.TOGGLE_ON else HapticFeedbackConstantsCompat.TOGGLE_OFF)
+            }
+            onChange(it)
+        },
     )
 }
 

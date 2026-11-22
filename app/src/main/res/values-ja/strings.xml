@@ -21,6 +21,7 @@
     <string name="animation_speed">アニメーション速度</string>
     <string name="animation_speed_moderate">標準</string>
     <string name="animation_speed_enhanced">高速</string>
+    <string name="haptic_feedback">触覚フィードバック</string>
     <string name="grid_columns">1行あたりの表紙数</string>
     <string name="show_file_type">ファイル形式を表示</string>
     <string name="show_file_type_hint">表紙の左上に形式を表示します</string>

@@ -48,6 +48,7 @@ class PreferenceStore(context: Context) {
         } else {
             AnimationSpeed.Moderate
         },
+        hapticFeedback = preferences.getBoolean("haptic_feedback", true),
         verifyOnStartup = preferences.getBoolean("verify_on_startup", false),
         hideRecentPreview = preferences.getBoolean("hide_recent_preview", false),
         verifyAfterBackground = preferences.getBoolean("verify_after_background", false),
@@ -80,6 +81,7 @@ class PreferenceStore(context: Context) {
             .putBoolean("clear_progress_on_task_removal", settings.clearProgressOnTaskRemoval)
             .putString("language", settings.language.tag)
             .putBoolean("fast_animations", settings.animationSpeed == AnimationSpeed.Enhanced)
+            .putBoolean("haptic_feedback", settings.hapticFeedback)
             .putBoolean("verify_on_startup", settings.verifyOnStartup)
             .putBoolean("hide_recent_preview", settings.hideRecentPreview)
             .putBoolean("verify_after_background", settings.verifyAfterBackground)

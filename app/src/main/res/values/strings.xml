@@ -21,6 +21,7 @@
     <string name="animation_speed">动画速度</string>
     <string name="animation_speed_moderate">适中</string>
     <string name="animation_speed_enhanced">增强</string>
+    <string name="haptic_feedback">触感反馈</string>
     <string name="grid_columns">每行封面数</string>
     <string name="show_file_type">显示文件类型</string>
     <string name="show_file_type_hint">在封面左上角显示漫画格式</string>

@@ -21,6 +21,7 @@
     <string name="animation_speed">Animation speed</string>
     <string name="animation_speed_moderate">Moderate</string>
     <string name="animation_speed_enhanced">Enhanced</string>
+    <string name="haptic_feedback">Haptic feedback</string>
     <string name="grid_columns">Covers per row</string>
     <string name="show_file_type">Show file type</string>
     <string name="show_file_type_hint">Show the format in the top left of the cover</string>

@@ -143,24 +143,30 @@ class SettingsMenuTest {
         setting("偏好").performClick()
         val language = setting("语言")
         val speed = setting("动画速度")
-        val rows = listOf(language, speed, setting("显示文件类型"))
+        val haptics = setting("触感反馈")
+        val rows = listOf(language, speed, haptics, setting("显示文件类型"))
             .map { it.fetchSemanticsNode().boundsInRoot }
         rows.zipWithNext().forEach { (upper, lower) -> assertEquals(upper.bottom, lower.top, 1f) }
         speed.assert(hasText("适中")).performClick()
         option("适中").assertIsSelected()
         option("增强").assertIsNotSelected().performClick()
         speed.assert(hasText("增强"))
+        haptics.assertIsOn().performClick().assertIsOff()
         assertEquals(AnimationSpeed.Enhanced, store.settings().animationSpeed)
+        assertFalse(store.settings().hapticFeedback)
 
         scenario.close()
         scenario = ActivityScenario.launch(MainActivity::class.java)
         rule.onNodeWithContentDescription("设置").performClick()
         setting("偏好").performClick()
         speed.assert(hasText("增强"))
+        haptics.assertIsOff()
         speed.performClick()
         option("增强").assertIsSelected()
         option("适中").performClick()
+        haptics.performClick().assertIsOn()
         assertEquals(AnimationSpeed.Moderate, store.settings().animationSpeed)
+        assertTrue(store.settings().hapticFeedback)
     }
 
     @Test fun switchingLanguagesKeepsSettingsOpenAndPersists() {

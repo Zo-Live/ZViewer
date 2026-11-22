@@ -47,6 +47,7 @@ internal fun AppAlertDialog(
     } else {
         moderateAnimation
     }
+    val hapticsEnabled = LocalHapticsEnabled.current
     AlertDialog(
         onDismissRequest = onDismissRequest,
         title = title,
@@ -56,6 +57,7 @@ internal fun AppAlertDialog(
             val view = LocalView.current
             val window = (view.parent as? DialogWindowProvider)?.window
             SideEffect {
+                view.isHapticFeedbackEnabled = hapticsEnabled
                 if (window != null) {
                     val attributes = window.attributes
                     if (animation != null && attributes.windowAnimations != animation) {

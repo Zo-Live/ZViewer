@@ -200,6 +200,7 @@ fun LogDetailScreen(file: DiagnosticLog.LogFile, onBack: () -> Unit) {
 @Composable
 private fun SelectableLog(content: String, modifier: Modifier, onAction: (Int, String) -> Unit) {
     val handleAction by rememberUpdatedState(onAction)
+    val hapticsEnabled = LocalHapticsEnabled.current
     val textColor = MaterialTheme.colorScheme.onBackground.toArgb()
     val fontSize = MaterialTheme.typography.bodySmall.fontSize.value
     key(content) {
@@ -225,6 +226,7 @@ private fun SelectableLog(content: String, modifier: Modifier, onAction: (Int, S
             },
             update = { scroll ->
                 (scroll.getChildAt(0) as TextView).apply {
+                    isHapticFeedbackEnabled = hapticsEnabled
                     setTextColor(textColor)
                     textSize = fontSize
                 }
