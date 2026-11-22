@@ -1,9 +1,16 @@
 package dev.zolive.zviewer.ui
 
+import androidx.core.view.HapticFeedbackConstantsCompat
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class ThemeColorHapticsTest {
+    @Test fun landmarksUseADistinctEffectOnOlderAndroidVersions() {
+        assertEquals(HapticFeedbackConstantsCompat.VIRTUAL_KEY, ColorPickerPulse.Landmark.effectForSdk(29))
+        assertEquals(HapticFeedbackConstantsCompat.VIRTUAL_KEY, ColorPickerPulse.Landmark.effectForSdk(33))
+        assertEquals(HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_DEACTIVATE, ColorPickerPulse.Landmark.effectForSdk(34))
+    }
+
     @Test fun hueWrapsAcrossRedInBothDirections() {
         val hue = ColorHueFeedback(358f)
         assertEquals(ColorPickerPulse.None, hue.moveTo(.5f))

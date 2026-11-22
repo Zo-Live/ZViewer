@@ -1,5 +1,6 @@
 package dev.zolive.zviewer.ui
 
+import android.os.Build
 import android.os.SystemClock
 import androidx.core.view.HapticFeedbackConstantsCompat
 import kotlin.math.floor
@@ -10,7 +11,10 @@ internal enum class ColorPickerPulse(val effect: Int) {
     None(HapticFeedbackConstantsCompat.NO_HAPTICS),
     Tick(HapticFeedbackConstantsCompat.SEGMENT_FREQUENT_TICK),
     Landmark(HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_DEACTIVATE),
-    Boundary(HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_ACTIVATE),
+    Boundary(HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_ACTIVATE);
+
+    fun effectForSdk(sdk: Int): Int =
+        if (this == Landmark && sdk < 34) HapticFeedbackConstantsCompat.VIRTUAL_KEY else effect
 }
 
 internal class ColorPickerFeedback {
@@ -21,7 +25,7 @@ internal class ColorPickerFeedback {
         val now = SystemClock.uptimeMillis()
         if (pulse == ColorPickerPulse.Tick && now - lastPulseAt < MinTickIntervalMs) return
         lastPulseAt = now
-        haptic(pulse.effect)
+        haptic(pulse.effectForSdk(Build.VERSION.SDK_INT))
     }
 }
 
