@@ -11,7 +11,18 @@ class PreferenceStore(context: Context) {
         set(value) { preferences.edit().putString("library_uri", value).apply() }
 
     internal fun selectLibrary(treeUri: String) {
-        preferences.edit().putString("library_uri", treeUri).remove("books").apply()
+        val retired = retiredLibraryTrees() + listOfNotNull(this.treeUri) - treeUri
+        preferences.edit().putString("library_uri", treeUri).putStringSet("retired_library_uris", retired)
+            .remove("books").apply()
+    }
+
+    internal fun retiredLibraryTrees(): Set<String> =
+        preferences.getStringSet("retired_library_uris", emptySet()).orEmpty().toSet()
+
+    internal fun forgetRetiredLibraryTrees(trees: Set<String>) {
+        if (trees.isNotEmpty()) {
+            preferences.edit().putStringSet("retired_library_uris", retiredLibraryTrees() - trees).apply()
+        }
     }
 
     internal fun logDirectories(): Set<String> =

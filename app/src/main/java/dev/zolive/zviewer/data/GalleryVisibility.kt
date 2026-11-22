@@ -7,11 +7,14 @@ import android.provider.DocumentsContract.Document
 import androidx.core.net.toUri
 import java.io.IOException
 
+internal fun Uri.documentTree(): Uri =
+    DocumentsContract.buildTreeDocumentUri(authority!!, DocumentsContract.getTreeDocumentId(this))
+
 internal class GalleryVisibility(context: Context) {
     private val resolver = context.contentResolver
     private val store = PreferenceStore(context)
 
-    fun update(hiddenFolders: Set<Uri>): Boolean {
+    fun update(library: Uri?, scannedFolders: Set<Uri>?, hiddenFolders: Set<Uri>?): Boolean {
         val markers = store.galleryMarkers().associate { record ->
             record.substringBefore('\n').toUri() to record.substringAfter('\n').toUri()
         }.toMutableMap()
@@ -20,21 +23,32 @@ internal class GalleryVisibility(context: Context) {
                 throw IOException("无法保存相册隐藏标记")
             }
         }
+        val readableTrees = resolver.persistedUriPermissions.filter { it.isReadPermission }.mapTo(mutableSetOf()) { it.uri }
         var success = true
         for ((folder, marker) in markers.toMap()) {
-            if (folder in hiddenFolders) continue
+            val tree = folder.documentTree()
+            val currentLibrary = tree == library
+            if (hiddenFolders?.contains(folder) ?: currentLibrary) continue
+            if (!currentLibrary && tree !in readableTrees) continue
             try {
-                if (findMarker(folder) == marker && !DocumentsContract.deleteDocument(resolver, marker)) {
+                val existing = try {
+                    findMarker(folder)
+                } catch (error: Exception) {
+                    // 已离开扫描范围的目录仍保留标记归属，等目录重新可用时清理。
+                    if (currentLibrary && scannedFolders != null && folder !in scannedFolders) continue
+                    throw error
+                }
+                if (existing == marker && !DocumentsContract.deleteDocument(resolver, marker)) {
                     throw IOException("无法删除 .nomedia")
                 }
                 markers.remove(folder)
                 save()
             } catch (error: Exception) {
-                success = false
+                if (currentLibrary) success = false
                 DiagnosticLog.error("Library", "恢复系统相册扫描失败", error)
             }
         }
-        for (folder in hiddenFolders) {
+        for (folder in hiddenFolders.orEmpty()) {
             try {
                 if (findMarker(folder) != null) continue
                 val marker = DocumentsContract.createDocument(resolver, folder, "application/octet-stream", ".nomedia")

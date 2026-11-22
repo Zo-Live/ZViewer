@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.annotation.StringRes
+import androidx.core.net.toUri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dev.zolive.zviewer.data.Book
@@ -21,6 +22,7 @@ import dev.zolive.zviewer.data.UpdateChecker
 import dev.zolive.zviewer.data.UpdateDownload
 import dev.zolive.zviewer.data.UpdateDownloader
 import dev.zolive.zviewer.data.UpdateInfo
+import dev.zolive.zviewer.data.documentTree
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -79,8 +81,8 @@ class LibraryViewModel(
     private val coverRebuildMutex = Mutex()
     private var scanJob: Job? = null
     private var indexLoaded = false
-    private var scannedGalleryFolders: Set<Uri>? = null
-    private val galleryRequests = Channel<Set<Uri>>(Channel.CONFLATED)
+    private var scannedLibraryFolders: Set<Uri>? = null
+    private val galleryRequests = Channel<Unit>(Channel.CONFLATED)
     private var openJob: Job? = null
     private var manualUpdateRequested = false
 
@@ -101,12 +103,29 @@ class LibraryViewModel(
             }
         }
         if (store.treeUri != null) refresh()
-        if (!settings.hideGalleryImages) galleryRequests.trySend(emptySet())
+        updateGalleryVisibility()
         viewModelScope.launch {
             val gallery = GalleryVisibility(application)
-            for (folders in galleryRequests) {
-                val success = withContext(Dispatchers.IO) { gallery.update(folders) }
-                if (!success) Toast.makeText(application, message(R.string.gallery_visibility_error), Toast.LENGTH_LONG).show()
+            for (request in galleryRequests) {
+                val current = state.value
+                val scannedFolders = scannedLibraryFolders
+                val hiddenFolders = when {
+                    scannedFolders == null && current.scanning -> null
+                    !current.settings.hideGalleryImages -> emptySet()
+                    else -> scannedFolders?.let {
+                        current.books.filter { it.kind == "folder" || it.kind == "mixed-folder" }
+                            .mapTo(mutableSetOf()) { Uri.parse(it.uri) }
+                    }
+                }
+                val success = withContext(Dispatchers.IO) {
+                    gallery.update(current.treeUri?.toUri(), scannedFolders, hiddenFolders)
+                }
+                releaseRetiredLibraryGrants()
+                val latest = state.value
+                if (!success && current.treeUri == latest.treeUri &&
+                    current.settings.hideGalleryImages == latest.settings.hideGalleryImages) {
+                    Toast.makeText(application, message(R.string.gallery_visibility_error), Toast.LENGTH_LONG).show()
+                }
             }
         }
         viewModelScope.launch {
@@ -217,17 +236,12 @@ class LibraryViewModel(
             val newUri = uri.toString()
             if (oldUri != newUri) {
                 scanJob?.cancel()
-                scannedGalleryFolders = null
+                scannedLibraryFolders = null
                 cancelOpen()
                 store.selectLibrary(newUri)
                 indexLoaded = true
                 mutable.update { it.copy(treeUri = newUri, books = emptyList(), progress = emptyMap(), error = null) }
-                if (oldUri != null) {
-                    val oldTree = Uri.parse(oldUri)
-                    if (resolver.persistedUriPermissions.none { it.uri == oldTree && it.isWritePermission }) {
-                        runCatching { resolver.releasePersistableUriPermission(oldTree, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-                    }
-                }
+                updateGalleryVisibility()
             }
             refresh()
             DiagnosticLog.log("Permission", "已选择书库 authority=${uri.authority}")
@@ -269,13 +283,12 @@ class LibraryViewModel(
                         publishBooks(cached)
                     }
                     val previous = mutable.value.books
-                    val books = repository.scanBooks(Uri.parse(uri))
+                    val (books, folders) = repository.scanLibrary(Uri.parse(uri))
                     val encoded = withContext(Dispatchers.IO) { store.encodeLibrary(books) }
                     val keepOnlyCurrent = mutable.value.settings.currentLibraryCacheOnly
                     store.saveEncodedLibrary(encoded)
                     publishBooks(books)
-                    scannedGalleryFolders = books.filter { it.kind == "folder" || it.kind == "mixed-folder" }
-                        .mapTo(mutableSetOf()) { Uri.parse(it.uri) }
+                    scannedLibraryFolders = folders
                     updateGalleryVisibility()
                     withContext(NonCancellable) {
                         repository.reconcileBooks(previous, books, keepOnlyCurrent)
@@ -285,7 +298,12 @@ class LibraryViewModel(
                 DiagnosticLog.log("Library", "扫描完成 count=${mutable.value.books.size} elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
             } catch (error: CancellationException) { throw error }
             catch (error: Exception) { if (isActive) showError(error) }
-            finally { if (isActive) mutable.update { it.copy(scanning = false) } }
+            finally {
+                if (isActive) {
+                    mutable.update { it.copy(scanning = false) }
+                    if (scannedLibraryFolders == null) updateGalleryVisibility()
+                }
+            }
         }
     }
 
@@ -386,8 +404,29 @@ class LibraryViewModel(
     }
 
     private fun updateGalleryVisibility() {
-        val folders = if (state.value.settings.hideGalleryImages) scannedGalleryFolders ?: return else emptySet()
-        galleryRequests.trySend(folders)
+        galleryRequests.trySend(Unit)
+    }
+
+    private fun releaseRetiredLibraryGrants() {
+        val retired = store.retiredLibraryTrees()
+        if (retired.isEmpty()) return
+        val markerTrees = store.galleryMarkers().mapTo(mutableSetOf()) {
+            it.substringBefore('\n').toUri().documentTree().toString()
+        }
+        val logDirectories = store.logDirectories()
+        val resolver = getApplication<Application>().contentResolver
+        val grants = resolver.persistedUriPermissions.associateBy { it.uri.toString() }
+        val released = retired.filterTo(mutableSetOf()) { tree ->
+            if (tree in markerTrees) return@filterTo false
+            val grant = grants[tree]
+            if (tree in logDirectories || grant == null) return@filterTo true
+            val flags = (if (grant.isReadPermission) Intent.FLAG_GRANT_READ_URI_PERMISSION else 0) or
+                (if (grant.isWritePermission) Intent.FLAG_GRANT_WRITE_URI_PERMISSION else 0)
+            runCatching { resolver.releasePersistableUriPermission(grant.uri, flags) }
+                .onFailure { DiagnosticLog.error("Permission", "无法释放旧书库授权", it) }
+                .isSuccess
+        }
+        store.forgetRetiredLibraryTrees(released)
     }
 
     fun setLogDirectory(uri: Uri?) {

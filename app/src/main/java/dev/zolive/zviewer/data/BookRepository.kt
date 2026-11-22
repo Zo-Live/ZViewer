@@ -117,23 +117,27 @@ class BookRepository(private val context: Context) : Closeable {
     }
 
     suspend fun scan(treeUri: Uri, previousBooks: List<Book> = emptyList()): List<Book> {
-        val books = scanBooks(treeUri)
+        val books = scanLibrary(treeUri).books
         reconcileBooks(previousBooks, books,
             preferences.treeUri == treeUri.toString() && preferences.settings().currentLibraryCacheOnly)
         return books
     }
 
-    internal suspend fun scanBooks(treeUri: Uri): List<Book> = withContext(Dispatchers.IO) {
+    internal data class LibraryScan(val books: List<Book>, val folders: Set<Uri>)
+
+    internal suspend fun scanLibrary(treeUri: Uri): LibraryScan = withContext(Dispatchers.IO) {
         val root = DocumentsContract.buildDocumentUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri))
         val rootName = resolver.query(root, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
             ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "图片集"
         val books = mutableListOf<Book>()
         suspend fun visit(uri: Uri, name: String, depth: Int) {
             currentCoroutineContext().ensureActive()
+        val folders = mutableSetOf<Uri>()
             if (depth > 32) throw readerError(R.string.directory_depth_error)
             val entries = children(uri)
             val images = entries.filter { !it.directory && isImage(it.name) }
             val videos = entries.filter { !it.directory && isVideo(it.name) }
+            folders.add(uri)
             if (images.isNotEmpty() || videos.isNotEmpty()) {
                 val kind = when {
                     images.isNotEmpty() && videos.isNotEmpty() -> "mixed-folder"
@@ -160,7 +164,7 @@ class BookRepository(private val context: Context) : Closeable {
         }
         visit(root, rootName, 0)
         currentCoroutineContext().ensureActive()
-        NaturalOrder.sorted(books, Book::title)
+        LibraryScan(NaturalOrder.sorted(books, Book::title), folders)
     }
 
     internal suspend fun reconcileBooks(previousBooks: List<Book>, books: List<Book>, keepOnlyCurrent: Boolean) =
