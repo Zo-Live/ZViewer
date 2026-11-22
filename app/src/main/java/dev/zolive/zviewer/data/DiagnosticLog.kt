@@ -22,6 +22,8 @@ import java.io.OutputStream
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.concurrent.atomic.AtomicLong
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 /** 本地、按需开启的通用诊断日志；有界队列、单文件限额与默认目录保留上限。 */
 object DiagnosticLog {
@@ -207,30 +209,44 @@ object DiagnosticLog {
         }
     }
 
-    fun export(context: Context, tree: Uri) {
+    fun export(context: Context, tree: Uri): Boolean {
         val resolver = context.contentResolver
         val treeId = DocumentsContract.getTreeDocumentId(tree)
         val parent = DocumentsContract.buildDocumentUriUsingTree(tree, treeId)
         val listing = listFiles(context)
         listing.error?.let { throw it }
-        val created = mutableListOf<Uri>()
+        val logs = listing.files
+        if (logs.isEmpty()) return false
+        val single = logs.singleOrNull()?.takeUnless {
+            it.uri.authority == tree.authority && DocumentsContract.getTreeDocumentId(it.uri) == treeId
+        }
+        val target = if (single != null) {
+            DocumentsContract.createDocument(resolver, parent, "application/octet-stream", single.name)
+        } else {
+            val timestamp = OffsetDateTime.now().format(fileFormat)
+            DocumentsContract.createDocument(resolver, parent, "application/zip", "ZViewer-logs-$timestamp.zip")
+        } ?: throw IOException("无法创建导出文件")
         try {
-            for (log in listing.files) {
-                if (log.uri.authority == tree.authority && DocumentsContract.getTreeDocumentId(log.uri) == treeId) continue
-                logInput(context, log.uri).use { input ->
-                    val target = DocumentsContract.createDocument(resolver, parent, "application/octet-stream", log.name)
-                        ?: throw IOException("无法创建导出文件")
-                    created.add(target)
-                    val output = resolver.openOutputStream(target, "w") ?: throw IOException("无法写入导出文件")
-                    output.use { input.copyTo(it) }
+            val output = resolver.openOutputStream(target, "w") ?: throw IOException("无法写入导出文件")
+            if (single != null) {
+                output.use { stream -> logInput(context, single.uri).use { it.copyTo(stream) } }
+            } else {
+                ZipOutputStream(output.buffered()).use { archive ->
+                    val occurrences = mutableMapOf<String, Int>()
+                    for (log in logs) {
+                        val occurrence = (occurrences[log.name] ?: 0) + 1
+                        occurrences[log.name] = occurrence
+                        archive.putNextEntry(ZipEntry(if (occurrence == 1) log.name else "$occurrence/${log.name}"))
+                        logInput(context, log.uri).use { it.copyTo(archive) }
+                        archive.closeEntry()
+                    }
                 }
             }
         } catch (error: Exception) {
-            for (target in created.asReversed()) {
-                runCatching { DocumentsContract.deleteDocument(resolver, target) }
-            }
+            runCatching { DocumentsContract.deleteDocument(resolver, target) }
             throw error
         }
+        return true
     }
 
     fun clear(context: Context): Boolean = synchronized(writeLock) {

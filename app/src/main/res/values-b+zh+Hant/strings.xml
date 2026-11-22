@@ -63,6 +63,7 @@
     <string name="export_logs">匯出所有記錄</string>
     <string name="log_exported">已匯出記錄</string>
     <string name="log_export_failed">無法匯出記錄</string>
+    <string name="log_export_empty">目前沒有記錄</string>
     <string name="clear_logs">清除記錄</string>
     <string name="clear_logs_hint">點兩下以清除所有記錄</string>
     <string name="log_clear_failed">無法清除所有記錄</string>

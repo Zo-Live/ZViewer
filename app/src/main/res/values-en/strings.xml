@@ -63,6 +63,7 @@
     <string name="export_logs">Export all logs</string>
     <string name="log_exported">Logs exported</string>
     <string name="log_export_failed">Could not export logs</string>
+    <string name="log_export_empty">No logs to export</string>
     <string name="clear_logs">Clear logs</string>
     <string name="clear_logs_hint">Double-tap to clear all logs</string>
     <string name="log_clear_failed">Could not clear all logs</string>

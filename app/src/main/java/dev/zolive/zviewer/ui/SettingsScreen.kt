@@ -377,13 +377,13 @@ private fun DiagnosticsSettings(
             } while (settings.diagnosticLog)
         }
     }
-    fun runLogOperation(errorMessage: Int, successMessage: Int? = null, operation: () -> Unit) {
+    fun runLogOperation(errorMessage: Int, operation: () -> Int?) {
         if (logOperationRunning) return
         logOperationRunning = true
         scope.launch {
             try {
-                withContext(Dispatchers.IO) { operation() }
-                if (successMessage != null) Toast.makeText(context, successMessage, Toast.LENGTH_SHORT).show()
+                val message = withContext(Dispatchers.IO) { operation() }
+                if (message != null) Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
@@ -398,8 +398,8 @@ private fun DiagnosticsSettings(
         if (uri != null) model.setLogDirectory(uri)
     }
     val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        if (uri != null) runLogOperation(R.string.log_export_failed, R.string.log_exported) {
-            DiagnosticLog.export(context, uri)
+        if (uri != null) runLogOperation(R.string.log_export_failed) {
+            if (DiagnosticLog.export(context, uri)) R.string.log_exported else R.string.log_export_empty
         }
     }
     PreferenceSwitch(stringResource(R.string.write_diagnostic_logs),
@@ -436,7 +436,10 @@ private fun DiagnosticsSettings(
             role = Role.Button,
             onClick = {},
             onDoubleClick = {
-                runLogOperation(R.string.log_clear_failed) { check(DiagnosticLog.clear(context)) }
+                runLogOperation(R.string.log_clear_failed) {
+                    check(DiagnosticLog.clear(context))
+                    null
+                }
             },
         ))
 }

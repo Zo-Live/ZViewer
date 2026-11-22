@@ -63,6 +63,7 @@
     <string name="export_logs">すべてのログをエクスポート</string>
     <string name="log_exported">ログをエクスポートしました</string>
     <string name="log_export_failed">ログをエクスポートできませんでした</string>
+    <string name="log_export_empty">エクスポートするログはありません</string>
     <string name="clear_logs">ログを消去</string>
     <string name="clear_logs_hint">ダブルタップですべてのログを消去</string>
     <string name="log_clear_failed">すべてのログを消去できませんでした</string>

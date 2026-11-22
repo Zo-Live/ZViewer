@@ -63,6 +63,7 @@
     <string name="export_logs">导出所有日志</string>
     <string name="log_exported">日志已导出</string>
     <string name="log_export_failed">无法导出日志</string>
+    <string name="log_export_empty">当前无日志</string>
     <string name="clear_logs">清除日志</string>
     <string name="clear_logs_hint">双击清除所有日志</string>
     <string name="log_clear_failed">无法清除所有日志</string>
