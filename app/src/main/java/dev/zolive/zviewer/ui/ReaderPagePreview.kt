@@ -1,7 +1,6 @@
 package dev.zolive.zviewer.ui
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.util.LruCache
 import androidx.compose.runtime.Composable
@@ -107,9 +106,7 @@ internal fun rememberReaderPagePreview(
                 withContext(Dispatchers.IO) {
                     when {
                         session.pdf != null -> session.pdf.render(index, width, PdfPreviewMaxPixels)
-                        page.isVideo -> repository.videoFrame(session, index)?.let {
-                            BitmapFactory.decodeFile(it.absolutePath, BitmapFactory.Options().apply { inSampleSize = 2 })
-                        }
+                        page.isVideo -> repository.videoPreviewFrame(session, index)
                         else -> ImageLoader.loadPreview(
                             page.filePath?.let { ImageDecoder.createSource(File(it)) }
                                 ?: ImageDecoder.createSource(resolver, checkNotNull(page.uri).toUri()),

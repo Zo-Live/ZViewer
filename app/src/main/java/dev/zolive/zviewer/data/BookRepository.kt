@@ -2,6 +2,7 @@ package dev.zolive.zviewer.data
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageDecoder
 import android.graphics.pdf.PdfRenderer
 import android.media.MediaMetadataRetriever
@@ -14,6 +15,7 @@ import android.system.OsConstants
 import android.util.LruCache
 import android.util.Size
 import androidx.annotation.StringRes
+import androidx.core.graphics.scale
 import dev.zolive.zviewer.R
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -130,14 +132,14 @@ class BookRepository(private val context: Context) : Closeable {
         val rootName = resolver.query(root, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
             ?.use { if (it.moveToFirst()) it.getString(0) else null } ?: "图片集"
         val books = mutableListOf<Book>()
+        val folders = mutableSetOf<Uri>()
         suspend fun visit(uri: Uri, name: String, depth: Int) {
             currentCoroutineContext().ensureActive()
-        val folders = mutableSetOf<Uri>()
             if (depth > 32) throw readerError(R.string.directory_depth_error)
             val entries = children(uri)
+            folders.add(uri)
             val images = entries.filter { !it.directory && isImage(it.name) }
             val videos = entries.filter { !it.directory && isVideo(it.name) }
-            folders.add(uri)
             if (images.isNotEmpty() || videos.isNotEmpty()) {
                 val kind = when {
                     images.isNotEmpty() && videos.isNotEmpty() -> "mixed-folder"
@@ -481,22 +483,11 @@ class BookRepository(private val context: Context) : Closeable {
         val page = session.pages.getOrNull(index) ?: return@withBookCache null
         if (!page.isVideo) return@withBookCache null
         frames.mkdirs()
-        val pageKey = (page.uri ?: File(page.filePath!!).name).stableId()
-        val output = File(frames, "${session.book.cacheKey}-$pageKey.jpg")
+        val output = videoFrameFile(session.book, page)
         if (output.isFile) return@withBookCache output
-        readingCache.fileLock("frame-${session.book.cacheKey}-$pageKey").withLock {
+        readingCache.fileLock("frame-${output.nameWithoutExtension}").withLock {
             if (output.isFile) return@withLock output
-            DiagnosticLog.log("Cover", "开始抽帧 book=${session.book.id.take(8)} index=$index")
-            val started = android.os.SystemClock.elapsedRealtime()
-            val bitmap = runCatching {
-                MediaMetadataRetriever().use { retriever ->
-                    page.filePath?.let { retriever.setDataSource(it) }
-                        ?: retriever.setDataSource(context, Uri.parse(page.uri))
-                    retriever.getScaledFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 1280, 1280)
-                        ?: retriever.getFrameAtTime()
-                }
-            }.onFailure { DiagnosticLog.error("Cover", "视频抽帧失败 book=${session.book.id.take(8)} index=$index", it) }.getOrNull() ?: return@withLock null
-            DiagnosticLog.log("Cover", "抽帧完成 index=$index 耗时=${android.os.SystemClock.elapsedRealtime() - started}ms")
+            val bitmap = extractVideoFrame(session.book, page, index, size = 1280) ?: return@withLock null
             val temporary = File(frames, "${output.name}.part")
             try {
                 temporary.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 88, it) }
@@ -506,6 +497,45 @@ class BookRepository(private val context: Context) : Closeable {
                 temporary.delete()
             }
             output
+        }
+    }
+
+    internal suspend fun videoPreviewFrame(session: BookSession, index: Int): Bitmap? = withBookCache(session.book) {
+        val page = session.pages[index]
+        val cover = videoFrameFile(session.book, page)
+        if (cover.isFile) {
+            val options = BitmapFactory.Options().apply { inSampleSize = 2 }
+            BitmapFactory.decodeFile(cover.absolutePath, options)?.let { return@withBookCache it }
+        }
+        extractVideoFrame(session.book, page, index, size = 640, limitFallbackSize = true)
+    }
+
+    private fun videoFrameFile(book: Book, page: PageSource): File {
+        val pageKey = (page.uri ?: File(page.filePath!!).name).stableId()
+        return File(frames, "${book.cacheKey}-$pageKey.jpg")
+    }
+
+    private fun extractVideoFrame(book: Book, page: PageSource, index: Int, size: Int,
+        limitFallbackSize: Boolean = false): Bitmap? {
+        DiagnosticLog.log("Cover", "开始抽帧 book=${book.id.take(8)} index=$index")
+        val started = android.os.SystemClock.elapsedRealtime()
+        val bitmap = runCatching {
+            MediaMetadataRetriever().use { retriever ->
+                page.filePath?.let { retriever.setDataSource(it) }
+                    ?: retriever.setDataSource(context, Uri.parse(page.uri))
+                retriever.getScaledFrameAtTime(0L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, size, size)
+                    ?: retriever.getFrameAtTime()
+            }
+        }.onFailure { DiagnosticLog.error("Cover", "视频抽帧失败 book=${book.id.take(8)} index=$index", it) }
+            .getOrNull() ?: return null
+        DiagnosticLog.log("Cover", "抽帧完成 index=$index 耗时=${android.os.SystemClock.elapsedRealtime() - started}ms")
+        val scale = size.toFloat() / maxOf(bitmap.width, bitmap.height)
+        if (!limitFallbackSize || scale >= 1f) return bitmap
+        return try {
+            bitmap.scale((bitmap.width * scale).roundToInt().coerceAtLeast(1),
+                (bitmap.height * scale).roundToInt().coerceAtLeast(1), filter = true)
+        } finally {
+            bitmap.recycle()
         }
     }
 

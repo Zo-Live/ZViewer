@@ -142,6 +142,21 @@ class CacheIntegrationTest {
         }
     }
 
+    @Test fun videoPreviewFramesDoNotCreatePersistentCovers() = runBlocking {
+        val tree = DocumentsContract.buildTreeDocumentUri("dev.zolive.zviewer.test.documents", "root/formats/video-folder")
+        val book = repository.scan(tree).single()
+        val session = repository.open(book).also { sessions += it }
+        val existing = repository.videoFrame(session, 0)!!
+        val directory = existing.parentFile!!
+        val before = directory.listFiles().orEmpty().toSet()
+        for (index in session.pages.indices) {
+            val bitmap = repository.videoPreviewFrame(session, index)
+            assertNotNull(bitmap)
+            bitmap!!.recycle()
+        }
+        assertEquals(before, directory.listFiles().orEmpty().toSet())
+    }
+
     @Test fun changedFileRebuildsOnlyItsCoverAndManualClearRemovesAllCovers() = runBlocking {
         val previous = repository.scan(tree)
         val book = previous.first { it.kind == "cbz" }
