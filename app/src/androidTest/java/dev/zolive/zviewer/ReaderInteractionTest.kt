@@ -34,6 +34,7 @@ class ReaderInteractionTest {
     private var currentPage = 0
     private val saved = mutableMapOf<Int, Long>()
     private lateinit var session: BookSession
+    private lateinit var readerSettings: MutableState<ReaderSettings>
 
     private fun open(video: Boolean = true, vertical: Boolean = true, loop: Boolean = true,
         rightToLeft: Boolean = false, preview: Boolean = true, initialPage: Int = 0, archive: Boolean = false,
@@ -58,11 +59,11 @@ class ReaderInteractionTest {
             runBlocking { repository.open(Book("archive-test", uri.toString(), "视频压缩包测试", "zip", 0, 0)) }
         } else BookSession(book, pages)
         currentPage = initialPage
+        readerSettings = mutableStateOf(ReaderSettings(vertical = vertical, loopMode = loop,
+            rightToLeft = rightToLeft, videoPreview = preview, doubleTapZoom = doubleTapZoom))
         rule.setContent {
-            var settings by remember { mutableStateOf(ReaderSettings(vertical = vertical, loopMode = loop,
-                rightToLeft = rightToLeft, videoPreview = preview, doubleTapZoom = doubleTapZoom)) }
-            ReaderScreen(session, initialPage, settings, repository,
-                onSettings = { settings = it }, onProgress = { currentPage = it },
+            ReaderScreen(session, initialPage, readerSettings.value, repository,
+                onSettings = { readerSettings.value = it }, onProgress = { currentPage = it },
                 videoPosition = { saved[it] ?: 0L }, onVideoProgress = { page, position -> saved[page] = position }, onBack = {})
         }
         if (video && !mixed || mixed && session.pages[initialPage].isVideo) waitForVideo() else rule.waitUntil(20_000) {
@@ -715,6 +716,43 @@ class ReaderInteractionTest {
         rule.waitUntil(15_000) { currentPage == 2 }
         toggleControls(visible = false)
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).assertDoesNotExist()
+    }
+
+    @Test fun changingReadingDirectionKeepsPlayingVideoAndItsTexture() {
+        open(mixed = true, initialPage = 1, preview = false)
+        waitForPlayback()
+        val video = rule.runOnIdle { currentVideoView() }
+        val player = rule.runOnIdle { video.playerView.player!! }
+        val texture = rule.runOnIdle { (video.playerView.videoSurfaceView as android.view.TextureView).surfaceTexture }
+        assertNotNull(texture)
+        for (vertical in listOf(false, true)) {
+            rule.runOnIdle { readerSettings.value = readerSettings.value.copy(vertical = vertical) }
+            rule.runOnIdle {
+                assertEquals(1, currentPage)
+                assertSame(video, currentVideoView())
+                assertSame(player, video.playerView.player)
+                assertSame(texture, (video.playerView.videoSurfaceView as android.view.TextureView).surfaceTexture)
+            }
+            waitForPlayback()
+        }
+    }
+
+    @Test fun changingReadingDirectionOnImageKeepsThePreloadedVideoTexture() {
+        open(mixed = true, preview = false)
+        val preloaded = rule.runOnIdle { videoViews().single { it.playerView.player != null } }
+        val player = rule.runOnIdle { preloaded.playerView.player!! }
+        rule.waitUntil(10_000) { rule.runOnIdle { preloaded.isSurfaceAvailable } }
+        val texture = rule.runOnIdle { (preloaded.playerView.videoSurfaceView as android.view.TextureView).surfaceTexture }
+        rule.runOnIdle { readerSettings.value = readerSettings.value.copy(vertical = false) }
+        rule.runOnIdle { assertEquals(0, currentPage) }
+        swipe(vertical = false)
+        rule.waitUntil(15_000) { currentPage == 1 }
+        waitForPlayback()
+        rule.runOnIdle {
+            assertSame(preloaded, currentVideoView())
+            assertSame(player, preloaded.playerView.player)
+            assertSame(texture, (preloaded.playerView.videoSurfaceView as android.view.TextureView).surfaceTexture)
+        }
     }
 
     @Test fun mixedContentStartsVideoAfterImageAndKeepsNextVideoPlayable() {

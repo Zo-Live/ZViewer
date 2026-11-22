@@ -14,7 +14,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -46,7 +48,7 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     var playRequested by mutableStateOf(false)
     var playbackState by mutableIntStateOf(Player.STATE_IDLE)
     var ready by mutableStateOf(false)
-    var surfaceReady by mutableStateOf(false)
+    private var surfaceReady by mutableStateOf(false)
 
     /**
      * The view that currently owns this player's video surface. Pager pages can be disposed and
@@ -58,8 +60,10 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
 
     /** Whether the owner view's TextureView currently has a usable Surface for rendering. */
     var surfaceAttached by mutableStateOf(false)
+        private set
 
     var firstFrameReady by mutableStateOf(false)
+    val frameReady: Boolean get() = firstFrameReady && surfaceAttached && surfaceReady
     var failed by mutableStateOf(false)
     var seekable by mutableStateOf(false)
     var scrubPosition by mutableStateOf<Long?>(null)
@@ -150,16 +154,19 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
         }
         if (active) activeView = view
         if (ownerView === view) {
-            surfaceAttached = view.isSurfaceAvailable
+            surfaceStateChanged(view, view.isVideoLayoutReady)
             return
         }
         val previous = ownerView
-        if (previous != null && previous.playerView.player === player) previous.playerView.player = null
+        if (previous != null && previous.playerView.player === player) {
+            previous.showVideoFrame(false)
+            previous.bindPlayer(null)
+        }
         ownerView = view
-        view.playerView.player = player
-        surfaceAttached = view.isSurfaceAvailable
-        // 新视图的 TextureView 还没有任何内容，等待渲染器重新绘制首帧前继续显示封面。
         firstFrameReady = false
+        view.showVideoFrame(false)
+        view.bindPlayer(player)
+        surfaceStateChanged(view, view.isVideoLayoutReady)
     }
 
     /**
@@ -174,22 +181,26 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
         surfaceAttached = false
         surfaceReady = false
         firstFrameReady = false
+        view.showVideoFrame(false)
         view.onLayoutReady = {}
-        view.playerView.player = null
+        view.bindPlayer(null)
         activeView?.let { bindOwner(it) }
     }
 
     /** Updates layout/surface readiness for the owner view only; stale views are ignored. */
     fun surfaceStateChanged(view: ZoomVideoView, layoutReady: Boolean) {
         if (ownerView !== view) return
-        surfaceReady = layoutReady
-        surfaceAttached = view.isSurfaceAvailable
+        val available = view.isSurfaceAvailable
+        if (surfaceAttached && !available) firstFrameReady = false
+        surfaceReady = layoutReady && available
+        surfaceAttached = available
     }
 
     fun release() {
         if (released) return
         finishScrub()
         released = true
+        ownerView?.let(::releaseOwner)
         DiagnosticLog.log("Video", "释放播放器 index=$index position=${player.currentPosition} state=${player.playbackState}")
         save()
         player.release()
@@ -334,7 +345,7 @@ internal fun rememberVideoPlayback(
         }
         var ticks = 0
         while (active) {
-            state.surfaceAttached = state.ownerView?.isSurfaceAvailable == true
+            state.ownerView?.let { state.surfaceStateChanged(it, it.isVideoLayoutReady) }
             if (state.scrubPosition == null) {
                 state.refresh()
                 if (ticks++ % 5 == 0) state.save()
@@ -407,7 +418,7 @@ internal fun VideoPage(
     state: VideoPlaybackState?, index: Int, session: BookSession, cover: Bitmap?,
     settings: ReaderSettings,
     videoPosition: (Int) -> Long, onProgress: (Int, Long) -> Unit,
-    foreground: Color, active: Boolean, allowPlayback: Boolean = active,
+    foreground: Color, background: Color, active: Boolean, allowPlayback: Boolean = active,
     zoomSequence: Int, zoomAction: Int, onTap: () -> Unit, onEnded: (VideoPlaybackState) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -426,7 +437,7 @@ internal fun VideoPage(
     LaunchedEffect(state, active) {
         if (state != null && active) viewRef.value?.let { state.bindOwner(it, active = true) }
     }
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(modifier.fillMaxSize().clipToBounds(), contentAlignment = Alignment.Center) {
         AndroidView(factory = { ZoomVideoView(it).also { view -> viewRef.value = view } }, modifier = Modifier.fillMaxSize(),
             onRelease = { view ->
                 if (viewRef.value === view) viewRef.value = null
@@ -435,22 +446,24 @@ internal fun VideoPage(
                 viewRef.value = view
                 view.bindPage(index)
                 view.bindCover(cover)
+                view.setCoverBackground(background.toArgb())
                 view.onTap = onTap
                 view.doubleTapZoomEnabled = settings.doubleTapZoom
                 view.contentDescription = description
                 if (state != null) {
                     state.bindOwner(view, active = active)
                     view.onLayoutReady = { ready -> state.surfaceStateChanged(view, ready) }
-                    state.surfaceReady = view.isVideoLayoutReady
-                    if (zoomSequence > 0) view.command(zoomSequence, zoomAction)
+                    view.showVideoFrame(state.frameReady)
                 } else {
-                    if (view.playerView.player != null) view.playerView.player = null
+                    view.showVideoFrame(false)
+                    view.bindPlayer(null)
                     view.onLayoutReady = {}
                 }
+                if (zoomSequence > 0) view.command(zoomSequence, zoomAction)
             })
         if (state?.failed == true) Text(stringResource(R.string.video_error), Modifier.padding(28.dp), color = foreground)
         // 只在停靠页且首帧尚未渲染时显示进度圈；预载、拖动中的页面只显示封面，避免切换时闪现进度圈。
-        else if (state != null && active && !state.firstFrameReady &&
+        else if (cover == null && state != null && active && !state.firstFrameReady &&
             (state.playbackState == Player.STATE_BUFFERING || state.playbackState == Player.STATE_IDLE)) {
             CircularProgressIndicator(color = foreground)
         }

@@ -84,6 +84,7 @@ import kotlin.math.roundToInt
 
 private const val PagePreviewHoldMillis = 120L
 private const val FastPagePreviewHoldMillis = 250L
+private typealias VideoPagerItem = @Composable (Int) -> Unit
 
 private fun LazyListLayoutInfo.centerItem(): Int? {
     val viewportCenter = viewportStartOffset + viewportEndOffset
@@ -193,6 +194,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         }
     }
     val videoPool = remember(session.book.cacheKey, videoBook) { if (videoBook) VideoPlaybackPool(context) else null }
+    val videoPagerItems = remember(session, paging) { mutableMapOf<Int, @Composable (VideoPagerItem) -> Unit>() }
     DisposableEffect(videoPool) {
         onDispose { videoPool?.releaseAll() }
     }
@@ -331,13 +333,22 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             alpha = 1f - backProgress * .25f
         }.background(background)) {
             if (videoBook) {
-                val itemContent: @Composable (Int) -> Unit = { item ->
+                val pageContent: VideoPagerItem = { item ->
                     VideoPagerPage(item, session, paging, pagerState, repository, videoPool!!, videoCovers,
-                        active, allowPlayback = visible && !scrubbing, settings, foreground,
+                        active, allowPlayback = visible && !scrubbing, settings, foreground, background,
                         videoPosition, onVideoProgress, zoomSequence, zoomAction, zoomItem,
                         previewPage, normalPageLoading, onPreviewReady,
                         onEntryReady = if (visible) null else onVideoEntryReady,
                         onTap = { controls = !controls }, onEnded = onVideoEnded)
+                }
+                val itemContent: VideoPagerItem = { item ->
+                    val content = videoPagerItems.getOrPut(item) {
+                        movableContentOf<VideoPagerItem> { page ->
+                            DisposableEffect(item) { onDispose { videoPagerItems.remove(item) } }
+                            page(item)
+                        }
+                    }
+                    content(pageContent)
                 }
                 if (verticalReading) {
                     VerticalPager(state = pagerState, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1,
@@ -515,7 +526,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
 private fun VideoPagerPage(
     item: Int, session: BookSession, paging: ReaderPaging, pagerState: PagerState, repository: BookRepository,
     pool: VideoPlaybackPool, covers: VideoCoverCache,
-    active: Boolean, allowPlayback: Boolean, settings: ReaderSettings, foreground: Color,
+    active: Boolean, allowPlayback: Boolean, settings: ReaderSettings, foreground: Color, background: Color,
     videoPosition: (Int) -> Long, onVideoProgress: (Int, Long) -> Unit,
     zoomSequence: Int, zoomAction: Int, zoomItem: Int, previewPage: Int?, normalPageLoading: Boolean,
     onPreviewReady: (Int) -> Unit,
@@ -532,7 +543,7 @@ private fun VideoPagerPage(
         val cover = rememberVideoCover(session, index, repository, covers)
         val state = if (neighbor) remember(item) { pool.acquire(item) } else null
         DisposableEffect(state) { onDispose { if (state != null) pool.release(item) } }
-        val frameReady = settled && state != null && (state.failed || state.firstFrameReady && state.surfaceAttached)
+        val frameReady = settled && state != null && (state.failed || state.frameReady)
         val entryReady = onEntryReady != null && frameReady
         LaunchedEffect(entryReady) {
             if (entryReady) {
@@ -548,7 +559,7 @@ private fun VideoPagerPage(
             }
         }
         VideoPage(state, index, session, cover, settings,
-            videoPosition, onVideoProgress, foreground, active && settled, allowPlayback,
+            videoPosition, onVideoProgress, foreground, background, active && settled, allowPlayback,
             sequence, zoomAction, onTap = onTap, onEnded = onEnded)
     } else {
         ReaderPage(session, index, repository, vertical = false, active = active && settled && normalPageLoading,

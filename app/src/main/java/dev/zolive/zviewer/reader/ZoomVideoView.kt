@@ -4,44 +4,65 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Rect
+import android.graphics.SurfaceTexture
 import android.graphics.drawable.BitmapDrawable
 import android.view.GestureDetector
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.ScaleGestureDetector
+import android.view.TextureView
 import android.view.View
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.media3.ui.PlayerView
+import androidx.media3.common.Player
 import dev.zolive.zviewer.R
 import dev.zolive.zviewer.data.DiagnosticLog
 import kotlin.math.abs
 
 class ZoomVideoView(context: Context) : FrameLayout(context) {
     val playerView = LayoutInflater.from(context).inflate(R.layout.reader_video, this, false) as PlayerView
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    private val textureView = playerView.videoSurfaceView as TextureView
+    private var retainedTexture: SurfaceTexture? = null
+    private var playerSurfaceListener: TextureView.SurfaceTextureListener? = null
+    private val surfaceListener = object : TextureView.SurfaceTextureListener {
+        override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) {
+            playerSurfaceListener?.onSurfaceTextureAvailable(texture, width, height)
+        }
+
+        override fun onSurfaceTextureSizeChanged(texture: SurfaceTexture, width: Int, height: Int) {
+            playerSurfaceListener?.onSurfaceTextureSizeChanged(texture, width, height)
+        }
+
+        override fun onSurfaceTextureUpdated(texture: SurfaceTexture) {
+            playerSurfaceListener?.onSurfaceTextureUpdated(texture)
+        }
+
+        override fun onSurfaceTextureDestroyed(texture: SurfaceTexture): Boolean {
+            retainedTexture = texture
+            return false
+        }
+    }
 
     /**
-     * 首帧封面，位于播放器视图下方。播放器尚未渲染画面时 TextureView 是透明的，
-     * 因此离屏、暂停或仍在准备中的视频会显示这一帧，而不是黑屏。
+     * 首帧封面盖住尚未就绪的 TextureView，播放器仍可在封面下方准备画面。
      */
     private val coverView = ImageView(context).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
     var onTap: () -> Unit = {}
     var onLayoutReady: (Boolean) -> Unit = {}
-    @get:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     val isSurfaceAvailable: Boolean
-        get() {
-            val surface = playerView.videoSurfaceView as? android.view.TextureView ?: return false
-            return surface.isAvailable && surface.width > 0 && surface.height > 0
-        }
-    @get:androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+        get() = (textureView.isAvailable || retainedTexture != null) && textureView.width > 0 && textureView.height > 0
+
     val isVideoLayoutReady: Boolean
         get() {
-            val surface = playerView.videoSurfaceView ?: return false
             val videoSize = playerView.player?.videoSize ?: return false
-            if (width <= 0 || height <= 0 || surface.width <= 0 || surface.height <= 0 ||
+            if (width <= 0 || height <= 0 || textureView.width <= 0 || textureView.height <= 0 ||
                 videoSize.width <= 0 || videoSize.height <= 0) return false
             val expectedRatio = videoSize.width * videoSize.pixelWidthHeightRatio / videoSize.height
-            return abs(surface.width.toFloat() / surface.height - expectedRatio) <= expectedRatio * .02f
+            val expectedWidth = textureView.height * expectedRatio
+            return abs(textureView.width - expectedWidth) <= maxOf(1f, expectedRatio, expectedWidth * .02f)
         }
     private var page = -1
     private var zoom = 1f
@@ -89,9 +110,8 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         }
 
     init {
-        addView(coverView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         addView(playerView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
-        // Media3 的黑色快门会盖住封面；设为透明后，首帧渲染前的空白 TextureView 能让封面透出。
+        addView(coverView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
         playerView.findViewById<View>(androidx.media3.ui.R.id.exo_shutter)?.apply {
             setBackgroundColor(Color.TRANSPARENT)
             visibility = GONE
@@ -117,6 +137,24 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         DiagnosticLog.log("View", "bindCover index=$page view=${hashCode()} " +
             (bitmap?.let { "${it.width}x${it.height}" } ?: "null"))
         coverView.setImageBitmap(bitmap)
+    }
+
+    fun setCoverBackground(color: Int) {
+        coverView.setBackgroundColor(color)
+    }
+
+    fun bindPlayer(player: Player?) {
+        if (playerView.player === player) return
+        textureView.surfaceTextureListener = playerSurfaceListener
+        playerView.player = player
+        retainedTexture?.release()
+        retainedTexture = null
+        playerSurfaceListener = textureView.surfaceTextureListener
+        if (player != null) textureView.surfaceTextureListener = surfaceListener
+    }
+
+    fun showVideoFrame(visible: Boolean) {
+        coverView.visibility = if (visible) INVISIBLE else VISIBLE
     }
 
     fun command(sequence: Int, action: Int) {
@@ -152,6 +190,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     }
 
     override fun onSizeChanged(width: Int, height: Int, oldWidth: Int, oldHeight: Int) {
+        clipBounds = Rect(0, 0, width, height)
         updateTransform()
     }
 
@@ -159,10 +198,16 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         super.onLayout(changed, left, top, right, bottom)
         onLayoutReady(isVideoLayoutReady)
     }
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        retainedTexture?.let(textureView::setSurfaceTexture)
+        retainedTexture = null
+    }
+
     override fun onDetachedFromWindow() {
         zoomAnimator.cancel()
         super.onDetachedFromWindow()
-        onLayoutReady(false)
+        if (retainedTexture == null) onLayoutReady(false)
     }
     override fun onInterceptTouchEvent(event: MotionEvent): Boolean = true
 
