@@ -49,7 +49,7 @@ internal fun AppAlertDialog(
     } else {
         moderateAnimation
     }
-    val hapticsEnabled = LocalHapticsEnabled.current
+    val hapticsEnabled = LocalInteractionSettings.current.hapticFeedback
     AlertDialog(
         onDismissRequest = onDismissRequest,
         title = title,

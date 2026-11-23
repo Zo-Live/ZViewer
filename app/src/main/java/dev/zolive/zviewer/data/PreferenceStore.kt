@@ -68,6 +68,9 @@ class PreferenceStore(context: Context) {
         disabledAnimations = preferences.getStringSet("disabled_animations", emptySet()).orEmpty().let { keys ->
             AnimationEffect.entries.filterTo(mutableSetOf()) { it.key in keys }
         },
+        disabledHaptics = preferences.getStringSet("disabled_haptics", emptySet()).orEmpty().let { keys ->
+            HapticEvent.entries.filterTo(mutableSetOf()) { it.key in keys }
+        },
         verifyOnStartup = preferences.getBoolean("verify_on_startup", false),
         hideRecentPreview = preferences.getBoolean("hide_recent_preview", false),
         verifyAfterBackground = preferences.getBoolean("verify_after_background", false),
@@ -105,6 +108,7 @@ class PreferenceStore(context: Context) {
             .putBoolean("fast_animations", settings.animationSpeed == AnimationSpeed.Enhanced)
             .putBoolean("haptic_feedback", settings.hapticFeedback)
             .putStringSet("disabled_animations", settings.disabledAnimations.mapTo(mutableSetOf()) { it.key })
+            .putStringSet("disabled_haptics", settings.disabledHaptics.mapTo(mutableSetOf()) { it.key })
             .putBoolean("verify_on_startup", settings.verifyOnStartup)
             .putBoolean("hide_recent_preview", settings.hideRecentPreview)
             .putBoolean("verify_after_background", settings.verifyAfterBackground)

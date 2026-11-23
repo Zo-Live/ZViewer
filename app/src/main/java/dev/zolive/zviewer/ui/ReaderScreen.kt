@@ -69,6 +69,7 @@ import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
 import dev.zolive.zviewer.data.DiagnosticLog
+import dev.zolive.zviewer.data.HapticEvent
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.PageSource
 import dev.zolive.zviewer.reader.ImageLoader
@@ -536,9 +537,11 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             else -> R.string.page_number_range
         }
         AppAlertDialog(onDismissRequest = { jumpDialog = false }, title = { Text(stringResource(title)) }, text = {
-            OutlinedTextField(text, { text = it.filter(Char::isDigit).take(6) },
-                label = { Text(stringResource(label, session.pages.size)) },
-                singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
+            TextSelectionHaptics {
+                OutlinedTextField(text, { text = it.filter(Char::isDigit).take(6) },
+                    label = { Text(stringResource(label, session.pages.size)) },
+                    singleLine = true, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number))
+            }
         }, confirmButton = { TextButton(enabled = page != null && page in 1..session.pages.size,
             onClick = { jump(page!! - 1); jumpDialog = false }) { Text(stringResource(R.string.jump)) } },
             dismissButton = { TextButton(onClick = { jumpDialog = false }) { Text(stringResource(R.string.cancel)) } })
@@ -611,7 +614,7 @@ private fun ReaderPageSlider(
     val position = sliderPosition()
     val pageNumber = (position?.roundToInt() ?: currentPage) + 1
     val sliderHaptics = remember(pageCount) { ProgressSliderHaptics() }
-    val haptic = hapticFeedback()
+    val haptic = hapticFeedback(HapticEvent.ReaderPageSlider)
     val lastPage = (pageCount - 1).toFloat()
     Row(verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = onJump, enabled = !scrubbing) {

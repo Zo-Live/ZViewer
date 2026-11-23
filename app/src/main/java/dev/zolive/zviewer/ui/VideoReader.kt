@@ -58,6 +58,7 @@ import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
 import dev.zolive.zviewer.data.DiagnosticLog
+import dev.zolive.zviewer.data.HapticEvent
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.reader.SpeedHoldEnd
 import dev.zolive.zviewer.reader.ZoomVideoView
@@ -537,7 +538,7 @@ internal fun VideoPage(
     modifier: Modifier = Modifier,
 ) {
     val viewRef = remember { mutableStateOf<ZoomVideoView?>(null) }
-    val haptic = hapticFeedback()
+    val speedLockHaptic = hapticFeedback(HapticEvent.VideoSpeedLock)
     val gesturesEnabled = active && allowPlayback
     val description = stringResource(
         if (settings.doubleTapZoom) R.string.video_accessibility else R.string.video_accessibility_without_zoom,
@@ -568,7 +569,7 @@ internal fun VideoPage(
                 view.onSpeedHoldStart = { gesturesEnabled && state?.startSpeedHold() == true }
                 view.onSpeedHoldEnd = { end ->
                     val feedback = state?.finishSpeedHold(end) ?: HapticFeedbackConstantsCompat.NO_HAPTICS
-                    if (feedback != HapticFeedbackConstantsCompat.NO_HAPTICS) haptic(feedback)
+                    if (feedback != HapticFeedbackConstantsCompat.NO_HAPTICS) speedLockHaptic(feedback)
                 }
                 view.onSwipeSeekStart = {
                     gesturesEnabled && settings.vertical && settings.horizontalVideoSeek && state?.startSwipeSeek() == true
@@ -600,7 +601,8 @@ internal fun VideoPage(
 
 @Composable
 internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean = true) {
-    val haptic = hapticFeedback()
+    val playbackHaptic = hapticFeedback(HapticEvent.VideoPlayPause)
+    val progressHaptic = hapticFeedback(HapticEvent.VideoProgress)
     val sliderHaptics = remember(state) { ProgressSliderHaptics() }
     val scrubbing = state.scrubPosition != null
     val displayedPosition = state.scrubPosition ?: state.position
@@ -620,7 +622,7 @@ internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean =
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = {
                 state.togglePlayback()
-                haptic(if (state.playRequested) HapticFeedbackConstantsCompat.TOGGLE_ON else HapticFeedbackConstantsCompat.TOGGLE_OFF)
+                playbackHaptic(if (state.playRequested) HapticFeedbackConstantsCompat.TOGGLE_ON else HapticFeedbackConstantsCompat.TOGGLE_OFF)
             }, enabled = enabled && !scrubbing && !state.failed && state.index >= 0) {
                 Icon(if (state.playRequested) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
                     stringResource(if (state.playRequested) R.string.pause_video else R.string.play_video))
@@ -628,7 +630,7 @@ internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean =
             val progressDescription = stringResource(R.string.video_playback_progress)
             Slider(value = displayedPosition.toFloat().coerceIn(0f, state.duration.coerceAtLeast(1L).toFloat()),
                 onValueChange = {
-                    sliderHaptics.update((it / 1000f).toLong(), it <= 0f, it >= state.duration.toFloat(), haptic)
+                    sliderHaptics.update((it / 1000f).toLong(), it <= 0f, it >= state.duration.toFloat(), progressHaptic)
                     state.scrubTo(it.toLong())
                 },
                 onValueChangeFinished = state::finishScrub,
@@ -647,7 +649,7 @@ private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
     var expanded by remember(state, enabled) { mutableStateOf(false) }
     var anchorTop by remember { mutableFloatStateOf(0f) }
     val animationSpeed = animationSpeed(AnimationEffect.VideoSpeedMenu)
-    val haptic = hapticFeedback()
+    val haptic = hapticFeedback(HapticEvent.VideoSpeedSelection)
     val label = stringResource(R.string.video_speed)
     Box(Modifier.onGloballyPositioned { anchorTop = it.boundsInWindow().top }) {
         Box(Modifier.height(40.dp).widthIn(min = 48.dp)

@@ -68,6 +68,7 @@ import dev.zolive.zviewer.data.AutoLockInterval
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.CacheLimits
 import dev.zolive.zviewer.data.DiagnosticLog
+import dev.zolive.zviewer.data.HapticEvent
 import dev.zolive.zviewer.data.UpdateDownload
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -183,7 +184,7 @@ internal fun SettingsPage(
 @Composable
 private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSettings) -> Unit) {
     var customColor by remember { mutableStateOf(false) }
-    val haptic = hapticFeedback()
+    val haptic = hapticFeedback(HapticEvent.ThemeColorPreset)
     PreferenceMenu(
         title = stringResource(R.string.app_theme),
         selectedValue = settings.theme,
@@ -277,9 +278,12 @@ private fun AppPreferences(
     ) { enabled ->
         onSettings(settings.copy(hapticFeedback = enabled))
         view.isHapticFeedbackEnabled = enabled
-        if (enabled) {
+        if (enabled && HapticEvent.EnableHapticFeedback !in settings.disabledHaptics) {
             ViewCompat.performHapticFeedback(view, HapticFeedbackConstantsCompat.TOGGLE_ON)
         }
+    }
+    if (settings.hapticFeedback) {
+        InteractionSettingsLink(InteractionSettingsPage.Haptics, onOpen)
     }
     PreferenceSwitch(stringResource(R.string.show_file_type), stringResource(R.string.show_file_type_hint), settings.showFileType) {
         onSettings(settings.copy(showFileType = it))
@@ -356,7 +360,7 @@ private fun SecuritySettings(state: LibraryState, model: LibraryViewModel) {
 private fun LibraryStorageSettings(state: LibraryState, model: LibraryViewModel, onChooseLibrary: () -> Unit) {
     val settings = state.settings
     val context = LocalContext.current
-    val haptic = hapticFeedback()
+    val haptic = hapticFeedback(HapticEvent.CacheLimit)
     var cacheLimitMiB by remember(settings.cacheLimitMiB) { mutableIntStateOf(settings.cacheLimitMiB) }
     val cacheSize by produceState(0L, state.cacheRevision) { value = model.repository.cacheSize() }
     SettingsListItem(headlineContent = { Text(stringResource(R.string.library_directory)) }, supportingContent = {
@@ -373,7 +377,7 @@ private fun LibraryStorageSettings(state: LibraryState, model: LibraryViewModel,
         ))
     },
         trailingContent = { Text(Formatter.formatShortFileSize(context, cacheSize)) },
-        modifier = Modifier.doubleClickToClear(onClear = model::clearCache))
+        modifier = Modifier.doubleClickToClear(HapticEvent.ClearCache, onClear = model::clearCache))
     PreferenceSwitch(stringResource(R.string.clear_covers), checked = settings.clearCovers) {
         model.settings(settings.copy(clearCovers = it))
     }
@@ -409,7 +413,7 @@ private fun LibraryStorageSettings(state: LibraryState, model: LibraryViewModel,
     SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_reading_history)) }, supportingContent = {
         Text(stringResource(R.string.clear_reading_history_hint))
     },
-        modifier = Modifier.doubleClickToClear(onClear = model::clearReadingProgress))
+        modifier = Modifier.doubleClickToClear(HapticEvent.ClearReadingHistory, onClear = model::clearReadingProgress))
     PreferenceSwitch(stringResource(R.string.clear_history_on_removal), checked = settings.clearProgressOnTaskRemoval) {
         model.settings(settings.copy(clearProgressOnTaskRemoval = it))
     }
@@ -489,7 +493,7 @@ private fun DiagnosticsSettings(
     SettingsListItem(headlineContent = { Text(stringResource(R.string.clear_logs)) },
         supportingContent = { Text(stringResource(R.string.clear_logs_hint)) },
         trailingContent = { Text(Formatter.formatShortFileSize(context, logSize)) },
-        modifier = Modifier.doubleClickToClear(enabled = !logOperationRunning, role = Role.Button) {
+        modifier = Modifier.doubleClickToClear(HapticEvent.ClearLogs, enabled = !logOperationRunning, role = Role.Button) {
             runLogOperation(R.string.log_clear_failed) {
                 check(DiagnosticLog.clear(context))
                 null
@@ -499,12 +503,13 @@ private fun DiagnosticsSettings(
 
 @Composable
 private fun Modifier.doubleClickToClear(
+    event: HapticEvent,
     enabled: Boolean = true,
     role: Role? = null,
     onClear: () -> Unit,
 ): Modifier {
     val interactionSource = remember { MutableInteractionSource() }
-    val haptic by rememberUpdatedState(hapticFeedback())
+    val haptic by rememberUpdatedState(hapticFeedback(event))
     LaunchedEffect(interactionSource) {
         interactionSource.interactions.collect { interaction ->
             if (interaction is PressInteraction.Release) haptic(HapticFeedbackConstantsCompat.CONTEXT_CLICK)
@@ -638,7 +643,7 @@ private fun <T> PreferenceMenu(
     onSelect: (T) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val haptic = hapticFeedback()
+    val haptic = hapticFeedback(HapticEvent.MenuSelection)
     val current = options.firstOrNull { it.first == selectedValue } ?: options.first()
     val action = stringResource(if (expanded) R.string.menu_collapse else R.string.menu_expand)
     val menuState = stringResource(if (expanded) R.string.menu_expanded else R.string.menu_collapsed)
@@ -736,7 +741,7 @@ internal fun PreferenceSwitch(
     feedbackOnToggle: Boolean = true,
     onChange: (Boolean) -> Unit,
 ) {
-    val haptic = hapticFeedback()
+    val haptic = hapticFeedback(HapticEvent.Switch)
     SettingsListItem(
         headlineContent = { Text(title) },
         supportingContent = subtitle?.let { { Text(it) } },

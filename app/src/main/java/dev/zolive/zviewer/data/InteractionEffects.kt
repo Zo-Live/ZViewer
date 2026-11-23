@@ -19,3 +19,26 @@ enum class AnimationEffect(internal val key: String) {
     VideoZoom("video_zoom"),
     VideoSpeedMenu("video_speed_menu"),
 }
+
+enum class HapticEvent(internal val key: String) {
+    Switch("switch"),
+    MenuSelection("menu_selection"),
+    EnableHapticFeedback("enable_haptic_feedback"),
+    TextSelection("text_selection"),
+    ThemeColorPreset("theme_color_preset"),
+    ThemeColorWheel("theme_color_wheel"),
+    ThemeColorSliders("theme_color_sliders"),
+    ApplyThemeColor("apply_theme_color"),
+    Favorite("favorite"),
+    FavoriteManagement("favorite_management"),
+    CacheLimit("cache_limit"),
+    ClearCache("clear_cache"),
+    ClearReadingHistory("clear_reading_history"),
+    ClearLogs("clear_logs"),
+    LogTextSelection("log_text_selection"),
+    ReaderPageSlider("reader_page_slider"),
+    VideoPlayPause("video_play_pause"),
+    VideoProgress("video_progress"),
+    VideoSpeedSelection("video_speed_selection"),
+    VideoSpeedLock("video_speed_lock"),
+}

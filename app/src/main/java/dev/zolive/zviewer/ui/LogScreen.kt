@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import dev.zolive.zviewer.R
 import dev.zolive.zviewer.data.DiagnosticLog
+import dev.zolive.zviewer.data.HapticEvent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -200,7 +201,7 @@ fun LogDetailScreen(file: DiagnosticLog.LogFile, onBack: () -> Unit) {
 @Composable
 private fun SelectableLog(content: String, modifier: Modifier, onAction: (Int, String) -> Unit) {
     val handleAction by rememberUpdatedState(onAction)
-    val hapticsEnabled = LocalHapticsEnabled.current
+    val hapticsEnabled = LocalInteractionSettings.current.hapticsEnabledFor(HapticEvent.LogTextSelection)
     val textColor = MaterialTheme.colorScheme.onBackground.toArgb()
     val fontSize = MaterialTheme.typography.bodySmall.fontSize.value
     key(content) {

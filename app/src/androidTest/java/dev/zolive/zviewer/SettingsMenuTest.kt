@@ -19,6 +19,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.AnimationSpeed
 import dev.zolive.zviewer.data.AutoLockInterval
+import dev.zolive.zviewer.data.HapticEvent
 import dev.zolive.zviewer.data.PreferenceStore
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -156,7 +157,7 @@ class SettingsMenuTest {
         val language = setting("语言")
         val speed = setting("动画速度")
         val haptics = setting("触感反馈")
-        val rows = listOf(language, speed, haptics, setting("显示文件类型"))
+        val rows = listOf(language, speed, haptics, setting("触感设置"), setting("显示文件类型"))
             .map { it.fetchSemanticsNode().boundsInRoot }
         rows.zipWithNext().forEach { (upper, lower) -> assertEquals(upper.bottom, lower.top, 1f) }
         speed.assert(hasText("适中")).performClick()
@@ -181,12 +182,15 @@ class SettingsMenuTest {
         assertTrue(store.settings().hapticFeedback)
     }
 
-    @Test fun animationSubpageAppearsInEnhancedModeAndRestoresSeparateChoices() {
+    @Test fun interactionSubpagesShowOnlyWithTheirMasterSettingsAndRestoreSeparateChoices() {
         setting("偏好").performClick()
         val speed = setting("动画速度")
+        val haptics = setting("触感反馈")
         val animationLink = setting("动画设置")
+        val hapticsLink = setting("触感设置")
         val back = rule.onNodeWithContentDescription("返回偏好")
         animationLink.assertDoesNotExist()
+        hapticsLink.assertIsDisplayed()
 
         speed.performClick()
         option("增强").performClick()
@@ -205,7 +209,28 @@ class SettingsMenuTest {
         option("增强").performClick()
         animationLink.performClick()
         setting("播放倍速菜单").performScrollTo().assertIsOff()
+        back.performClick()
+
+        hapticsLink.performClick()
+        rule.onAllNodes(isToggleable()).assertCountEquals(HapticEvent.entries.size)
+        rule.onAllNodes(isToggleable() and isOn()).assertCountEquals(HapticEvent.entries.size)
+        setting("添加和取消收藏").performScrollTo().performClick().assertIsOff()
+        setting("进入和退出收藏管理").assertIsOn()
+        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        haptics.performClick().assertIsOff()
+        hapticsLink.assertDoesNotExist()
+
+        scenario.close()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        rule.onNodeWithContentDescription("设置").performClick()
+        setting("偏好").performClick()
+        hapticsLink.assertDoesNotExist()
+        haptics.performClick().assertIsOn()
+        hapticsLink.performClick()
+        setting("添加和取消收藏").performScrollTo().assertIsOff()
+        setting("进入和退出收藏管理").assertIsOn()
         assertEquals(setOf(AnimationEffect.VideoSpeedMenu), store.settings().disabledAnimations)
+        assertEquals(setOf(HapticEvent.Favorite), store.settings().disabledHaptics)
     }
 
     @Test fun switchingLanguagesKeepsSettingsOpenAndPersists() {

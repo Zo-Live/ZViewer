@@ -89,9 +89,13 @@ data class ReaderSettings(
     val animationSpeed: AnimationSpeed = AnimationSpeed.Moderate,
     val hapticFeedback: Boolean = true,
     val disabledAnimations: Set<AnimationEffect> = emptySet(),
+    val disabledHaptics: Set<HapticEvent> = emptySet(),
 ) {
     internal fun animationSpeedFor(effect: AnimationEffect): AnimationSpeed =
         if (effect in disabledAnimations) AnimationSpeed.Moderate else animationSpeed
+
+    internal fun hapticsEnabledFor(event: HapticEvent): Boolean =
+        hapticFeedback && event !in disabledHaptics
 }
 
 data class PageSource(

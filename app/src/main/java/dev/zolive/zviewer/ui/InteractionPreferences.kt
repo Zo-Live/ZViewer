@@ -19,22 +19,24 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.ViewCompat
 import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.AnimationSpeed
+import dev.zolive.zviewer.data.HapticEvent
 import dev.zolive.zviewer.data.ReaderSettings
 import kotlin.math.roundToInt
 
 internal val LocalInteractionSettings = compositionLocalOf { ReaderSettings() }
-internal val LocalHapticsEnabled = staticCompositionLocalOf { true }
 
 @Composable
 internal fun animationSpeed(effect: AnimationEffect): AnimationSpeed =
@@ -112,8 +114,22 @@ internal fun AppCircularProgressIndicator(
 }
 
 @Composable
-internal fun hapticFeedback(): (Int) -> Unit {
+internal fun hapticFeedback(event: HapticEvent): (Int) -> Unit {
     val view = LocalView.current
-    val enabled = LocalHapticsEnabled.current
+    val enabled = LocalInteractionSettings.current.hapticsEnabledFor(event)
     return { type -> if (enabled) ViewCompat.performHapticFeedback(view, type) }
+}
+
+private val SilentHapticFeedback = object : HapticFeedback {
+    override fun performHapticFeedback(hapticFeedbackType: HapticFeedbackType) = Unit
+}
+
+@Composable
+internal fun TextSelectionHaptics(content: @Composable () -> Unit) {
+    val feedback = if (LocalInteractionSettings.current.hapticsEnabledFor(HapticEvent.TextSelection)) {
+        LocalHapticFeedback.current
+    } else {
+        SilentHapticFeedback
+    }
+    CompositionLocalProvider(LocalHapticFeedback provides feedback, content = content)
 }

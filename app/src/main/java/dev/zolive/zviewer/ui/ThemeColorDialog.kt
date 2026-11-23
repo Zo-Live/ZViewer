@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import androidx.core.view.HapticFeedbackConstantsCompat
 import dev.zolive.zviewer.R
+import dev.zolive.zviewer.data.HapticEvent
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -122,26 +123,28 @@ internal fun ThemeColorDialog(
                         }
                     }
                 }
-                OutlinedTextField(
-                    value = hex,
-                    onValueChange = { input ->
-                        hex = input.filter { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }.take(6)
-                        if (hex.length == 6) selectRgb(0xFF000000.toInt() or hex.toInt(16))
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.color_hex)) },
-                    singleLine = true,
-                    isError = !valid,
-                    keyboardOptions = KeyboardOptions(
-                        capitalization = KeyboardCapitalization.Characters,
-                        keyboardType = KeyboardType.Ascii,
-                        autoCorrectEnabled = false,
-                    ),
-                )
+                TextSelectionHaptics {
+                    OutlinedTextField(
+                        value = hex,
+                        onValueChange = { input ->
+                            hex = input.filter { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }.take(6)
+                            if (hex.length == 6) selectRgb(0xFF000000.toInt() or hex.toInt(16))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.color_hex)) },
+                        singleLine = true,
+                        isError = !valid,
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Characters,
+                            keyboardType = KeyboardType.Ascii,
+                            autoCorrectEnabled = false,
+                        ),
+                    )
+                }
             }
         },
         confirmButton = {
-            val haptic = hapticFeedback()
+            val haptic = hapticFeedback(HapticEvent.ApplyThemeColor)
             TextButton(enabled = valid, onClick = {
                 if (rgb == initialRgb) {
                     onDismiss()
@@ -191,7 +194,7 @@ private enum class ColorChannel(val shift: Int, val tint: Color) {
 @Composable
 private fun ColorSlider(channel: ColorChannel, value: Int, onValueChange: (Int) -> Unit) {
     val gradient = remember(channel) { Brush.horizontalGradient(listOf(Color.Black, channel.tint)) }
-    val haptic = hapticFeedback()
+    val haptic = hapticFeedback(HapticEvent.ThemeColorSliders)
     val feedback = remember { ColorPickerFeedback() }
     val currentValue by rememberUpdatedState(value)
     var dragFeedback by remember { mutableStateOf<ColorAxisFeedback?>(null) }
@@ -281,7 +284,7 @@ private fun ColorWheel(hsv: Hsv, rgb: Int, onChange: (Hsv) -> Unit) {
     val selection by rememberUpdatedState(hsv)
     val selectedColor by rememberUpdatedState(Color(rgb))
     val updateColor by rememberUpdatedState(onChange)
-    val haptic by rememberUpdatedState(hapticFeedback())
+    val haptic by rememberUpdatedState(hapticFeedback(HapticEvent.ThemeColorWheel))
     val feedback = remember { ColorPickerFeedback() }
     val hueColor = Color.hsv(hsv.hue, 1f, 1f)
     Box(

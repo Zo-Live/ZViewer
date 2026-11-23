@@ -92,6 +92,7 @@ import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.Book
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.DiagnosticLog
+import dev.zolive.zviewer.data.HapticEvent
 import dev.zolive.zviewer.data.ReadingProgress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -132,6 +133,7 @@ private sealed class AppPage(val tag: String) {
                     Logs.tag -> Logs
                     "log-detail-screen" -> LogDetail(DiagnosticLog.LogFile(it[1] as Uri, it[2] as String, it[3] as Long))
                     InteractionSettingsPage.Animation.tag -> Interaction(InteractionSettingsPage.Animation)
+                    InteractionSettingsPage.Haptics.tag -> Interaction(InteractionSettingsPage.Haptics)
                     else -> SettingsSection.entries.firstOrNull { section -> section.tag == it[0] }
                         ?.let { section -> Section(section) } ?: Library
                 }
@@ -382,7 +384,8 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
 private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: Boolean,
     onSettings: () -> Unit, onChooseLibrary: () -> Unit) {
     val searchSpeed = animationSpeed(AnimationEffect.LibrarySearch)
-    val haptic = hapticFeedback()
+    val managementHaptic = hapticFeedback(HapticEvent.FavoriteManagement)
+    val favoriteHaptic = hapticFeedback(HapticEvent.Favorite)
     val titles = listOf(stringResource(R.string.library), stringResource(R.string.favorites), stringResource(R.string.recent_reads))
     val pagerState = rememberPagerState { titles.size }
     val gridStates = titles.map { rememberLazyGridState() }
@@ -395,12 +398,12 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     fun changeFavoriteManagement(enabled: Boolean) {
         if (managingFavorites == enabled) return
         managingFavorites = enabled
-        haptic(if (enabled) HapticFeedbackConstantsCompat.LONG_PRESS else HapticFeedbackConstantsCompat.TOGGLE_OFF)
+        managementHaptic(if (enabled) HapticFeedbackConstantsCompat.LONG_PRESS else HapticFeedbackConstantsCompat.TOGGLE_OFF)
     }
     fun toggleFavorite(book: Book) {
         val isFavorite = book.id in model.state.value.favorites
         model.toggleFavorite(book)
-        haptic(if (isFavorite) HapticFeedbackConstantsCompat.TOGGLE_OFF else HapticFeedbackConstantsCompat.TOGGLE_ON)
+        favoriteHaptic(if (isFavorite) HapticFeedbackConstantsCompat.TOGGLE_OFF else HapticFeedbackConstantsCompat.TOGGLE_ON)
     }
     val contentInset = 24.dp
     val actionInset = contentInset - 12.dp
@@ -457,10 +460,12 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                     slideOutVertically(tween(searchSpeed.duration(220), easing = FastOutSlowInEasing)) { -it / 4 } +
                     fadeOut(tween(searchSpeed.duration(150)))
             ) {
-                OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = contentInset, vertical = 8.dp),
-                    placeholder = { Text(stringResource(R.string.search_title)) }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
-                    trailingIcon = { IconButton(onClick = { query = ""; searching = false }) { Icon(Icons.Outlined.Close, stringResource(R.string.close_search)) } },
-                    shape = RoundedCornerShape(28.dp), singleLine = true)
+                TextSelectionHaptics {
+                    OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = contentInset, vertical = 8.dp),
+                        placeholder = { Text(stringResource(R.string.search_title)) }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
+                        trailingIcon = { IconButton(onClick = { query = ""; searching = false }) { Icon(Icons.Outlined.Close, stringResource(R.string.close_search)) } },
+                        shape = RoundedCornerShape(28.dp), singleLine = true)
+                }
             }
             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize().testTag("library-pager"),
                 flingBehavior = pageFlingBehavior(pagerState, animationSpeed(AnimationEffect.LibraryPaging)),
