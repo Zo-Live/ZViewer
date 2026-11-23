@@ -592,6 +592,7 @@ internal fun VideoPage(
 @Composable
 internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean = true) {
     val haptic = hapticFeedback()
+    val sliderHaptics = remember(state) { ProgressSliderHaptics() }
     val scrubbing = state.scrubPosition != null
     val displayedPosition = state.scrubPosition ?: state.position
     DisposableEffect(state) {
@@ -617,11 +618,16 @@ internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean =
             }
             val progressDescription = stringResource(R.string.video_playback_progress)
             Slider(value = displayedPosition.toFloat().coerceIn(0f, state.duration.coerceAtLeast(1L).toFloat()),
-                onValueChange = { state.scrubTo(it.toLong()) },
+                onValueChange = {
+                    sliderHaptics.update((it / 1000f).toLong(), it <= 0f, it >= state.duration.toFloat(), haptic)
+                    state.scrubTo(it.toLong())
+                },
                 onValueChangeFinished = state::finishScrub,
                 valueRange = 0f..state.duration.coerceAtLeast(1L).toFloat(),
                 enabled = enabled && state.seekable && state.duration > 0L && !state.failed,
-                modifier = Modifier.weight(1f).semantics { contentDescription = progressDescription })
+                modifier = Modifier.weight(1f)
+                    .trackProgressSliderDrag(sliderHaptics, positionSeconds, displayedPosition == 0L, displayedPosition >= state.duration)
+                    .semantics { contentDescription = progressDescription })
         }
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
     }

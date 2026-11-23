@@ -608,6 +608,9 @@ private fun ReaderPageSlider(
 ) {
     val position = sliderPosition()
     val pageNumber = (position?.roundToInt() ?: currentPage) + 1
+    val sliderHaptics = remember(pageCount) { ProgressSliderHaptics() }
+    val haptic = hapticFeedback()
+    val lastPage = (pageCount - 1).toFloat()
     Row(verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = onJump, enabled = !scrubbing) {
             Text(stringResource(progressLabel, pageNumber, pageCount))
@@ -615,9 +618,15 @@ private fun ReaderPageSlider(
         Spacer(Modifier.weight(1f))
         Text("${(pageNumber.toFloat() / pageCount * 100).roundToInt()}%", style = MaterialTheme.typography.labelMedium)
     }
-    Slider(value = position ?: currentPage.toFloat(), onValueChange = onValueChange,
+    Slider(value = position ?: currentPage.toFloat(), onValueChange = { value ->
+            sliderHaptics.update(value.roundToInt().toLong(), value <= 0f, value >= lastPage, haptic)
+            onValueChange(value)
+        },
         onValueChangeFinished = onValueChangeFinished, valueRange = 0f..maxOf(1, pageCount - 1).toFloat(),
-        enabled = pageCount > 1, modifier = Modifier.fillMaxWidth())
+        enabled = pageCount > 1, modifier = Modifier.fillMaxWidth().trackProgressSliderDrag(
+            sliderHaptics, (pageNumber - 1).toLong(), (position ?: currentPage.toFloat()) == 0f,
+            (position ?: currentPage.toFloat()) == lastPage,
+        ))
 }
 
 private fun Modifier.blockVideoGestures(): Modifier = pointerInput(Unit) {
