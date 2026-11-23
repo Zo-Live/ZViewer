@@ -510,7 +510,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             }
         }
     }
-    if (preferences) WithAnimationSpeed(speed) {
+    if (preferences) WithAnimationSpeed(speed, modifier = Modifier.size(0.dp)) {
         ModalBottomSheet(onDismissRequest = { preferences = false }) {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
                 Text(stringResource(R.string.reader_settings), style = MaterialTheme.typography.headlineSmall)
@@ -754,6 +754,6 @@ private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, ve
             }
         } else if (preview != null) {
             ReaderPreviewImage(preview, Modifier.fillMaxSize(), contentScale = ContentScale.FillWidth)
-        } else CircularProgressIndicator(Modifier.size(28.dp), color = foreground)
+        } else AppCircularProgressIndicator(Modifier.size(28.dp), color = foreground)
     }
 }

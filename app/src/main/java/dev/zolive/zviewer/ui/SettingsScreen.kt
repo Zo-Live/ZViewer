@@ -523,7 +523,7 @@ private fun ApplicationSettings(state: LibraryState, model: LibraryViewModel) {
                 val description = stringResource(
                     if (state.downloadingUpdate) R.string.update_download_preparing else R.string.update_checking,
                 )
-                CircularProgressIndicator(Modifier.size(24.dp).semantics { contentDescription = description }, strokeWidth = 2.dp)
+                AppCircularProgressIndicator(Modifier.size(24.dp).semantics { contentDescription = description }, strokeWidth = 2.dp)
             }
         } else null,
         modifier = Modifier.clickable(
@@ -722,7 +722,11 @@ private fun PreferenceSwitch(
     SettingsListItem(
         headlineContent = { Text(title) },
         supportingContent = subtitle?.let { { Text(it) } },
-        trailingContent = { Switch(checked, onCheckedChange = null) },
+        trailingContent = {
+            WithAnimationSpeed(LocalAnimationSpeed.current) {
+                Switch(checked, onCheckedChange = null)
+            }
+        },
         modifier = Modifier.toggleable(value = checked, role = Role.Switch) {
             if (feedbackOnToggle) {
                 haptic(if (it) HapticFeedbackConstantsCompat.TOGGLE_ON else HapticFeedbackConstantsCompat.TOGGLE_OFF)

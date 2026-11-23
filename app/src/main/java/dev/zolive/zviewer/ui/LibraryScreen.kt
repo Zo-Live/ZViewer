@@ -51,6 +51,7 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.TransformOrigin
@@ -356,7 +357,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
         UpdateFeedback(state, model)
     }
     if (showOpening && state.opening != null) {
-        AppAlertDialog(onDismissRequest = model::cancelOpen, icon = { CircularProgressIndicator(Modifier.size(36.dp)) },
+        AppAlertDialog(onDismissRequest = model::cancelOpen, icon = { AppCircularProgressIndicator(Modifier.size(36.dp)) },
             title = { Text(stringResource(R.string.opening_reader)) }, text = { Text(state.opening) },
             confirmButton = { TextButton(onClick = model::cancelOpen) { Text(stringResource(R.string.cancel)) } })
     }
@@ -418,12 +419,14 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
             })
         },
         bottomBar = {
-            NavigationBar {
-                val icons = listOf(Icons.Outlined.CollectionsBookmark, Icons.Outlined.BookmarkBorder, Icons.Outlined.History)
-                titles.forEachIndexed { index, title ->
-                    NavigationBarItem(selected = pagerState.currentPage == index,
-                        onClick = { pagerState.requestScrollToPage(index) },
-                        icon = { Icon(icons[index], null) }, label = { Text(title) })
+            WithAnimationSpeed(speed) {
+                NavigationBar {
+                    val icons = listOf(Icons.Outlined.CollectionsBookmark, Icons.Outlined.BookmarkBorder, Icons.Outlined.History)
+                    titles.forEachIndexed { index, title ->
+                        NavigationBarItem(selected = pagerState.currentPage == index,
+                            onClick = { pagerState.requestScrollToPage(index) },
+                            icon = { Icon(icons[index], null) }, label = { Text(title) })
+                    }
                 }
             }
         },
@@ -433,7 +436,9 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            if (state.scanning) LinearProgressIndicator(Modifier.fillMaxWidth())
+            if (state.scanning) WithAnimationSpeed(speed) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+            }
             AnimatedVisibility(
                 visible = searching,
                 enter = expandVertically(tween(speed.duration(280), easing = FastOutSlowInEasing), expandFrom = Alignment.Top) +
@@ -597,7 +602,8 @@ private fun LibraryActions(gridState: LazyGridState, managingFavorites: Boolean,
         }
         coroutineScope {
             // 手势中断滚动时，保留当前按钮位置继续过渡。
-            launch { gridState.animateScrollToItem(0) }.join()
+            val scale = PreferredMotionDurationScale(coroutineContext[MotionDurationScale], speed)
+            launch(scale) { gridState.animateScrollToItem(0) }.join()
         }
         visibility.snapTo(buttonProgress)
         returnAnimationDistance = null

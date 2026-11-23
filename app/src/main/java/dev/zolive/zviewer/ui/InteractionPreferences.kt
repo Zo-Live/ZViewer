@@ -3,9 +3,11 @@ package dev.zolive.zviewer.ui
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.TargetedFlingBehavior
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ProgressIndicatorDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -19,9 +21,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.ViewCompat
 import dev.zolive.zviewer.data.AnimationSpeed
@@ -33,6 +36,13 @@ internal val LocalHapticsEnabled = staticCompositionLocalOf { true }
 internal fun AnimationSpeed.duration(millis: Int): Int = (millis * durationScale).roundToInt()
 
 internal fun AnimationSpeed.stiffness(base: Float): Float = base / (durationScale * durationScale)
+
+internal class PreferredMotionDurationScale(
+    private val systemScale: MotionDurationScale?,
+    private val speed: AnimationSpeed,
+) : MotionDurationScale {
+    override val scaleFactor: Float get() = (systemScale?.scaleFactor ?: 1f) * speed.durationScale
+}
 
 @Composable
 internal fun pageFlingBehavior(state: PagerState, speed: AnimationSpeed): TargetedFlingBehavior =
@@ -46,18 +56,19 @@ internal fun pageFlingBehavior(state: PagerState, speed: AnimationSpeed): Target
     }
 
 @Composable
-internal fun WithAnimationSpeed(speed: AnimationSpeed, content: @Composable () -> Unit) {
-    if (speed == AnimationSpeed.Moderate) {
-        content()
+internal fun WithAnimationSpeed(
+    speed: AnimationSpeed,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val context = rememberCoroutineScope().coroutineContext
+    val inheritedScale = context[MotionDurationScale]
+    if (speed == AnimationSpeed.Moderate || inheritedScale is PreferredMotionDurationScale) {
+        Box(modifier) { content() }
         return
     }
-    val context = rememberCoroutineScope().coroutineContext
     val recomposer = remember(context, speed) {
-        val systemScale = context[MotionDurationScale]
-        val scale = object : MotionDurationScale {
-            override val scaleFactor: Float get() = (systemScale?.scaleFactor ?: 1f) * speed.durationScale
-        }
-        Recomposer(context + scale)
+        Recomposer(context + PreferredMotionDurationScale(inheritedScale, speed))
     }
     val locals by rememberUpdatedState(currentCompositionLocalContext)
     val currentContent by rememberUpdatedState(content)
@@ -70,9 +81,20 @@ internal fun WithAnimationSpeed(speed: AnimationSpeed, content: @Composable () -
                 setContent { CompositionLocalProvider(locals) { currentContent() } }
             }
         },
-        modifier = Modifier.size(0.dp),
+        modifier = modifier,
         onRelease = ComposeView::disposeComposition,
     )
+}
+
+@Composable
+internal fun AppCircularProgressIndicator(
+    modifier: Modifier = Modifier,
+    color: Color = ProgressIndicatorDefaults.circularColor,
+    strokeWidth: Dp = ProgressIndicatorDefaults.CircularStrokeWidth,
+) {
+    WithAnimationSpeed(LocalAnimationSpeed.current) {
+        CircularProgressIndicator(modifier, color, strokeWidth)
+    }
 }
 
 @Composable

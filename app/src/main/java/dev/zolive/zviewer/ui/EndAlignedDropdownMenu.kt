@@ -23,7 +23,11 @@ internal fun EndAlignedDropdownMenu(
         Box(Modifier.matchParentSize(), contentAlignment = Alignment.CenterEnd) {
             // 以触发控件的整个高度和末端作为定位基准。
             Box(Modifier.fillMaxHeight().width(0.dp)) {
-                DropdownMenu(expanded, onDismissRequest, modifier, content = content)
+                WithAnimationSpeed(LocalAnimationSpeed.current, modifier = Modifier.fillMaxHeight()) {
+                    Box(Modifier.fillMaxHeight()) {
+                        DropdownMenu(expanded, onDismissRequest, modifier, content = content)
+                    }
+                }
             }
         }
     }

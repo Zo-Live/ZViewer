@@ -592,7 +592,7 @@ internal fun VideoPage(
         // 只在停靠页且首帧尚未渲染时显示进度圈；预载、拖动中的页面只显示封面，避免切换时闪现进度圈。
         else if (cover == null && state != null && active && !state.firstFrameReady &&
             (state.playbackState == Player.STATE_BUFFERING || state.playbackState == Player.STATE_IDLE)) {
-            CircularProgressIndicator(color = foreground)
+            AppCircularProgressIndicator(color = foreground)
         }
     }
 }

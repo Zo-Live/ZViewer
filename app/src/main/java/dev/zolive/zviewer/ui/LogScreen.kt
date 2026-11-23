@@ -69,7 +69,7 @@ fun LogListScreen(active: Boolean, onBack: () -> Unit, onOpen: (DiagnosticLog.Lo
         if (result == null || result.files.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 when {
-                    result == null -> CircularProgressIndicator()
+                    result == null -> AppCircularProgressIndicator()
                     result.error != null -> Text(stringResource(R.string.log_list_failed))
                     else -> Text(stringResource(R.string.no_logs))
                 }
@@ -177,7 +177,7 @@ fun LogDetailScreen(file: DiagnosticLog.LogFile, onBack: () -> Unit) {
     }) { padding ->
         if (content == null) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                if (result == null) CircularProgressIndicator()
+                if (result == null) AppCircularProgressIndicator()
                 else Text(stringResource(R.string.log_read_failed))
             }
         } else {
