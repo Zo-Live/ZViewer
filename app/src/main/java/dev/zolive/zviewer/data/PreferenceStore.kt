@@ -34,8 +34,9 @@ class PreferenceStore(context: Context) {
 
     fun settings() = ReaderSettings(
         theme = preferences.getString("theme", "system") ?: "system",
-        accent = preferences.getLong("accent", 0xFF49684D),
+        accent = preferences.getLong("accent", DefaultThemeAccent),
         dynamicColor = preferences.getBoolean("dynamic_color", false),
+        verificationFollowsTheme = preferences.getBoolean("verification_follows_theme", true),
         readerDark = preferences.getBoolean("reader_dark", true),
         vertical = preferences.getBoolean("vertical", true),
         rightToLeft = preferences.getBoolean("rtl", false),
@@ -84,6 +85,7 @@ class PreferenceStore(context: Context) {
     fun saveSettings(settings: ReaderSettings) {
         preferences.edit().putString("theme", settings.theme).putLong("accent", settings.accent)
             .putBoolean("dynamic_color", settings.dynamicColor)
+            .putBoolean("verification_follows_theme", settings.verificationFollowsTheme)
             .putBoolean("reader_dark", settings.readerDark).putBoolean("vertical", settings.vertical)
             .putBoolean("rtl", settings.rightToLeft).putBoolean("keep_screen", settings.keepScreenOn)
             .putBoolean("horizontal_video_seek", settings.horizontalVideoSeek)

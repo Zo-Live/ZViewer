@@ -67,6 +67,7 @@ import dev.zolive.zviewer.data.AppLanguage
 import dev.zolive.zviewer.data.AutoLockInterval
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.CacheLimits
+import dev.zolive.zviewer.data.DefaultThemeAccent
 import dev.zolive.zviewer.data.DiagnosticLog
 import dev.zolive.zviewer.data.HapticEvent
 import dev.zolive.zviewer.data.UpdateDownload
@@ -217,7 +218,7 @@ private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSett
         Modifier.fillMaxWidth().padding(top = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        val colors = listOf(0xFF49684D to stringResource(R.string.color_moss), 0xFF476A8A to stringResource(R.string.color_mist), 0xFF79618C to stringResource(R.string.color_wisteria), 0xFF9A5357 to stringResource(R.string.color_rose), 0xFF8B683E to stringResource(R.string.color_amber))
+        val colors = listOf(DefaultThemeAccent to stringResource(R.string.color_moss), 0xFF476A8A to stringResource(R.string.color_mist), 0xFF79618C to stringResource(R.string.color_wisteria), 0xFF9A5357 to stringResource(R.string.color_rose), 0xFF8B683E to stringResource(R.string.color_amber))
         colors.forEach { (color, name) ->
             val description = stringResource(R.string.theme_color_description, name)
             val selected = activeAccent == color
@@ -233,6 +234,12 @@ private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSett
             }
         }
         IconButton(onClick = { customColor = true }, Modifier.size(44.dp)) { Icon(Icons.Outlined.Palette, stringResource(R.string.custom_theme_color)) }
+    }
+    if (settings.verifyOnStartup) {
+        Spacer(Modifier.height(11.5.dp))
+        PreferenceSwitch(stringResource(R.string.verification_follows_theme), checked = settings.verificationFollowsTheme) {
+            onSettings(settings.copy(verificationFollowsTheme = it))
+        }
     }
     if (customColor) {
         ThemeColorDialog(

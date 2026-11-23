@@ -25,6 +25,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import dev.zolive.zviewer.data.AppLanguage
+import dev.zolive.zviewer.data.DefaultThemeAccent
 import dev.zolive.zviewer.data.DiagnosticLog
 import dev.zolive.zviewer.data.PreferenceStore
 import dev.zolive.zviewer.ui.AppLockScreen
@@ -64,9 +65,13 @@ class MainActivity : ComponentActivity() {
                     if (state.settings.language != appliedLanguage) recreate()
                 }
                 val pageState = rememberSaveableStateHolder()
-                ZViewerTheme(state.settings) {
-                    if (appLock.locked) {
-                        AppLockScreen(state.settings, ::verify)
+                val locked = appLock.locked
+                val themeSettings = if (locked && !state.settings.verificationFollowsTheme) {
+                    state.settings.copy(accent = DefaultThemeAccent, dynamicColor = false)
+                } else state.settings
+                ZViewerTheme(themeSettings) {
+                    if (locked) {
+                        AppLockScreen(themeSettings, ::verify)
                     } else {
                         pageState.SaveableStateProvider("app") { ZViewerApp(model, state) }
                     }

@@ -9,6 +9,7 @@
     <string name="theme_dark">深色</string>
     <string name="dynamic_color">動態取色</string>
     <string name="theme_color">主題色彩</string>
+    <string name="verification_follows_theme">驗證頁跟隨主題色彩</string>
     <string name="color_moss">苔綠</string>
     <string name="color_mist">霧藍</string>
     <string name="color_wisteria">藤紫</string>

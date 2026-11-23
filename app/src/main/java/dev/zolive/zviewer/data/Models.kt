@@ -53,9 +53,11 @@ enum class AnimationSpeed(val durationScale: Float) {
     Moderate(1f), Enhanced(0.6f),
 }
 
+internal const val DefaultThemeAccent = 0xFF49684DL
+
 data class ReaderSettings(
     val theme: String = "system",
-    val accent: Long = 0xFF49684D,
+    val accent: Long = DefaultThemeAccent,
     val readerDark: Boolean = true,
     val vertical: Boolean = true,
     val rightToLeft: Boolean = false,
@@ -90,6 +92,7 @@ data class ReaderSettings(
     val hapticFeedback: Boolean = true,
     val disabledAnimations: Set<AnimationEffect> = emptySet(),
     val disabledHaptics: Set<HapticEvent> = emptySet(),
+    val verificationFollowsTheme: Boolean = true,
 ) {
     internal fun animationSpeedFor(effect: AnimationEffect): AnimationSpeed =
         if (effect in disabledAnimations) AnimationSpeed.Moderate else animationSpeed

@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
+import androidx.lifecycle.ViewModelProvider
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.zolive.zviewer.data.AnimationEffect
@@ -295,6 +296,27 @@ class SettingsMenuTest {
         direction.assertIsOn()
         assertTrue(store.settings().volumeKeyPaging)
         assertFalse(store.settings().doubleTapZoom)
+    }
+
+    @Test fun verificationThemeIsShownOnlyWithStartupVerificationAndPersists() {
+        setting("外观").performClick()
+        val followTheme = setting("验证页跟随主题颜色")
+        followTheme.assertDoesNotExist()
+        fun verifyOnStartup(enabled: Boolean) {
+            scenario.onActivity {
+                val model = ViewModelProvider(it)[LibraryViewModel::class.java]
+                model.settings(model.state.value.settings.copy(verifyOnStartup = enabled))
+            }
+        }
+        verifyOnStartup(true)
+        followTheme.performScrollTo().assertIsOn().performClick().assertIsOff()
+        scenario.recreate()
+        followTheme.performScrollTo().assertIsOff()
+        verifyOnStartup(false)
+        followTheme.assertDoesNotExist()
+        verifyOnStartup(true)
+        followTheme.performScrollTo().assertIsOff()
+        assertFalse(store.settings().verificationFollowsTheme)
     }
 
     @Test fun customThemeColorControlsStayInSyncAndOnlyApplySaves() {
