@@ -591,6 +591,7 @@ internal fun VideoPage(
 
 @Composable
 internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean = true) {
+    val haptic = hapticFeedback()
     val scrubbing = state.scrubPosition != null
     val displayedPosition = state.scrubPosition ?: state.position
     DisposableEffect(state) {
@@ -607,7 +608,10 @@ internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean =
             VideoSpeedMenu(state, enabled = enabled && !scrubbing && !state.failed && state.index >= 0)
         }
         Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = state::togglePlayback, enabled = enabled && !scrubbing && !state.failed && state.index >= 0) {
+            IconButton(onClick = {
+                state.togglePlayback()
+                haptic(if (state.playRequested) HapticFeedbackConstantsCompat.TOGGLE_ON else HapticFeedbackConstantsCompat.TOGGLE_OFF)
+            }, enabled = enabled && !scrubbing && !state.failed && state.index >= 0) {
                 Icon(if (state.playRequested) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
                     stringResource(if (state.playRequested) R.string.pause_video else R.string.play_video))
             }
