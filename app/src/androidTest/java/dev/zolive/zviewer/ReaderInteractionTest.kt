@@ -555,30 +555,50 @@ class ReaderInteractionTest {
         rule.onNode(button and hasText(displayed)).assertIsDisplayed()
     }
 
-    @Test fun toolbarSpeedLockFollowsMixedContentAndUnlockKeepsCurrentRate() {
+    @Test fun toolbarSpeedLockInheritsLatestRateAcrossMixedContentAndUnlockKeepsCurrentRate() {
         open(mixed = true, vertical = false, loop = false,
-            names = listOf("moving-video/moving.mp4", "page1.png", "video-folder/video2.mp4"))
+            names = listOf("moving-video/moving.mp4", "video-folder/video10.mp4", "page1.png", "video-folder/video2.mp4"))
         toggleControls()
         val button = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
         val menuItem = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
         val locked = SemanticsMatcher.expectValue(
             SemanticsProperties.StateDescription, rule.activity.getString(R.string.video_speed_locked),
         )
-        val speed = rule.onNode(button and hasText("1.5x"))
+        val speed = rule.onNode(button and hasText("0.75x"))
+        fun assertPlayerSpeed(expected: Float) = rule.runOnIdle {
+            assertEquals(expected, currentVideoView().playerView.player!!.playbackParameters.speed, 0f)
+        }
         rule.onNode(button and hasText("1.0x")).performClick()
         rule.onNode(menuItem and hasText("1.5x")).performClick()
-        speed.performTouchInput { longClick() }.assert(locked)
-        rule.onNode(menuItem and hasText("1.5x")).assertDoesNotExist()
+        val initialSpeed = rule.onNode(button and hasText("1.5x"))
+        initialSpeed.performTouchInput { longClick() }.assert(locked)
+        initialSpeed.performTouchInput { click() }
+        rule.onNode(menuItem and hasText("1.5x")).assertIsSelected()
+        rule.onNode(menuItem and hasText("0.75x")).performTouchInput { click() }
+        speed.assert(locked)
+        assertPlayerSpeed(.75f)
+
+        val root = rule.onRoot()
+        root.performTouchInput { down(Offset(width * .82f, height * .45f)); advanceEventTime(650) }
+        rule.waitUntil(4_000) { rule.runOnIdle { currentVideoView().playerView.player!!.playbackParameters.speed == 2f } }
+        root.performTouchInput { up() }
+        speed.assert(locked)
+        assertPlayerSpeed(.75f)
 
         swipe(vertical = false)
         rule.waitUntil(15_000) { currentPage == 1 }
-        swipe(vertical = false)
-        rule.waitUntil(15_000) { currentPage == 2 }
         waitForVideo()
         speed.assert(locked)
-        rule.runOnIdle { assertEquals(1.5f, currentVideoView().playerView.player!!.playbackParameters.speed, 0f) }
+        assertPlayerSpeed(.75f)
+        swipe(vertical = false)
+        rule.waitUntil(15_000) { currentPage == 2 }
+        swipe(vertical = false)
+        rule.waitUntil(15_000) { currentPage == 3 }
+        waitForVideo()
+        speed.assert(locked)
+        assertPlayerSpeed(.75f)
         speed.performTouchInput { longClick() }.assert(!locked)
-        rule.runOnIdle { assertEquals(1.5f, currentVideoView().playerView.player!!.playbackParameters.speed, 0f) }
+        assertPlayerSpeed(.75f)
 
         rule.onRoot().performTouchInput {
             down(Offset(width * .4f, height * .4f))
@@ -586,24 +606,24 @@ class ReaderInteractionTest {
             cancel()
         }
         rule.waitForIdle()
-        assertEquals(2, currentPage)
+        assertEquals(3, currentPage)
         speed.assert(!locked)
 
         swipe(forward = false, vertical = false)
-        rule.waitUntil(15_000) { currentPage == 1 }
-        swipe(vertical = false)
         rule.waitUntil(15_000) { currentPage == 2 }
+        swipe(vertical = false)
+        rule.waitUntil(15_000) { currentPage == 3 }
         waitForVideo()
         rule.onNode(button and hasText("1.0x")).assertIsDisplayed()
-        rule.runOnIdle { assertEquals(1f, currentVideoView().playerView.player!!.playbackParameters.speed, 0f) }
+        assertPlayerSpeed(1f)
 
         swipe(forward = false, vertical = false)
-        rule.waitUntil(15_000) { currentPage == 1 }
+        rule.waitUntil(15_000) { currentPage == 2 }
         swipe(forward = false, vertical = false)
-        rule.waitUntil(15_000) { currentPage == 0 }
+        rule.waitUntil(15_000) { currentPage == 1 }
         waitForVideo()
         rule.onNode(button and hasText("1.0x")).assertIsDisplayed()
-        rule.runOnIdle { assertEquals(1f, currentVideoView().playerView.player!!.playbackParameters.speed, 0f) }
+        assertPlayerSpeed(1f)
     }
 
     @Test fun horizontalVideoSwipeSeeksOnlyWhenEnabledAndDirectionMatches() {

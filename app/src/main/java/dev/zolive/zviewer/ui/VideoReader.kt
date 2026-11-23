@@ -194,10 +194,18 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
     }
 
     fun selectSpeed(value: Float): Boolean {
-        if (released || speedLocked || speedBeforeHold != null || value == speed) return false
-        pool.clearUnlockedSpeed(this)
-        resetSpeed(value)
+        if (released || speedBeforeHold != null || value == speed) return false
+        changeSpeed(value)
         return true
+    }
+
+    private fun changeSpeed(value: Float) {
+        if (speedLocked) {
+            pool.setLockedSpeed(value, this)
+        } else {
+            pool.clearUnlockedSpeed(this)
+            resetSpeed(value)
+        }
     }
 
     fun toggleSpeedLock(): Boolean? {
@@ -209,7 +217,7 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
 
     fun startSpeedHold(): Boolean {
         if (released || failed || index < 0 || !ready || scrubPosition != null ||
-            speedLocked || speedBeforeHold != null) return false
+            speedBeforeHold != null) return false
         speedBeforeHold = speed
         playingBeforeHold = playRequested
         playRequested = true
@@ -225,22 +233,20 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
             playRequested = playingBeforeHold
             applySpeed(original)
         } else if (end == SpeedHoldEnd.Up && !holdSpeedLocked) {
-            pool.clearUnlockedSpeed(this)
-            holdSpeedLocked = true
+            changeSpeed(FastSpeed)
             return HapticFeedbackConstantsCompat.CONFIRM
         } else if (end == SpeedHoldEnd.Down && holdSpeedLocked) {
-            holdSpeedLocked = false
-            applySpeed(NormalSpeed)
+            changeSpeed(NormalSpeed)
             return HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_DEACTIVATE
         } else if (!holdSpeedLocked) {
-            applySpeed(NormalSpeed)
+            applySpeed(pool.lockedSpeed ?: NormalSpeed)
         }
         return HapticFeedbackConstantsCompat.NO_HAPTICS
     }
 
     fun resetSpeed(value: Float = pool.lockedSpeed ?: NormalSpeed) {
         finishSpeedHold(SpeedHoldEnd.Cancel)
-        holdSpeedLocked = !speedLocked && value == FastSpeed
+        holdSpeedLocked = value == FastSpeed
         applySpeed(value)
     }
 
@@ -742,8 +748,8 @@ private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
     Box(Modifier.onGloballyPositioned { anchorTop = it.boundsInWindow().top }) {
         Row(Modifier.height(40.dp).widthIn(min = 48.dp)
             .combinedClickable(
-                enabled = enabled, role = Role.Button, onClickLabel = label.takeUnless { locked },
-                onClick = { if (!locked) expanded = true },
+                enabled = enabled, role = Role.Button, onClickLabel = label,
+                onClick = { expanded = true },
                 onLongClickLabel = lockAction, hapticFeedbackEnabled = false,
                 onLongClick = {
                     state.toggleSpeedLock()?.let { locked ->
