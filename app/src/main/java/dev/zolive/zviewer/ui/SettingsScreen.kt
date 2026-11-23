@@ -81,6 +81,7 @@ private val SettingsContentInset = 24.dp
 private val SettingsSectionIconSize = 20.dp
 private val SettingsBackButtonSize = 48.dp
 private val SettingsActionWidth = 48.dp
+private val SettingsTrailingIconSize = 24.dp
 private val SettingsTrailingMinWidth = 52.dp
 private val SettingsTrailingGap = 16.dp
 private val SettingsSupportingMaxWidth = 480.dp
@@ -475,18 +476,18 @@ private fun DiagnosticsSettings(
             trailingContent = if (settings.logDirectory != null) {
                 {
                     IconButton(onClick = { model.setLogDirectory(null) }, modifier = Modifier.width(SettingsActionWidth)) {
-                        Icon(Icons.Outlined.Refresh, stringResource(R.string.restore_default_directory))
+                        Icon(
+                            Icons.Outlined.Refresh, stringResource(R.string.restore_default_directory),
+                            Modifier.offset(x = (SettingsActionWidth - SettingsTrailingIconSize) / 2)
+                                .size(SettingsTrailingIconSize),
+                        )
                     }
                 }
             } else null,
             modifier = Modifier.clickable { logPicker.launch(null) })
     }
     SettingsListItem(headlineContent = { Text(stringResource(R.string.view_logs)) },
-        trailingContent = {
-            Box(Modifier.width(SettingsActionWidth), contentAlignment = Alignment.Center) {
-                Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null)
-            }
-        },
+        trailingContent = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null) },
         modifier = Modifier.clickable(enabled = !logOperationRunning, role = Role.Button, onClick = onViewLogs))
     SettingsListItem(headlineContent = { Text(stringResource(R.string.export_logs)) },
         modifier = Modifier.clickable(enabled = !logOperationRunning, role = Role.Button) { exportPicker.launch(null) })
