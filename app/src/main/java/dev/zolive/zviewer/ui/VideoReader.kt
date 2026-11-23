@@ -12,6 +12,8 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.rememberTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -29,6 +31,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
@@ -71,6 +75,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.roundToLong
 
 private const val NormalSpeed = 1f
@@ -166,8 +171,11 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
         save()
     }
 
+    fun canStartSwipeSeek(): Boolean =
+        !released && !failed && seekable && duration > 0 && scrubPosition == null && swipeSeekOrigin == null
+
     fun startSwipeSeek(): Boolean {
-        if (released || failed || !seekable || duration <= 0 || scrubPosition != null || swipeSeekOrigin != null) return false
+        if (!canStartSwipeSeek()) return false
         swipeSeekOrigin = player.currentPosition.coerceIn(0L, duration)
         return true
     }
@@ -319,6 +327,7 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
 
     fun release() {
         if (released) return
+        finishSwipeSeek(cancelled = true)
         finishScrub()
         released = true
         ownerView?.let(::releaseOwner)
@@ -574,6 +583,9 @@ internal fun VideoPage(
     val viewRef = remember { mutableStateOf<ZoomVideoView?>(null) }
     val speedLockHaptic = hapticFeedback(HapticEvent.VideoSpeedLock)
     val gesturesEnabled = active && allowPlayback
+    val swipeSeekModifier = if (state != null && gesturesEnabled && settings.vertical && settings.horizontalVideoSeek) {
+        Modifier.videoSwipeSeek(state, viewRef)
+    } else Modifier
     val description = stringResource(
         if (settings.doubleTapZoom) R.string.video_accessibility else R.string.video_accessibility_without_zoom,
         index + 1,
@@ -588,7 +600,7 @@ internal fun VideoPage(
     LaunchedEffect(state, active) {
         if (state != null && active) viewRef.value?.let { state.bindOwner(it, active = true) }
     }
-    Box(modifier.fillMaxSize().clipToBounds(), contentAlignment = Alignment.Center) {
+    Box(modifier.fillMaxSize().clipToBounds().then(swipeSeekModifier), contentAlignment = Alignment.Center) {
         AndroidView(factory = { ZoomVideoView(it).also { view -> viewRef.value = view } }, modifier = Modifier.fillMaxSize(),
             onRelease = { view ->
                 if (viewRef.value === view) viewRef.value = null
@@ -599,17 +611,12 @@ internal fun VideoPage(
                 view.bindCover(cover)
                 view.setCoverBackground(background.toArgb())
                 view.onTap = onTap
-                if (!gesturesEnabled) view.cancelPlaybackGestures()
+                if (!gesturesEnabled) view.cancelSpeedHold()
                 view.onSpeedHoldStart = { gesturesEnabled && state?.startSpeedHold() == true }
                 view.onSpeedHoldEnd = { end ->
                     val feedback = state?.finishSpeedHold(end) ?: HapticFeedbackConstantsCompat.NO_HAPTICS
                     if (feedback != HapticFeedbackConstantsCompat.NO_HAPTICS) speedLockHaptic(feedback)
                 }
-                view.onSwipeSeekStart = {
-                    gesturesEnabled && settings.vertical && settings.horizontalVideoSeek && state?.startSwipeSeek() == true
-                }
-                view.onSwipeSeek = { fraction -> state?.swipeSeek(fraction) }
-                view.onSwipeSeekEnd = { cancelled -> state?.finishSwipeSeek(cancelled) }
                 view.doubleTapZoomEnabled = settings.doubleTapZoom
                 view.zoomAnimationSpeed = settings.animationSpeedFor(AnimationEffect.VideoZoom)
                 view.contentDescription = description
@@ -632,6 +639,48 @@ internal fun VideoPage(
         }
     }
 }
+
+private fun Modifier.videoSwipeSeek(state: VideoPlaybackState, view: State<ZoomVideoView?>): Modifier =
+    pointerInput(state, view) {
+        awaitEachGesture {
+            val down = awaitFirstDown(pass = PointerEventPass.Initial)
+            awaitPointerEvent(PointerEventPass.Final)
+            if (!state.canStartSwipeSeek() || view.value?.acceptsSwipeSeek != true) return@awaitEachGesture
+
+            val touchSlop = viewConfiguration.touchSlop
+            var horizontalDrag = false
+            var seeking = false
+            var cancelled = true
+            try {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val touch = event.changes.singleOrNull() ?: break
+                    if (touch.id != down.id || touch.isConsumed) break
+
+                    val horizontal = touch.position.x - down.position.x
+                    if (!horizontalDrag && touch.pressed) {
+                        if (view.value?.acceptsSwipeSeek != true || !state.canStartSwipeSeek()) break
+                        val vertical = touch.position.y - down.position.y
+                        horizontalDrag = abs(horizontal) >= touchSlop && abs(horizontal) > 1.5f * abs(vertical)
+                        if (!horizontalDrag) {
+                            if (abs(vertical) >= touchSlop) break
+                            continue
+                        }
+                    }
+                    if (!horizontalDrag) break
+                    touch.consume()
+                    if (!seeking && touch.pressed && abs(horizontal) >= 2 * touchSlop) seeking = state.startSwipeSeek()
+                    if (seeking) state.swipeSeek(horizontal / size.width.coerceAtLeast(1))
+                    if (!touch.pressed) {
+                        cancelled = false
+                        break
+                    }
+                }
+            } finally {
+                if (seeking) state.finishSwipeSeek(cancelled)
+            }
+        }
+    }
 
 @Composable
 internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean = true) {

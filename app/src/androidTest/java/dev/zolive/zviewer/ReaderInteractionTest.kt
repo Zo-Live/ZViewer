@@ -623,9 +623,28 @@ class ReaderInteractionTest {
             swipe(center, center + Offset(width * .14f, width * .12f), 180)
         }
         assertEquals(before, position())
+
+        rule.onRoot().performTouchInput {
+            down(Offset(width * .2f, height * .25f))
+            repeat(40) { moveBy(Offset(width * .0125f, width * .0075f)) }
+        }
+        rule.waitUntil(5_000) { position() in 25_000L..35_000L }
+        rule.onRoot().performTouchInput { cancel() }
+        rule.waitUntil(5_000) { position() == before }
+        assertEquals(0, currentPage)
+
+        rule.onRoot().performTouchInput {
+            down(Offset(width * .2f, height * .25f))
+            repeat(40) { moveBy(Offset(width * .0125f, width * .0075f)) }
+            up()
+        }
+        rule.waitUntil(5_000) { position() in 25_000L..35_000L }
+        assertEquals(0, currentPage)
+
+        val after = position()
         rule.runOnIdle { readerSettings.value = readerSettings.value.copy(horizontalVideoSeek = false) }
         swipe(forward = false, vertical = false)
-        assertEquals(before, position())
+        assertEquals(after, position())
         swipe(vertical = true)
         rule.waitUntil(10_000) { currentPage == 1 }
     }

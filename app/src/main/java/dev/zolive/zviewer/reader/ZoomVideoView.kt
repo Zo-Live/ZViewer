@@ -57,9 +57,6 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     var onTap: () -> Unit = {}
     internal var onSpeedHoldStart: () -> Boolean = { false }
     internal var onSpeedHoldEnd: (SpeedHoldEnd) -> Unit = {}
-    internal var onSwipeSeekStart: () -> Boolean = { false }
-    internal var onSwipeSeek: (Float) -> Unit = {}
-    internal var onSwipeSeekEnd: (Boolean) -> Unit = {}
     var onLayoutReady: (Boolean) -> Unit = {}
     val isSurfaceAvailable: Boolean
         get() = (textureView.isAvailable || retainedTexture != null) && textureView.width > 0 && textureView.height > 0
@@ -84,9 +81,10 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     private var touchStartX = 0f
     private var touchStartY = 0f
     private var speedHeld = false
-    private var swipeSeeking = false
-    private var canStartSwipeSeek = false
     private var ignoreTouch = false
+    private val zoomed: Boolean get() = (zoomAnimator.target ?: zoom) > 1f || zoom > 1f
+    internal val acceptsSwipeSeek: Boolean
+        get() = !zoomed && !multiTouch && !speedHeld && !ignoreTouch && !scaleDetector.isInProgress
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
             zoomAnimator.cancel()
@@ -109,7 +107,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
             return true
         }
         override fun onLongPress(event: MotionEvent) {
-            if (!multiTouch && !swipeSeeking && !scaleDetector.isInProgress && onSpeedHoldStart()) {
+            if (!multiTouch && !scaleDetector.isInProgress && onSpeedHoldStart()) {
                 speedHeld = true
                 parent?.requestDisallowInterceptTouchEvent(true)
             }
@@ -228,16 +226,16 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     }
 
     override fun onDetachedFromWindow() {
-        cancelPlaybackGestures()
+        cancelSpeedHold()
         zoomAnimator.cancel()
         super.onDetachedFromWindow()
         if (retainedTexture == null) onLayoutReady(false)
     }
     override fun onInterceptTouchEvent(event: MotionEvent): Boolean = true
 
-    internal fun cancelPlaybackGestures() {
-        if (!speedHeld && !swipeSeeking) return
-        endPlaybackGesture(null)
+    internal fun cancelSpeedHold() {
+        if (!speedHeld) return
+        endSpeedHold(null)
         ignoreTouch = true
         parent?.requestDisallowInterceptTouchEvent(false)
     }
@@ -249,8 +247,6 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
             touchStartY = event.y
             multiTouch = false
             ignoreTouch = false
-            val zoomed = (zoomAnimator.target ?: zoom) > 1f || zoom > 1f
-            canStartSwipeSeek = !zoomed
             parent?.requestDisallowInterceptTouchEvent(zoomed)
         }
         if (ignoreTouch) {
@@ -259,47 +255,22 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
             }
             return true
         }
-        val horizontal = event.x - touchStartX
-        val vertical = event.y - touchStartY
         when (event.actionMasked) {
             MotionEvent.ACTION_POINTER_DOWN -> {
-                if (speedHeld || swipeSeeking) {
-                    endPlaybackGesture(null)
+                if (speedHeld) {
+                    endSpeedHold(null)
                     ignoreTouch = true
                     cancelDetectors(event)
                     return true
                 }
                 multiTouch = true
-                canStartSwipeSeek = false
                 parent?.requestDisallowInterceptTouchEvent(true)
             }
-            MotionEvent.ACTION_MOVE -> {
-                if (speedHeld) return true
-                if (canStartSwipeSeek && !multiTouch) {
-                    val mostlyHorizontal = abs(horizontal) > 1.5f * abs(vertical)
-                    if (abs(horizontal) >= 2 * touchSlop && mostlyHorizontal) {
-                        canStartSwipeSeek = false
-                        swipeSeeking = onSwipeSeekStart()
-                        if (swipeSeeking) {
-                            parent?.requestDisallowInterceptTouchEvent(true)
-                            cancelDetectors(event)
-                        }
-                    } else if (abs(vertical) >= touchSlop && !mostlyHorizontal) {
-                        canStartSwipeSeek = false
-                    }
-                }
-                if (swipeSeeking) {
-                    onSwipeSeek(horizontal / width.coerceAtLeast(1))
-                    return true
-                }
-            }
+            MotionEvent.ACTION_MOVE -> if (speedHeld) return true
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                 parent?.requestDisallowInterceptTouchEvent(false)
-                if (speedHeld || swipeSeeking) {
-                    if (swipeSeeking && event.actionMasked == MotionEvent.ACTION_UP) {
-                        onSwipeSeek(horizontal / width.coerceAtLeast(1))
-                    }
-                    endPlaybackGesture(event.takeIf { it.actionMasked == MotionEvent.ACTION_UP })
+                if (speedHeld) {
+                    endSpeedHold(event.takeIf { it.actionMasked == MotionEvent.ACTION_UP })
                     cancelDetectors(event)
                     return true
                 }
@@ -311,25 +282,19 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         return true
     }
 
-    private fun endPlaybackGesture(up: MotionEvent?) {
-        if (speedHeld) {
-            speedHeld = false
-            val result = if (up == null) SpeedHoldEnd.Cancel else {
-                val horizontal = up.x - touchStartX
-                val vertical = up.y - touchStartY
-                val threshold = maxOf(4 * touchSlop.toFloat(), 32 * resources.displayMetrics.density)
-                when {
-                    abs(vertical) < threshold || abs(vertical) <= 1.5f * abs(horizontal) -> SpeedHoldEnd.Release
-                    vertical < 0 -> SpeedHoldEnd.Up
-                    else -> SpeedHoldEnd.Down
-                }
+    private fun endSpeedHold(up: MotionEvent?) {
+        speedHeld = false
+        val result = if (up == null) SpeedHoldEnd.Cancel else {
+            val horizontal = up.x - touchStartX
+            val vertical = up.y - touchStartY
+            val threshold = maxOf(4 * touchSlop.toFloat(), 32 * resources.displayMetrics.density)
+            when {
+                abs(vertical) < threshold || abs(vertical) <= 1.5f * abs(horizontal) -> SpeedHoldEnd.Release
+                vertical < 0 -> SpeedHoldEnd.Up
+                else -> SpeedHoldEnd.Down
             }
-            onSpeedHoldEnd(result)
         }
-        if (swipeSeeking) {
-            swipeSeeking = false
-            onSwipeSeekEnd(up == null)
-        }
+        onSpeedHoldEnd(result)
     }
 
     private fun cancelDetectors(event: MotionEvent) {
