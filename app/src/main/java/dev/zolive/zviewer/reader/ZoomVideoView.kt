@@ -13,6 +13,7 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 import android.view.TextureView
 import android.view.View
+import android.view.ViewConfiguration
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.media3.ui.PlayerView
@@ -21,6 +22,8 @@ import dev.zolive.zviewer.R
 import dev.zolive.zviewer.data.AnimationSpeed
 import dev.zolive.zviewer.data.DiagnosticLog
 import kotlin.math.abs
+
+internal enum class SpeedHoldEnd { Release, Up, Down, Cancel }
 
 class ZoomVideoView(context: Context) : FrameLayout(context) {
     val playerView = LayoutInflater.from(context).inflate(R.layout.reader_video, this, false) as PlayerView
@@ -52,6 +55,8 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
      */
     private val coverView = ImageView(context).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
     var onTap: () -> Unit = {}
+    internal var onSpeedHoldStart: () -> Boolean = { false }
+    internal var onSpeedHoldEnd: (SpeedHoldEnd) -> Unit = {}
     var onLayoutReady: (Boolean) -> Unit = {}
     val isSurfaceAvailable: Boolean
         get() = (textureView.isAvailable || retainedTexture != null) && textureView.width > 0 && textureView.height > 0
@@ -72,6 +77,11 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     private val zoomAnimator = ZoomAnimator()
     private var multiTouch = false
     private var lastCommand = 0
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private var touchStartX = 0f
+    private var touchStartY = 0f
+    private var speedHeld = false
+    private var ignoreTouch = false
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
             zoomAnimator.cancel()
@@ -92,6 +102,12 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
                 animateZoom(if ((zoomAnimator.target ?: zoom) > 1.1f) 1f else 2.5f, event.x, event.y)
             }
             return true
+        }
+        override fun onLongPress(event: MotionEvent) {
+            if (!multiTouch && !scaleDetector.isInProgress && onSpeedHoldStart()) {
+                speedHeld = true
+                parent?.requestDisallowInterceptTouchEvent(true)
+            }
         }
         override fun onScroll(first: MotionEvent?, second: MotionEvent, distanceX: Float, distanceY: Float): Boolean {
             if (zoom > 1f && !multiTouch && !scaleDetector.isInProgress) {
@@ -207,30 +223,85 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     }
 
     override fun onDetachedFromWindow() {
+        cancelPlaybackGestures()
         zoomAnimator.cancel()
         super.onDetachedFromWindow()
         if (retainedTexture == null) onLayoutReady(false)
     }
     override fun onInterceptTouchEvent(event: MotionEvent): Boolean = true
 
+    internal fun cancelPlaybackGestures() {
+        if (!speedHeld) return
+        endPlaybackGesture(null)
+        ignoreTouch = true
+        parent?.requestDisallowInterceptTouchEvent(false)
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        when (event.actionMasked) {
-            MotionEvent.ACTION_DOWN -> {
-                multiTouch = false
-                // 未放大时把手势交给外层 Pager，实现跟手的翻页过渡；放大后自行处理平移。
-                parent?.requestDisallowInterceptTouchEvent((zoomAnimator.target ?: zoom) > 1f || zoom > 1f)
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            touchStartX = event.x
+            touchStartY = event.y
+            multiTouch = false
+            ignoreTouch = false
+            val zoomed = (zoomAnimator.target ?: zoom) > 1f || zoom > 1f
+            parent?.requestDisallowInterceptTouchEvent(zoomed)
+        }
+        if (ignoreTouch) {
+            if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+                parent?.requestDisallowInterceptTouchEvent(false)
             }
+            return true
+        }
+        when (event.actionMasked) {
             MotionEvent.ACTION_POINTER_DOWN -> {
+                if (speedHeld) {
+                    endPlaybackGesture(null)
+                    ignoreTouch = true
+                    cancelDetectors(event)
+                    return true
+                }
                 multiTouch = true
                 parent?.requestDisallowInterceptTouchEvent(true)
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> parent?.requestDisallowInterceptTouchEvent(false)
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                parent?.requestDisallowInterceptTouchEvent(false)
+                if (speedHeld) {
+                    endPlaybackGesture(event.takeIf { it.actionMasked == MotionEvent.ACTION_UP })
+                    cancelDetectors(event)
+                    return true
+                }
+            }
         }
         if (event.pointerCount > 1) multiTouch = true
         gestureDetector.onTouchEvent(event)
         scaleDetector.onTouchEvent(event)
         return true
+    }
+
+    private fun endPlaybackGesture(up: MotionEvent?) {
+        if (speedHeld) {
+            speedHeld = false
+            val result = if (up == null) SpeedHoldEnd.Cancel else {
+                val horizontal = up.x - touchStartX
+                val vertical = up.y - touchStartY
+                val threshold = maxOf(4 * touchSlop.toFloat(), 32 * resources.displayMetrics.density)
+                when {
+                    abs(vertical) < threshold || abs(vertical) <= 1.5f * abs(horizontal) -> SpeedHoldEnd.Release
+                    vertical < 0 -> SpeedHoldEnd.Up
+                    else -> SpeedHoldEnd.Down
+                }
+            }
+            onSpeedHoldEnd(result)
+        }
+    }
+
+    private fun cancelDetectors(event: MotionEvent) {
+        val cancel = MotionEvent.obtain(event)
+        cancel.action = MotionEvent.ACTION_CANCEL
+        gestureDetector.onTouchEvent(cancel)
+        scaleDetector.onTouchEvent(cancel)
+        cancel.recycle()
     }
 
     override fun performClick(): Boolean { super.performClick(); onTap(); return true }

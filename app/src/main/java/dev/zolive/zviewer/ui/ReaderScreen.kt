@@ -46,6 +46,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalWindowInfo
@@ -437,7 +438,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             }
             val fadeSpec = spring<Float>(stiffness = speed.stiffness(Spring.StiffnessMediumLow))
             AnimatedVisibility(visible = controls, enter = fadeIn(fadeSpec), exit = fadeOut(fadeSpec),
-                modifier = Modifier.align(Alignment.TopCenter)) {
+                modifier = Modifier.align(Alignment.TopCenter).blockVideoGestures()) {
                 TopAppBar(title = {
                     Text(session.book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 }, navigationIcon = {
@@ -448,7 +449,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             val slideSpec = spring(
                 stiffness = speed.stiffness(Spring.StiffnessMediumLow), visibilityThreshold = IntOffset(1, 1),
             )
-            AnimatedVisibility(visible = controls, modifier = Modifier.align(Alignment.BottomCenter),
+            AnimatedVisibility(visible = controls, modifier = Modifier.align(Alignment.BottomCenter).blockVideoGestures(),
                 enter = slideInVertically(slideSpec) { it } + fadeIn(fadeSpec),
                 exit = slideOutVertically(slideSpec) { it } + fadeOut(fadeSpec)) {
                 Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .98f), tonalElevation = 3.dp,
@@ -617,6 +618,10 @@ private fun ReaderPageSlider(
     Slider(value = position ?: currentPage.toFloat(), onValueChange = onValueChange,
         onValueChangeFinished = onValueChangeFinished, valueRange = 0f..maxOf(1, pageCount - 1).toFloat(),
         enabled = pageCount > 1, modifier = Modifier.fillMaxWidth())
+}
+
+private fun Modifier.blockVideoGestures(): Modifier = pointerInput(Unit) {
+    awaitPointerEventScope { while (true) awaitPointerEvent() }
 }
 
 @Composable

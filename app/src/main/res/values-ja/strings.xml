@@ -188,6 +188,7 @@
     <string name="pause_video">動画を一時停止</string>
     <string name="play_video">動画を再生</string>
     <string name="video_playback_progress">動画の再生位置</string>
+    <string name="video_speed">再生速度</string>
     <string name="update_prompt">新しいバージョン %1$s があります。\n今すぐ更新しますか？</string>
     <string name="update_later">後で更新</string>
     <string name="update_now">今すぐ更新</string>

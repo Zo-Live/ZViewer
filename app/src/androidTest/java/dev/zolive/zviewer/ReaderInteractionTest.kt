@@ -12,6 +12,11 @@ import android.view.MotionEvent
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect as ComposeRect
+import androidx.compose.ui.layout.positionInWindow
+import androidx.compose.ui.layout.positionOnScreen
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -483,6 +488,76 @@ class ReaderInteractionTest {
         toggleControls(visible = false)
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.video_playback_progress)).assertDoesNotExist()
         rule.onNodeWithContentDescription(rule.activity.getString(R.string.next_page)).assertDoesNotExist()
+    }
+
+    @Test fun videoSpeedHoldLocksOnlyWithVerticalMovementAndRespectsToolbars() {
+        open(names = listOf("moving-video/moving.mp4"))
+        val player = rule.runOnIdle { currentVideoView().playerView.player!! }
+        val root = rule.onRoot()
+        fun hold(yFraction: Float = .45f) {
+            root.performTouchInput { down(Offset(width * .82f, height * yFraction)); advanceEventTime(650) }
+        }
+        fun speed() = rule.runOnIdle { player.playbackParameters.speed }
+
+        hold(.82f)
+        rule.waitUntil(4_000) { speed() == 2f }
+        waitForPlayback()
+        root.performTouchInput { moveBy(Offset(-width * .25f, -height * .10f)); up() }
+        assertEquals(1f, speed(), 0f)
+
+        hold()
+        rule.waitUntil(4_000) { speed() == 2f }
+        root.performTouchInput { moveBy(Offset(0f, -height * .15f)); up() }
+        assertEquals(2f, speed(), 0f)
+        hold()
+        root.performTouchInput { moveBy(Offset(0f, 6f)); up() }
+        assertEquals(2f, speed(), 0f)
+        hold()
+        root.performTouchInput { moveBy(Offset(0f, height * .15f)); up() }
+        assertEquals(1f, speed(), 0f)
+
+        toggleControls()
+        val toolbarY = rule.onNodeWithContentDescription(rule.activity.getString(R.string.reader_settings))
+            .fetchSemanticsNode().boundsInRoot.center.y
+        root.performTouchInput { longClick(Offset(width * .30f, toolbarY), 650) }
+        assertEquals(1f, speed(), 0f)
+        hold()
+        rule.waitUntil(4_000) { speed() == 2f }
+        root.performTouchInput { cancel() }
+        assertEquals(1f, speed(), 0f)
+        assertEquals(0, currentPage)
+    }
+
+    @Test fun videoSpeedMenuOpensAboveAnchorAndAppliesAllRatesWithoutPitchShift() {
+        open(names = listOf("moving-video/moving.mp4"))
+        toggleControls()
+        val player = rule.runOnIdle { currentVideoView().playerView.player!! }
+        val rates = listOf("2.0x" to 2f, "1.5x" to 1.5f, "1.0x" to 1f, "0.75x" to .75f, "0.5x" to .5f)
+        val button = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
+        val menuItem = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
+        fun screenBounds(node: SemanticsNode): ComposeRect = rule.runOnIdle {
+            val coordinates = node.layoutInfo.coordinates
+            node.boundsInWindow.translate(coordinates.positionOnScreen() - coordinates.positionInWindow())
+        }
+        var displayed = "1.0x"
+        for ((text, rate) in rates) {
+            val anchor = rule.onNode(button and hasText(displayed)).assertIsDisplayed()
+            val anchorBounds = screenBounds(anchor.fetchSemanticsNode())
+            anchor.performClick()
+            rule.onNode(menuItem and hasText(displayed)).assertIsSelected()
+            val bounds = rates.map { (option, _) -> screenBounds(rule.onNode(menuItem and hasText(option)).fetchSemanticsNode()) }
+            bounds.zipWithNext().forEach { (above, below) -> assertTrue(above.bottom <= below.top) }
+            assertEquals(anchorBounds.top, bounds.last().bottom, 12f)
+            assertEquals(anchorBounds.right, bounds.last().right, 2f)
+            rule.onNode(menuItem and hasText(text)).performClick()
+            rule.runOnIdle {
+                assertEquals(rate, player.playbackParameters.speed, 0f)
+                assertEquals(1f, player.playbackParameters.pitch, 0f)
+                assertFalse(player.playWhenReady)
+            }
+            displayed = text
+        }
+        rule.onNode(button and hasText(displayed)).assertIsDisplayed()
     }
 
     @Test fun draggingPageProgressShowsTheTargetBeforeSavingIt() {

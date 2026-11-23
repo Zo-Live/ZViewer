@@ -188,6 +188,7 @@
     <string name="pause_video">Pause video</string>
     <string name="play_video">Play video</string>
     <string name="video_playback_progress">Video playback position</string>
+    <string name="video_speed">Playback speed</string>
     <string name="update_prompt">Version %1$s is available.\nWould you like to update now?</string>
     <string name="update_later">Later</string>
     <string name="update_now">Update now</string>

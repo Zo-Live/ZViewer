@@ -6,8 +6,12 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.*
@@ -17,13 +21,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
+import androidx.core.view.HapticFeedbackConstantsCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import dev.zolive.zviewer.R
@@ -31,6 +50,7 @@ import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
 import dev.zolive.zviewer.data.DiagnosticLog
 import dev.zolive.zviewer.data.ReaderSettings
+import dev.zolive.zviewer.reader.SpeedHoldEnd
 import dev.zolive.zviewer.reader.ZoomVideoView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -39,6 +59,10 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
+
+private const val NormalSpeed = 1f
+private const val FastSpeed = 2f
+private val videoSpeedOptions = listOf(2f to "2.0x", 1.5f to "1.5x", 1f to "1.0x", .75f to "0.75x", .5f to "0.5x")
 
 internal class VideoPlaybackState(val player: ExoPlayer) {
     var index by mutableIntStateOf(-1)
@@ -69,6 +93,11 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     var scrubPosition by mutableStateOf<Long?>(null)
         private set
     private var lastPreviewSeek = -1L
+    var speed by mutableFloatStateOf(NormalSpeed)
+        private set
+    private var speedLocked = false
+    private var speedBeforeHold: Float? = null
+    private var playingBeforeHold = false
     var saveProgress: (Int, Long) -> Unit = { _, _ -> }
     var preparedIndex by mutableIntStateOf(-1)
     private var released = false
@@ -119,6 +148,54 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
         lastPreviewSeek = -1L
         refresh()
         save()
+    }
+
+    fun selectSpeed(value: Float): Boolean {
+        if (released || speedBeforeHold != null || value == speed) return false
+        speedLocked = value == FastSpeed
+        applySpeed(value)
+        return true
+    }
+
+    fun startSpeedHold(): Boolean {
+        if (released || failed || index < 0 || !ready || scrubPosition != null || speedBeforeHold != null) return false
+        speedBeforeHold = speed
+        playingBeforeHold = playRequested
+        playRequested = true
+        applySpeed(FastSpeed)
+        return true
+    }
+
+    fun finishSpeedHold(end: SpeedHoldEnd): Int {
+        val original = speedBeforeHold ?: return HapticFeedbackConstantsCompat.NO_HAPTICS
+        speedBeforeHold = null
+        if (released) return HapticFeedbackConstantsCompat.NO_HAPTICS
+        if (end == SpeedHoldEnd.Cancel) {
+            playRequested = playingBeforeHold
+            applySpeed(original)
+        } else if (end == SpeedHoldEnd.Up && !speedLocked) {
+            speedLocked = true
+            return HapticFeedbackConstantsCompat.CONFIRM
+        } else if (end == SpeedHoldEnd.Down && speedLocked) {
+            speedLocked = false
+            applySpeed(NormalSpeed)
+            return HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_DEACTIVATE
+        } else if (!speedLocked) {
+            applySpeed(NormalSpeed)
+        }
+        return HapticFeedbackConstantsCompat.NO_HAPTICS
+    }
+
+    fun resetSpeed() {
+        speedBeforeHold = null
+        speedLocked = false
+        applySpeed(NormalSpeed)
+    }
+
+    private fun applySpeed(value: Float) {
+        if (speed == value) return
+        player.playbackParameters = PlaybackParameters(value)
+        speed = player.playbackParameters.speed
     }
 
     fun togglePlayback() {
@@ -300,6 +377,7 @@ internal fun rememberVideoPlayback(
         state.preparedIndex = index
         state.save()
         state.player.stop()
+        state.resetSpeed()
         state.index = index
         state.failed = false
         state.position = 0L
@@ -423,6 +501,8 @@ internal fun VideoPage(
     modifier: Modifier = Modifier,
 ) {
     val viewRef = remember { mutableStateOf<ZoomVideoView?>(null) }
+    val haptic = hapticFeedback()
+    val gesturesEnabled = active && allowPlayback
     val description = stringResource(
         if (settings.doubleTapZoom) R.string.video_accessibility else R.string.video_accessibility_without_zoom,
         index + 1,
@@ -448,6 +528,12 @@ internal fun VideoPage(
                 view.bindCover(cover)
                 view.setCoverBackground(background.toArgb())
                 view.onTap = onTap
+                if (!gesturesEnabled) view.cancelPlaybackGestures()
+                view.onSpeedHoldStart = { gesturesEnabled && state?.startSpeedHold() == true }
+                view.onSpeedHoldEnd = { end ->
+                    val feedback = state?.finishSpeedHold(end) ?: HapticFeedbackConstantsCompat.NO_HAPTICS
+                    if (feedback != HapticFeedbackConstantsCompat.NO_HAPTICS) haptic(feedback)
+                }
                 view.doubleTapZoomEnabled = settings.doubleTapZoom
                 view.zoomAnimationSpeed = settings.animationSpeed
                 view.contentDescription = description
@@ -489,8 +575,10 @@ internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean =
         "${formatVideoTime(displayedPosition)} / ${formatVideoTime(state.duration)}"
     }
     Column(Modifier.fillMaxWidth().padding(top = 12.dp)) {
-        Text(time,
-            style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 48.dp))
+        Row(Modifier.fillMaxWidth().padding(start = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(time, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+            VideoSpeedMenu(state, enabled = enabled && !scrubbing && !state.failed && state.index >= 0)
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = state::togglePlayback, enabled = enabled && !scrubbing && !state.failed && state.index >= 0) {
                 Icon(if (state.playRequested) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
@@ -505,6 +593,58 @@ internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean =
                 modifier = Modifier.weight(1f).semantics { contentDescription = progressDescription })
         }
         HorizontalDivider(Modifier.padding(vertical = 4.dp))
+    }
+}
+
+@Composable
+private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
+    var expanded by remember(state, enabled) { mutableStateOf(false) }
+    var anchorTop by remember { mutableFloatStateOf(0f) }
+    val haptic = hapticFeedback()
+    val label = stringResource(R.string.video_speed)
+    Box(Modifier.onGloballyPositioned { anchorTop = it.boundsInWindow().top }) {
+        Box(Modifier.height(40.dp).widthIn(min = 48.dp)
+            .clickable(enabled = enabled, role = Role.Button, onClickLabel = label) { expanded = true }
+            .padding(end = 4.dp), contentAlignment = Alignment.CenterEnd) {
+            Text(videoSpeedOptions.first { it.first == state.speed }.second, style = MaterialTheme.typography.labelMedium)
+        }
+        if (expanded) {
+            Popup(AboveSpeedButton, onDismissRequest = { expanded = false }, properties = PopupProperties(focusable = true)) {
+                val availableHeight = with(LocalDensity.current) { anchorTop.toDp() }
+                Surface(shape = MaterialTheme.shapes.extraSmall, color = MenuDefaults.containerColor,
+                    tonalElevation = MenuDefaults.TonalElevation, shadowElevation = 4.dp) {
+                    Column(Modifier.width(112.dp).heightIn(max = availableHeight.coerceAtLeast(48.dp))
+                        .verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
+                        videoSpeedOptions.forEach { (speed, text) ->
+                            val isSelected = speed == state.speed
+                            DropdownMenuItem(
+                                text = { Text(text) },
+                                onClick = {
+                                    expanded = false
+                                    if (state.selectSpeed(speed)) haptic(HapticFeedbackConstantsCompat.SEGMENT_TICK)
+                                },
+                                modifier = Modifier.semantics {
+                                    role = Role.RadioButton
+                                    selected = isSelected
+                                },
+                                trailingIcon = {
+                                    if (isSelected) Icon(Icons.Outlined.Check, null, tint = MaterialTheme.colorScheme.primary)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private object AboveSpeedButton : PopupPositionProvider {
+    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection,
+        popupContentSize: IntSize): IntOffset {
+        val start = if (layoutDirection == LayoutDirection.Ltr) anchorBounds.right - popupContentSize.width else anchorBounds.left
+        return IntOffset(start.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
+            (anchorBounds.top - popupContentSize.height).coerceAtLeast(0))
     }
 }
 
