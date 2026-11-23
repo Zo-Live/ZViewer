@@ -187,6 +187,7 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
 
     fun selectSpeed(value: Float): Boolean {
         if (released || speedLocked || speedBeforeHold != null || value == speed) return false
+        pool.clearUnlockedSpeed(this)
         resetSpeed(value)
         return true
     }
@@ -216,6 +217,7 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
             playRequested = playingBeforeHold
             applySpeed(original)
         } else if (end == SpeedHoldEnd.Up && !holdSpeedLocked) {
+            pool.clearUnlockedSpeed(this)
             holdSpeedLocked = true
             return HapticFeedbackConstantsCompat.CONFIRM
         } else if (end == SpeedHoldEnd.Down && holdSpeedLocked) {
@@ -336,6 +338,7 @@ internal class VideoPlaybackPool(private val context: Context, private val speed
     private class Entry(val state: VideoPlaybackState) { var refs = 0 }
 
     private val entries = mutableStateMapOf<Int, Entry>()
+    private var unlockedPlayback: VideoPlaybackState? = null
 
     var lockedSpeed by speedLock
         private set
@@ -353,6 +356,7 @@ internal class VideoPlaybackPool(private val context: Context, private val speed
         entry.refs--
         if (entry.refs > 0) return
         entries.remove(item)
+        clearUnlockedSpeed(entry.state)
         entry.state.release()
     }
 
@@ -360,14 +364,27 @@ internal class VideoPlaybackPool(private val context: Context, private val speed
 
     fun setLockedSpeed(value: Float?, current: VideoPlaybackState) {
         lockedSpeed = value
+        unlockedPlayback = current.takeIf { value == null }
         entries.values.forEach { entry ->
             if (value != null || entry.state !== current) entry.state.resetSpeed()
         }
     }
 
+    fun clearUnlockedSpeed(state: VideoPlaybackState) {
+        if (unlockedPlayback === state) unlockedPlayback = null
+    }
+
+    fun onPageSettled(page: Int) {
+        val state = unlockedPlayback ?: return
+        if (state.index == page) return
+        unlockedPlayback = null
+        state.resetSpeed()
+    }
+
     fun snapshot(): List<Pair<Int, VideoPlaybackState>> = entries.map { it.key to it.value.state }
 
     fun releaseAll() {
+        unlockedPlayback = null
         entries.values.forEach { it.state.release() }
         entries.clear()
     }

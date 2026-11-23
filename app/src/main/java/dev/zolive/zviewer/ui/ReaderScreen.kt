@@ -243,7 +243,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         }
     }
 
-    LaunchedEffect(pagerReading, paging) {
+    LaunchedEffect(pagerReading, paging, videoPool) {
         jumpJob?.cancel()
         val item = paging.anchor(currentPage)
         if (pagerReading) pagerState.scrollToPage(item) else listState.scrollToItem(item)
@@ -252,7 +252,10 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             else if (pagerReading) paging.pageAt(pagerState.settledPage)
             else if (!paging.looping && !listState.canScrollForward && listState.canScrollBackward) paging.pageCount - 1
             else paging.pageAt(listState.firstVisibleItemIndex)
-        }.distinctUntilChanged().filterNotNull().collect { page -> currentPage = page; onProgress(page)
+        }.distinctUntilChanged().filterNotNull().collect { page ->
+            videoPool?.onPageSettled(page)
+            currentPage = page
+            onProgress(page)
             DiagnosticLog.log("Reader", "停靠到第 ${page + 1}/${session.pages.size} 项")
         }
     }

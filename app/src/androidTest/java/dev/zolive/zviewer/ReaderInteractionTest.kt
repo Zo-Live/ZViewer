@@ -580,6 +580,23 @@ class ReaderInteractionTest {
         speed.performTouchInput { longClick() }.assert(!locked)
         rule.runOnIdle { assertEquals(1.5f, currentVideoView().playerView.player!!.playbackParameters.speed, 0f) }
 
+        rule.onRoot().performTouchInput {
+            down(Offset(width * .4f, height * .4f))
+            moveBy(Offset(width * .15f, 0f))
+            cancel()
+        }
+        rule.waitForIdle()
+        assertEquals(2, currentPage)
+        speed.assert(!locked)
+
+        swipe(forward = false, vertical = false)
+        rule.waitUntil(15_000) { currentPage == 1 }
+        swipe(vertical = false)
+        rule.waitUntil(15_000) { currentPage == 2 }
+        waitForVideo()
+        rule.onNode(button and hasText("1.0x")).assertIsDisplayed()
+        rule.runOnIdle { assertEquals(1f, currentVideoView().playerView.player!!.playbackParameters.speed, 0f) }
+
         swipe(forward = false, vertical = false)
         rule.waitUntil(15_000) { currentPage == 1 }
         swipe(forward = false, vertical = false)
