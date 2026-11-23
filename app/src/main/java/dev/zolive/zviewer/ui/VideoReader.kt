@@ -6,6 +6,11 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.MutableTransitionState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.rememberTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,10 +25,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -637,6 +645,7 @@ internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean =
 private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
     var expanded by remember(state, enabled) { mutableStateOf(false) }
     var anchorTop by remember { mutableFloatStateOf(0f) }
+    val animationSpeed = LocalAnimationSpeed.current
     val haptic = hapticFeedback()
     val label = stringResource(R.string.video_speed)
     Box(Modifier.onGloballyPositioned { anchorTop = it.boundsInWindow().top }) {
@@ -647,9 +656,30 @@ private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
         }
         if (expanded) {
             Popup(AboveSpeedButton, onDismissRequest = { expanded = false }, properties = PopupProperties(focusable = true)) {
+                val entrance = remember { MutableTransitionState(false).apply { targetState = true } }
+                val transition = rememberTransition(entrance, label = "VideoSpeedMenu")
+                val scale by transition.animateFloat(
+                    transitionSpec = { tween(animationSpeed.duration(120), easing = LinearOutSlowInEasing) },
+                    label = "scale",
+                ) { visible -> if (visible) 1f else 0.8f }
+                val opacity by transition.animateFloat(
+                    transitionSpec = { tween(animationSpeed.duration(30)) },
+                    label = "alpha",
+                ) { visible -> if (visible) 1f else 0f }
+                val origin = TransformOrigin(if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1f else 0f, 1f)
                 val availableHeight = with(LocalDensity.current) { anchorTop.toDp() }
-                Surface(shape = MaterialTheme.shapes.extraSmall, color = MenuDefaults.containerColor,
-                    tonalElevation = MenuDefaults.TonalElevation, shadowElevation = 4.dp) {
+                Surface(
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        alpha = opacity
+                        transformOrigin = origin
+                    },
+                    shape = MaterialTheme.shapes.extraSmall,
+                    color = MenuDefaults.containerColor,
+                    tonalElevation = MenuDefaults.TonalElevation,
+                    shadowElevation = 4.dp,
+                ) {
                     Column(Modifier.width(112.dp).heightIn(max = availableHeight.coerceAtLeast(48.dp))
                         .verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
                         videoSpeedOptions.forEach { (speed, text) ->
