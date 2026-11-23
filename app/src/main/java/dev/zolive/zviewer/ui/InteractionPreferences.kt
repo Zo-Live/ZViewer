@@ -13,6 +13,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Recomposer
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.currentCompositionLocalContext
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -27,20 +28,32 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.ViewCompat
+import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.AnimationSpeed
+import dev.zolive.zviewer.data.ReaderSettings
 import kotlin.math.roundToInt
 
-internal val LocalAnimationSpeed = staticCompositionLocalOf { AnimationSpeed.Moderate }
+internal val LocalInteractionSettings = compositionLocalOf { ReaderSettings() }
 internal val LocalHapticsEnabled = staticCompositionLocalOf { true }
+
+@Composable
+internal fun animationSpeed(effect: AnimationEffect): AnimationSpeed =
+    LocalInteractionSettings.current.animationSpeedFor(effect)
 
 internal fun AnimationSpeed.duration(millis: Int): Int = (millis * durationScale).roundToInt()
 
 internal fun AnimationSpeed.stiffness(base: Float): Float = base / (durationScale * durationScale)
 
 internal class PreferredMotionDurationScale(
-    private val systemScale: MotionDurationScale?,
-    private val speed: AnimationSpeed,
+    inheritedScale: MotionDurationScale?,
+    val speed: AnimationSpeed,
 ) : MotionDurationScale {
+    private val systemScale: MotionDurationScale? = if (inheritedScale is PreferredMotionDurationScale) {
+        inheritedScale.systemScale
+    } else {
+        inheritedScale
+    }
+
     override val scaleFactor: Float get() = (systemScale?.scaleFactor ?: 1f) * speed.durationScale
 }
 
@@ -63,7 +76,8 @@ internal fun WithAnimationSpeed(
 ) {
     val context = rememberCoroutineScope().coroutineContext
     val inheritedScale = context[MotionDurationScale]
-    if (speed == AnimationSpeed.Moderate || inheritedScale is PreferredMotionDurationScale) {
+    val inheritedSpeed = (inheritedScale as? PreferredMotionDurationScale)?.speed ?: AnimationSpeed.Moderate
+    if (speed == inheritedSpeed) {
         Box(modifier) { content() }
         return
     }
@@ -92,7 +106,7 @@ internal fun AppCircularProgressIndicator(
     color: Color = ProgressIndicatorDefaults.circularColor,
     strokeWidth: Dp = ProgressIndicatorDefaults.CircularStrokeWidth,
 ) {
-    WithAnimationSpeed(LocalAnimationSpeed.current) {
+    WithAnimationSpeed(animationSpeed(AnimationEffect.CircularProgress)) {
         CircularProgressIndicator(modifier, color, strokeWidth)
     }
 }

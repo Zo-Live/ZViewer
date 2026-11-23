@@ -65,6 +65,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.zolive.zviewer.MainActivity
 import dev.zolive.zviewer.R
+import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
 import dev.zolive.zviewer.data.DiagnosticLog
@@ -103,7 +104,8 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     videoPosition: (Int) -> Long = { 0L }, onVideoProgress: (Int, Long) -> Unit = { _, _ -> }, onBack: () -> Unit,
     visible: Boolean = true, onVideoEntryReady: () -> Unit = {}) {
     val scope = rememberCoroutineScope()
-    val speed = settings.animationSpeed
+    val pagingSpeed = settings.animationSpeedFor(AnimationEffect.ReaderPaging)
+    val toolbarSpeed = settings.animationSpeedFor(AnimationEffect.ReaderToolbar)
     var currentPage by rememberSaveable(session.book.id) { mutableIntStateOf(initialPage.coerceIn(session.pages.indices)) }
     var controls by rememberSaveable(session.book.id) { mutableStateOf(false) }
     var preferences by remember { mutableStateOf(false) }
@@ -128,7 +130,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     var zoomItem by remember(session, paging, settings.vertical) { mutableIntStateOf(-1) }
     val listState = rememberLazyListState(paging.anchor(currentPage))
     val pagerState = rememberPagerState(initialPage = paging.anchor(currentPage)) { paging.itemCount }
-    val flingBehavior = pageFlingBehavior(pagerState, speed)
+    val flingBehavior = pageFlingBehavior(pagerState, pagingSpeed)
     var jumpJob by remember { mutableStateOf<Job?>(null) }
     var pendingVolumeItem by remember(paging, settings.vertical) { mutableStateOf<Int?>(null) }
     val ratios = remember(session.book.cacheKey) { mutableStateMapOf<Int, Float>() }
@@ -267,7 +269,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         if (pagerReading) {
             val item = videoItem ?: paging.nearestItem(page, pagerState.currentPage)
             if (animate) {
-                pagerState.animateScrollToPage(item, animationSpec = spring(stiffness = speed.stiffness(Spring.StiffnessMedium)))
+                pagerState.animateScrollToPage(item, animationSpec = spring(stiffness = pagingSpeed.stiffness(Spring.StiffnessMedium)))
             } else {
                 pagerState.scrollToPage(item)
             }
@@ -436,7 +438,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         style = MaterialTheme.typography.labelSmall)
                 }
             }
-            val fadeSpec = spring<Float>(stiffness = speed.stiffness(Spring.StiffnessMediumLow))
+            val fadeSpec = spring<Float>(stiffness = toolbarSpeed.stiffness(Spring.StiffnessMediumLow))
             AnimatedVisibility(visible = controls, enter = fadeIn(fadeSpec), exit = fadeOut(fadeSpec),
                 modifier = Modifier.align(Alignment.TopCenter).blockVideoGestures()) {
                 TopAppBar(title = {
@@ -447,7 +449,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = .97f)))
             }
             val slideSpec = spring(
-                stiffness = speed.stiffness(Spring.StiffnessMediumLow), visibilityThreshold = IntOffset(1, 1),
+                stiffness = toolbarSpeed.stiffness(Spring.StiffnessMediumLow), visibilityThreshold = IntOffset(1, 1),
             )
             AnimatedVisibility(visible = controls, modifier = Modifier.align(Alignment.BottomCenter).blockVideoGestures(),
                 enter = slideInVertically(slideSpec) { it } + fadeIn(fadeSpec),
@@ -510,7 +512,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             }
         }
     }
-    if (preferences) WithAnimationSpeed(speed, modifier = Modifier.size(0.dp)) {
+    if (preferences) WithAnimationSpeed(settings.animationSpeedFor(AnimationEffect.ReaderQuickSettings), modifier = Modifier.size(0.dp)) {
         ModalBottomSheet(onDismissRequest = { preferences = false }) {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
                 Text(stringResource(R.string.reader_settings), style = MaterialTheme.typography.headlineSmall)
@@ -724,7 +726,7 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
 private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, vertical: Boolean, active: Boolean,
     doubleTapZoomEnabled: Boolean, foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float?, onRatio: (Float) -> Unit,
     onTap: () -> Unit, onRetry: () -> Unit, preview: ReaderPagePreview?, clipPage: Boolean) {
-    val speed = LocalAnimationSpeed.current
+    val speed = animationSpeed(AnimationEffect.ReaderImageZoom)
     val imageDescription = stringResource(
         if (doubleTapZoomEnabled) R.string.image_accessibility else R.string.image_accessibility_without_zoom,
         index + 1,

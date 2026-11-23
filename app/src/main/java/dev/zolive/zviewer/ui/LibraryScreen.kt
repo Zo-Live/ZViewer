@@ -88,6 +88,7 @@ import androidx.compose.ui.zIndex
 import dev.zolive.zviewer.LibraryState
 import dev.zolive.zviewer.LibraryViewModel
 import dev.zolive.zviewer.R
+import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.Book
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.DiagnosticLog
@@ -107,12 +108,14 @@ private sealed class AppPage(val tag: String) {
     data object Library : AppPage("library-screen")
     data object Settings : AppPage("settings-screen")
     data class Section(val section: SettingsSection) : AppPage(section.tag)
+    data class Interaction(val settingsPage: InteractionSettingsPage) : AppPage(settingsPage.tag)
     data object Logs : AppPage("log-list-screen")
     data class LogDetail(val file: DiagnosticLog.LogFile) : AppPage("log-detail-screen")
 
     fun parent(): AppPage = when (this) {
         Library, Settings -> Library
         is Section -> Settings
+        is Interaction -> Section(SettingsSection.Preferences)
         Logs -> Section(SettingsSection.Diagnostics)
         is LogDetail -> Logs
     }
@@ -128,6 +131,7 @@ private sealed class AppPage(val tag: String) {
                     Settings.tag -> Settings
                     Logs.tag -> Logs
                     "log-detail-screen" -> LogDetail(DiagnosticLog.LogFile(it[1] as Uri, it[2] as String, it[3] as Long))
+                    InteractionSettingsPage.Animation.tag -> Interaction(InteractionSettingsPage.Animation)
                     else -> SettingsSection.entries.firstOrNull { section -> section.tag == it[0] }
                         ?.let { section -> Section(section) } ?: Library
                 }
@@ -188,7 +192,7 @@ private fun Modifier.pageBackSwipe(
 @Composable
 fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     val activity = LocalActivity.current
-    val speed = state.settings.animationSpeed
+    val speed = animationSpeed(AnimationEffect.PageTransition)
     val session = state.session
     val waitingForVideo = session != null && state.waitingForVideoEntry
     LaunchedEffect(session, waitingForVideo) {
@@ -320,7 +324,12 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                                         }
                                         is AppPage.Section -> SettingsSectionScreen(
                                             layer.section, state, model, active, ::goBack, chooseLibrary,
-                                            onViewLogs = { finishTransition(AppPage.Logs, showChild = true, startProgress = 0f) })
+                                            onViewLogs = { finishTransition(AppPage.Logs, showChild = true, startProgress = 0f) },
+                                            onOpenInteractionSettings = {
+                                                finishTransition(AppPage.Interaction(it), showChild = true, startProgress = 0f)
+                                            })
+                                        is AppPage.Interaction -> InteractionSettingsScreen(
+                                            layer.settingsPage, state.settings, ::goBack, model::settings)
                                         AppPage.Logs -> LogListScreen(active, ::goBack) { file ->
                                             finishTransition(AppPage.LogDetail(file), showChild = true, startProgress = 0f)
                                         }
@@ -372,7 +381,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
 @Composable
 private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: Boolean,
     onSettings: () -> Unit, onChooseLibrary: () -> Unit) {
-    val speed = state.settings.animationSpeed
+    val searchSpeed = animationSpeed(AnimationEffect.LibrarySearch)
     val haptic = hapticFeedback()
     val titles = listOf(stringResource(R.string.library), stringResource(R.string.favorites), stringResource(R.string.recent_reads))
     val pagerState = rememberPagerState { titles.size }
@@ -419,7 +428,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
             })
         },
         bottomBar = {
-            WithAnimationSpeed(speed) {
+            WithAnimationSpeed(animationSpeed(AnimationEffect.LibraryTabIndicator)) {
                 NavigationBar {
                     val icons = listOf(Icons.Outlined.CollectionsBookmark, Icons.Outlined.BookmarkBorder, Icons.Outlined.History)
                     titles.forEachIndexed { index, title ->
@@ -436,17 +445,17 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
         },
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
-            if (state.scanning) WithAnimationSpeed(speed) {
+            if (state.scanning) WithAnimationSpeed(animationSpeed(AnimationEffect.LibraryScanProgress)) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
             }
             AnimatedVisibility(
                 visible = searching,
-                enter = expandVertically(tween(speed.duration(280), easing = FastOutSlowInEasing), expandFrom = Alignment.Top) +
-                    slideInVertically(tween(speed.duration(280), easing = FastOutSlowInEasing)) { -it / 4 } +
-                    fadeIn(tween(speed.duration(180))),
-                exit = shrinkVertically(tween(speed.duration(220), easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) +
-                    slideOutVertically(tween(speed.duration(220), easing = FastOutSlowInEasing)) { -it / 4 } +
-                    fadeOut(tween(speed.duration(150)))
+                enter = expandVertically(tween(searchSpeed.duration(280), easing = FastOutSlowInEasing), expandFrom = Alignment.Top) +
+                    slideInVertically(tween(searchSpeed.duration(280), easing = FastOutSlowInEasing)) { -it / 4 } +
+                    fadeIn(tween(searchSpeed.duration(180))),
+                exit = shrinkVertically(tween(searchSpeed.duration(220), easing = FastOutSlowInEasing), shrinkTowards = Alignment.Top) +
+                    slideOutVertically(tween(searchSpeed.duration(220), easing = FastOutSlowInEasing)) { -it / 4 } +
+                    fadeOut(tween(searchSpeed.duration(150)))
             ) {
                 OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = contentInset, vertical = 8.dp),
                     placeholder = { Text(stringResource(R.string.search_title)) }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
@@ -454,7 +463,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                     shape = RoundedCornerShape(28.dp), singleLine = true)
             }
             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize().testTag("library-pager"),
-                flingBehavior = pageFlingBehavior(pagerState, speed),
+                flingBehavior = pageFlingBehavior(pagerState, animationSpeed(AnimationEffect.LibraryPaging)),
                 key = { it }) { tab ->
                 var sortMenu by remember { mutableStateOf(false) }
                 val filterOptions = if (tab == 2) {
@@ -577,7 +586,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
 
 @Composable
 private fun LibraryActions(gridState: LazyGridState, managingFavorites: Boolean, onExitManagement: () -> Unit) {
-    val speed = LocalAnimationSpeed.current
+    val speed = animationSpeed(AnimationEffect.LibraryScrollToTop)
     var returnAnimationDistance by remember(gridState) { mutableStateOf<Float?>(null) }
     val returningToTop = returnAnimationDistance != null
     val showScrollToTop = !returningToTop && gridState.canScrollBackward

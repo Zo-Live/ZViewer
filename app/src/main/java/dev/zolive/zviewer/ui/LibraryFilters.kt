@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import dev.zolive.zviewer.data.AnimationEffect
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -56,7 +57,7 @@ internal fun LibraryFilters(
 ) {
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()
-    val speed by rememberUpdatedState(LocalAnimationSpeed.current)
+    val speed by rememberUpdatedState(animationSpeed(AnimationEffect.LibraryFilterRebound))
     val boundary = remember(scope) { FilterOverscroll(scope) { speed.stiffness(600f) } }
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
     Row(

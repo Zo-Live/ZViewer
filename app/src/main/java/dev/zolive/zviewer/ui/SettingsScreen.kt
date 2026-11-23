@@ -61,6 +61,7 @@ import dev.zolive.zviewer.BuildConfig
 import dev.zolive.zviewer.LibraryState
 import dev.zolive.zviewer.LibraryViewModel
 import dev.zolive.zviewer.R
+import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.AnimationSpeed
 import dev.zolive.zviewer.data.AppLanguage
 import dev.zolive.zviewer.data.AutoLockInterval
@@ -128,11 +129,12 @@ internal fun SettingsSectionScreen(
     onBack: () -> Unit,
     onChooseLibrary: () -> Unit,
     onViewLogs: () -> Unit,
+    onOpenInteractionSettings: (InteractionSettingsPage) -> Unit,
 ) {
     SettingsPage(section.title, R.string.back_to_settings, onBack) {
         when (section) {
             SettingsSection.Appearance -> AppearanceSettings(state.settings, model::settings)
-            SettingsSection.Preferences -> AppPreferences(state.settings, model::settings)
+            SettingsSection.Preferences -> AppPreferences(state.settings, model::settings, onOpenInteractionSettings)
             SettingsSection.Reading -> ReaderPreferences(state.settings, model::settings)
             SettingsSection.LibraryAndStorage -> LibraryStorageSettings(state, model, onChooseLibrary)
             SettingsSection.Diagnostics -> DiagnosticsSettings(state.settings, model, active, onViewLogs)
@@ -143,7 +145,7 @@ internal fun SettingsSectionScreen(
 }
 
 @Composable
-private fun SettingsPage(
+internal fun SettingsPage(
     @StringRes title: Int,
     @StringRes backLabel: Int,
     onBack: () -> Unit,
@@ -245,7 +247,11 @@ private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSett
 }
 
 @Composable
-private fun AppPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> Unit) {
+private fun AppPreferences(
+    settings: ReaderSettings,
+    onSettings: (ReaderSettings) -> Unit,
+    onOpen: (InteractionSettingsPage) -> Unit,
+) {
     val view = LocalView.current
     PreferenceMenu(
         title = stringResource(R.string.language),
@@ -261,6 +267,9 @@ private fun AppPreferences(settings: ReaderSettings, onSettings: (ReaderSettings
             AnimationSpeed.Enhanced to stringResource(R.string.animation_speed_enhanced),
         ),
     ) { onSettings(settings.copy(animationSpeed = it)) }
+    if (settings.animationSpeed == AnimationSpeed.Enhanced) {
+        InteractionSettingsLink(InteractionSettingsPage.Animation, onOpen)
+    }
     PreferenceSwitch(
         title = stringResource(R.string.haptic_feedback),
         checked = settings.hapticFeedback,
@@ -278,6 +287,15 @@ private fun AppPreferences(settings: ReaderSettings, onSettings: (ReaderSettings
     PreferenceSwitch(stringResource(R.string.show_favorite_icon), stringResource(R.string.show_favorite_icon_hint), settings.showFavoriteIcon) {
         onSettings(settings.copy(showFavoriteIcon = it))
     }
+}
+
+@Composable
+private fun InteractionSettingsLink(page: InteractionSettingsPage, onOpen: (InteractionSettingsPage) -> Unit) {
+    SettingsListItem(
+        headlineContent = { Text(stringResource(page.title)) },
+        trailingContent = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null) },
+        modifier = Modifier.clickable(role = Role.Button) { onOpen(page) },
+    )
 }
 
 @Composable
@@ -711,7 +729,7 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
 }
 
 @Composable
-private fun PreferenceSwitch(
+internal fun PreferenceSwitch(
     title: String,
     subtitle: String? = null,
     checked: Boolean,
@@ -723,7 +741,7 @@ private fun PreferenceSwitch(
         headlineContent = { Text(title) },
         supportingContent = subtitle?.let { { Text(it) } },
         trailingContent = {
-            WithAnimationSpeed(LocalAnimationSpeed.current) {
+            WithAnimationSpeed(animationSpeed(AnimationEffect.Switch)) {
                 Switch(checked, onCheckedChange = null)
             }
         },

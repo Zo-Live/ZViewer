@@ -9,6 +9,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import dev.zolive.zviewer.data.AnimationEffect
 
 @Composable
 internal fun EndAlignedDropdownMenu(
@@ -23,7 +24,7 @@ internal fun EndAlignedDropdownMenu(
         Box(Modifier.matchParentSize(), contentAlignment = Alignment.CenterEnd) {
             // 以触发控件的整个高度和末端作为定位基准。
             Box(Modifier.fillMaxHeight().width(0.dp)) {
-                WithAnimationSpeed(LocalAnimationSpeed.current, modifier = Modifier.fillMaxHeight()) {
+                WithAnimationSpeed(animationSpeed(AnimationEffect.DropdownMenu), modifier = Modifier.fillMaxHeight()) {
                     Box(Modifier.fillMaxHeight()) {
                         DropdownMenu(expanded, onDismissRequest, modifier, content = content)
                     }

@@ -16,6 +16,7 @@ import androidx.core.view.descendants
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.lifecycle.ViewModelProvider
+import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.AnimationSpeed
 import dev.zolive.zviewer.data.AppLanguage
 import dev.zolive.zviewer.data.Book
@@ -427,8 +428,11 @@ class NavigationInteractionTest {
     }
 
     @Test fun enhancedBackSwipeFinishesEarlierAfterRelease() {
-        for (speed in AnimationSpeed.entries) {
-            store.saveSettings(store.settings().copy(animationSpeed = speed))
+        val moderate = store.settings().copy(animationSpeed = AnimationSpeed.Moderate)
+        val enhanced = moderate.copy(animationSpeed = AnimationSpeed.Enhanced)
+        val enhancedWithoutPageTransition = enhanced.copy(disabledAnimations = setOf(AnimationEffect.PageTransition))
+        for (settingsToTest in listOf(moderate, enhanced, enhancedWithoutPageTransition)) {
+            store.saveSettings(settingsToTest)
             launch()
             rule.onNodeWithContentDescription("设置").performClick()
             val settings = rule.onNodeWithTag("settings-screen").assertIsDisplayed()
@@ -438,7 +442,7 @@ class NavigationInteractionTest {
                     swipe(Offset(width * .3f, centerY), Offset(width * .66f, centerY), durationMillis = 240)
                 }
                 rule.mainClock.advanceTimeBy(192)
-                if (speed == AnimationSpeed.Enhanced) settings.assertDoesNotExist() else settings.assertExists()
+                if (settingsToTest == enhanced) settings.assertDoesNotExist() else settings.assertExists()
                 rule.mainClock.advanceTimeBy(400)
                 rule.onNodeWithTag("library-screen").assertIsDisplayed()
             } finally {

@@ -16,6 +16,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.test.core.app.ActivityScenario
 import androidx.test.platform.app.InstrumentationRegistry
+import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.AnimationSpeed
 import dev.zolive.zviewer.data.AutoLockInterval
 import dev.zolive.zviewer.data.PreferenceStore
@@ -178,6 +179,33 @@ class SettingsMenuTest {
         haptics.performClick().assertIsOn()
         assertEquals(AnimationSpeed.Moderate, store.settings().animationSpeed)
         assertTrue(store.settings().hapticFeedback)
+    }
+
+    @Test fun animationSubpageAppearsInEnhancedModeAndRestoresSeparateChoices() {
+        setting("偏好").performClick()
+        val speed = setting("动画速度")
+        val animationLink = setting("动画设置")
+        val back = rule.onNodeWithContentDescription("返回偏好")
+        animationLink.assertDoesNotExist()
+
+        speed.performClick()
+        option("增强").performClick()
+        assertEquals(speed.fetchSemanticsNode().boundsInRoot.bottom, animationLink.fetchSemanticsNode().boundsInRoot.top, 1f)
+        animationLink.performClick()
+        rule.onAllNodes(isToggleable()).assertCountEquals(AnimationEffect.entries.size)
+        rule.onAllNodes(isToggleable() and isOn()).assertCountEquals(AnimationEffect.entries.size)
+        setting("播放倍速菜单").performScrollTo().performClick().assertIsOff()
+        setting("视频缩放").assertIsOn()
+        scenario.recreate()
+        back.assertIsDisplayed().performClick()
+        speed.performClick()
+        option("适中").performClick()
+        animationLink.assertDoesNotExist()
+        speed.performClick()
+        option("增强").performClick()
+        animationLink.performClick()
+        setting("播放倍速菜单").performScrollTo().assertIsOff()
+        assertEquals(setOf(AnimationEffect.VideoSpeedMenu), store.settings().disabledAnimations)
     }
 
     @Test fun switchingLanguagesKeepsSettingsOpenAndPersists() {

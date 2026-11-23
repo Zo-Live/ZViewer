@@ -54,6 +54,7 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import dev.zolive.zviewer.R
+import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
 import dev.zolive.zviewer.data.DiagnosticLog
@@ -575,7 +576,7 @@ internal fun VideoPage(
                 view.onSwipeSeek = { fraction -> state?.swipeSeek(fraction) }
                 view.onSwipeSeekEnd = { cancelled -> state?.finishSwipeSeek(cancelled) }
                 view.doubleTapZoomEnabled = settings.doubleTapZoom
-                view.zoomAnimationSpeed = settings.animationSpeed
+                view.zoomAnimationSpeed = settings.animationSpeedFor(AnimationEffect.VideoZoom)
                 view.contentDescription = description
                 if (state != null) {
                     state.bindOwner(view, active = active)
@@ -645,7 +646,7 @@ internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean =
 private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
     var expanded by remember(state, enabled) { mutableStateOf(false) }
     var anchorTop by remember { mutableFloatStateOf(0f) }
-    val animationSpeed = LocalAnimationSpeed.current
+    val animationSpeed = animationSpeed(AnimationEffect.VideoSpeedMenu)
     val haptic = hapticFeedback()
     val label = stringResource(R.string.video_speed)
     Box(Modifier.onGloballyPositioned { anchorTop = it.boundsInWindow().top }) {

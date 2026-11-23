@@ -88,7 +88,11 @@ data class ReaderSettings(
     val hideGalleryImages: Boolean = false,
     val animationSpeed: AnimationSpeed = AnimationSpeed.Moderate,
     val hapticFeedback: Boolean = true,
-)
+    val disabledAnimations: Set<AnimationEffect> = emptySet(),
+) {
+    internal fun animationSpeedFor(effect: AnimationEffect): AnimationSpeed =
+        if (effect in disabledAnimations) AnimationSpeed.Moderate else animationSpeed
+}
 
 data class PageSource(
     val name: String,

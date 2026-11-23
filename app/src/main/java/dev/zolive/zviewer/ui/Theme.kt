@@ -88,7 +88,7 @@ fun ZViewerTheme(settings: ReaderSettings, content: @Composable () -> Unit) {
         remember(settings.accent, dark) { themeColorScheme(settings.accent, dark) }
     }
     CompositionLocalProvider(
-        LocalAnimationSpeed provides settings.animationSpeed,
+        LocalInteractionSettings provides settings,
         LocalHapticsEnabled provides settings.hapticFeedback,
     ) {
         MaterialTheme(colorScheme = colors, content = content)
