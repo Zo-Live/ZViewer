@@ -443,11 +443,6 @@ class ReaderInteractionTest {
 
     @Test fun progressControlsSeekAndHideTogether() {
         open(names = listOf("moving-video/moving.mp4", "video-folder/video2.mp4"))
-        swipe(vertical = false)
-        rule.runOnIdle {
-            assertEquals(0, currentPage)
-            assertEquals(0L, currentVideoView().playerView.player!!.currentPosition)
-        }
         toggleControls()
         val player = rule.runOnIdle { currentVideoView().playerView.player!! }
         fun frame() = rule.runOnIdle { (currentVideoView().playerView.videoSurfaceView as android.view.TextureView).bitmap!! }
@@ -558,6 +553,30 @@ class ReaderInteractionTest {
             displayed = text
         }
         rule.onNode(button and hasText(displayed)).assertIsDisplayed()
+    }
+
+    @Test fun horizontalVideoSwipeSeeksOnlyWhenEnabledAndDirectionMatches() {
+        open(names = listOf("moving-video/moving.mp4", "video-folder/video2.mp4"))
+        val player = rule.runOnIdle { currentVideoView().playerView.player!! }
+        fun position() = rule.runOnIdle { player.currentPosition }
+        swipe(forward = false, vertical = false)
+        rule.waitUntil(5_000) { position() in 25_000L..35_000L }
+        assertEquals(0, currentPage)
+        assertFalse(rule.runOnIdle { player.playWhenReady })
+        swipe(vertical = false)
+        rule.waitUntil(5_000) { position() <= 2_000L }
+        val before = position()
+
+        rule.onRoot().performTouchInput {
+            swipe(center, center + Offset(6f, 1f), 180)
+            swipe(center, center + Offset(width * .14f, width * .12f), 180)
+        }
+        assertEquals(before, position())
+        rule.runOnIdle { readerSettings.value = readerSettings.value.copy(horizontalVideoSeek = false) }
+        swipe(forward = false, vertical = false)
+        assertEquals(before, position())
+        swipe(vertical = true)
+        rule.waitUntil(10_000) { currentPage == 1 }
     }
 
     @Test fun draggingPageProgressShowsTheTargetBeforeSavingIt() {

@@ -694,7 +694,11 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
         selectedValue = settings.vertical,
         options = listOf(true to stringResource(R.string.reading_vertical), false to stringResource(R.string.reading_horizontal)),
     ) { onSettings(settings.copy(vertical = it)) }
-    if (!settings.vertical) {
+    if (settings.vertical) {
+        PreferenceSwitch(stringResource(R.string.horizontal_video_seek), checked = settings.horizontalVideoSeek) {
+            onSettings(settings.copy(horizontalVideoSeek = it))
+        }
+    } else {
         PreferenceSwitch(stringResource(R.string.reader_rtl), checked = settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }
     }
     PreferenceSwitch(stringResource(R.string.keep_screen_on), checked = settings.keepScreenOn) { onSettings(settings.copy(keepScreenOn = it)) }

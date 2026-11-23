@@ -39,6 +39,7 @@ class PreferenceStore(context: Context) {
         readerDark = preferences.getBoolean("reader_dark", true),
         vertical = preferences.getBoolean("vertical", true),
         rightToLeft = preferences.getBoolean("rtl", false),
+        horizontalVideoSeek = preferences.getBoolean("horizontal_video_seek", true),
         keepScreenOn = preferences.getBoolean("keep_screen", true),
         volumeKeyPaging = preferences.getBoolean("volume_key_paging", false),
         doubleTapZoom = preferences.getBoolean("double_tap_zoom", true),
@@ -79,6 +80,7 @@ class PreferenceStore(context: Context) {
             .putBoolean("dynamic_color", settings.dynamicColor)
             .putBoolean("reader_dark", settings.readerDark).putBoolean("vertical", settings.vertical)
             .putBoolean("rtl", settings.rightToLeft).putBoolean("keep_screen", settings.keepScreenOn)
+            .putBoolean("horizontal_video_seek", settings.horizontalVideoSeek)
             .putBoolean("volume_key_paging", settings.volumeKeyPaging)
             .putBoolean("double_tap_zoom", settings.doubleTapZoom)
             .putInt("columns", settings.gridColumns)

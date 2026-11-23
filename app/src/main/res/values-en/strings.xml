@@ -104,6 +104,7 @@
     <string name="reader_dark">Dark reading background</string>
     <string name="reader_dark_hint">Turn off for a light reading background regardless of the app theme</string>
     <string name="reader_rtl">Right-to-left paging</string>
+    <string name="horizontal_video_seek">Swipe horizontally to adjust video progress</string>
     <string name="keep_screen_on">Keep screen on while reading</string>
     <string name="volume_key_paging">Turn pages with volume keys</string>
     <string name="double_tap_zoom">Double-tap to zoom</string>

@@ -59,9 +59,11 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
+import kotlin.math.roundToLong
 
 private const val NormalSpeed = 1f
 private const val FastSpeed = 2f
+private const val MaxSwipeSeekMs = 60_000L
 private val videoSpeedOptions = listOf(2f to "2.0x", 1.5f to "1.5x", 1f to "1.0x", .75f to "0.75x", .5f to "0.5x")
 
 internal class VideoPlaybackState(val player: ExoPlayer) {
@@ -93,6 +95,7 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     var scrubPosition by mutableStateOf<Long?>(null)
         private set
     private var lastPreviewSeek = -1L
+    private var swipeSeekOrigin: Long? = null
     var speed by mutableFloatStateOf(NormalSpeed)
         private set
     private var speedLocked = false
@@ -148,6 +151,25 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
         lastPreviewSeek = -1L
         refresh()
         save()
+    }
+
+    fun startSwipeSeek(): Boolean {
+        if (released || failed || !seekable || duration <= 0 || scrubPosition != null || swipeSeekOrigin != null) return false
+        swipeSeekOrigin = player.currentPosition.coerceIn(0L, duration)
+        return true
+    }
+
+    fun swipeSeek(screenFraction: Float) {
+        val origin = swipeSeekOrigin ?: return
+        val offset = (screenFraction * minOf(duration, MaxSwipeSeekMs)).roundToLong()
+        scrubTo(origin + offset)
+    }
+
+    fun finishSwipeSeek(cancelled: Boolean) {
+        val origin = swipeSeekOrigin ?: return
+        swipeSeekOrigin = null
+        if (cancelled && scrubPosition != null) scrubTo(origin)
+        finishScrub()
     }
 
     fun selectSpeed(value: Float): Boolean {
@@ -393,6 +415,11 @@ internal fun rememberVideoPlayback(
         state.player.playWhenReady = false
         state.player.prepare()
     }
+    LaunchedEffect(state) {
+        snapshotFlow { state.scrubPosition }.filterNotNull().conflate().collect {
+            withFrameNanos { state.submitScrubPreview() }
+        }
+    }
     LaunchedEffect(state, settings.videoLoopSingle, settings.loopMode) {
         // 注意不要根据滚动 / 切换状态切换 repeatMode：ExoPlayer 在接近片尾时切换循环模式
         // 会重新初始化解码器输出（视频尺寸归零、画面重新渲染首帧），在真机与模拟器上都会闪屏。
@@ -534,6 +561,11 @@ internal fun VideoPage(
                     val feedback = state?.finishSpeedHold(end) ?: HapticFeedbackConstantsCompat.NO_HAPTICS
                     if (feedback != HapticFeedbackConstantsCompat.NO_HAPTICS) haptic(feedback)
                 }
+                view.onSwipeSeekStart = {
+                    gesturesEnabled && settings.vertical && settings.horizontalVideoSeek && state?.startSwipeSeek() == true
+                }
+                view.onSwipeSeek = { fraction -> state?.swipeSeek(fraction) }
+                view.onSwipeSeekEnd = { cancelled -> state?.finishSwipeSeek(cancelled) }
                 view.doubleTapZoomEnabled = settings.doubleTapZoom
                 view.zoomAnimationSpeed = settings.animationSpeed
                 view.contentDescription = description
@@ -563,11 +595,6 @@ internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean =
     val displayedPosition = state.scrubPosition ?: state.position
     DisposableEffect(state) {
         onDispose { state.finishScrub() }
-    }
-    LaunchedEffect(state) {
-        snapshotFlow { state.scrubPosition }.filterNotNull().conflate().collect {
-            withFrameNanos { state.submitScrubPreview() }
-        }
     }
     val positionSeconds = displayedPosition / 1000L
     val durationSeconds = state.duration / 1000L

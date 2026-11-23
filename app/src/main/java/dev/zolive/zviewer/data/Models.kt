@@ -59,6 +59,7 @@ data class ReaderSettings(
     val readerDark: Boolean = true,
     val vertical: Boolean = true,
     val rightToLeft: Boolean = false,
+    val horizontalVideoSeek: Boolean = true,
     val keepScreenOn: Boolean = true,
     val volumeKeyPaging: Boolean = false,
     val doubleTapZoom: Boolean = true,

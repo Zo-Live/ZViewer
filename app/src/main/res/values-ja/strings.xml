@@ -104,6 +104,7 @@
     <string name="reader_dark">閲覧画面の背景を暗くする</string>
     <string name="reader_dark_hint">オフにするとアプリのテーマにかかわらず明るい背景を使います</string>
     <string name="reader_rtl">右から左にページをめくる</string>
+    <string name="horizontal_video_seek">左右スワイプで動画の再生位置を調整</string>
     <string name="keep_screen_on">閲覧中は画面を点灯</string>
     <string name="volume_key_paging">音量キーでページをめくる</string>
     <string name="double_tap_zoom">ダブルタップで拡大・縮小</string>
