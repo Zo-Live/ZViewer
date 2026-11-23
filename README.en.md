@@ -31,8 +31,10 @@ Android usually does not allow granting access to the internal storage root, the
 | Library         | Recursive scan, search, reading-status filter, recently read, favorites                                  |
 | Reading         | Continuous vertical / horizontal / right-to-left paging, mixed images and videos, looping, auto-saved progress |
 
-- Long-press any comic cover to manage favorites in bulk.
 - The interface defaults to Simplified Chinese. Choose Traditional Chinese, English, or Japanese under Settings → Preferences → Language.
+- Long-press any comic cover to manage favorites in bulk.
+- On the video screen, press and hold, then swipe up and release to keep the current video at 2× speed. Press and hold, then swipe down and release to return to 1× speed.
+- Long-press the playback speed in the video toolbar to lock or unlock that speed for all videos in the comic.
 - If something goes wrong, enable "Diagnostic log" in Settings and pick a log folder, then share the log file with the developer after reproducing the issue.
 
 ## Format Support and Limitations
