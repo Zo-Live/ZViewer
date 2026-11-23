@@ -11,12 +11,13 @@ import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.rememberTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.*
@@ -38,6 +39,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
@@ -76,7 +78,7 @@ private const val FastSpeed = 2f
 private const val MaxSwipeSeekMs = 60_000L
 private val videoSpeedOptions = listOf(2f to "2.0x", 1.5f to "1.5x", 1f to "1.0x", .75f to "0.75x", .5f to "0.5x")
 
-internal class VideoPlaybackState(val player: ExoPlayer) {
+internal class VideoPlaybackState(val player: ExoPlayer, private val pool: VideoPlaybackPool) {
     var index by mutableIntStateOf(-1)
     var position by mutableLongStateOf(0L)
     var duration by mutableLongStateOf(0L)
@@ -108,7 +110,8 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     private var swipeSeekOrigin: Long? = null
     var speed by mutableFloatStateOf(NormalSpeed)
         private set
-    private var speedLocked = false
+    val speedLocked: Boolean get() = pool.lockedSpeed != null
+    private var holdSpeedLocked = false
     private var speedBeforeHold: Float? = null
     private var playingBeforeHold = false
     var saveProgress: (Int, Long) -> Unit = { _, _ -> }
@@ -183,14 +186,21 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     }
 
     fun selectSpeed(value: Float): Boolean {
-        if (released || speedBeforeHold != null || value == speed) return false
-        speedLocked = value == FastSpeed
-        applySpeed(value)
+        if (released || speedLocked || speedBeforeHold != null || value == speed) return false
+        resetSpeed(value)
         return true
     }
 
+    fun toggleSpeedLock(): Boolean? {
+        if (released || speedBeforeHold != null) return null
+        val locked = !speedLocked
+        pool.setLockedSpeed(speed.takeIf { locked }, this)
+        return locked
+    }
+
     fun startSpeedHold(): Boolean {
-        if (released || failed || index < 0 || !ready || scrubPosition != null || speedBeforeHold != null) return false
+        if (released || failed || index < 0 || !ready || scrubPosition != null ||
+            speedLocked || speedBeforeHold != null) return false
         speedBeforeHold = speed
         playingBeforeHold = playRequested
         playRequested = true
@@ -205,23 +215,23 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
         if (end == SpeedHoldEnd.Cancel) {
             playRequested = playingBeforeHold
             applySpeed(original)
-        } else if (end == SpeedHoldEnd.Up && !speedLocked) {
-            speedLocked = true
+        } else if (end == SpeedHoldEnd.Up && !holdSpeedLocked) {
+            holdSpeedLocked = true
             return HapticFeedbackConstantsCompat.CONFIRM
-        } else if (end == SpeedHoldEnd.Down && speedLocked) {
-            speedLocked = false
+        } else if (end == SpeedHoldEnd.Down && holdSpeedLocked) {
+            holdSpeedLocked = false
             applySpeed(NormalSpeed)
             return HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_DEACTIVATE
-        } else if (!speedLocked) {
+        } else if (!holdSpeedLocked) {
             applySpeed(NormalSpeed)
         }
         return HapticFeedbackConstantsCompat.NO_HAPTICS
     }
 
-    fun resetSpeed() {
-        speedBeforeHold = null
-        speedLocked = false
-        applySpeed(NormalSpeed)
+    fun resetSpeed(value: Float = pool.lockedSpeed ?: NormalSpeed) {
+        finishSpeedHold(SpeedHoldEnd.Cancel)
+        holdSpeedLocked = !speedLocked && value == FastSpeed
+        applySpeed(value)
     }
 
     private fun applySpeed(value: Float) {
@@ -318,22 +328,22 @@ internal class VideoPlaybackState(val player: ExoPlayer) {
     fun isReleased(): Boolean = released
 }
 
-internal fun createVideoPlaybackState(context: Context): VideoPlaybackState =
-    VideoPlaybackState(ExoPlayer.Builder(context).build())
-
 /**
  * 按 Pager 虚拟项管理播放器。循环模式下同一真实页面可能同时出现在相邻的两个虚拟项中，
  * 每个虚拟项各自持有播放器，避免两个视图争抢同一个输出 Surface 而出现黑屏；离开可见范围后及时回收。
  */
-internal class VideoPlaybackPool(private val context: Context) {
+internal class VideoPlaybackPool(private val context: Context, private val speedLock: MutableState<Float?>) {
     private class Entry(val state: VideoPlaybackState) { var refs = 0 }
 
     private val entries = mutableStateMapOf<Int, Entry>()
 
+    var lockedSpeed by speedLock
+        private set
+
     val size: Int get() = entries.size
 
     fun acquire(item: Int): VideoPlaybackState {
-        val entry = entries.getOrPut(item) { Entry(createVideoPlaybackState(context)) }
+        val entry = entries.getOrPut(item) { Entry(VideoPlaybackState(ExoPlayer.Builder(context).build(), this)) }
         entry.refs++
         return entry.state
     }
@@ -347,6 +357,13 @@ internal class VideoPlaybackPool(private val context: Context) {
     }
 
     fun get(item: Int): VideoPlaybackState? = entries[item]?.state
+
+    fun setLockedSpeed(value: Float?, current: VideoPlaybackState) {
+        lockedSpeed = value
+        entries.values.forEach { entry ->
+            if (value != null || entry.state !== current) entry.state.resetSpeed()
+        }
+    }
 
     fun snapshot(): List<Pair<Int, VideoPlaybackState>> = entries.map { it.key to it.value.state }
 
@@ -646,16 +663,38 @@ internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean =
 
 @Composable
 private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
-    var expanded by remember(state, enabled) { mutableStateOf(false) }
+    val locked = state.speedLocked
+    var expanded by remember(state, enabled, locked) { mutableStateOf(false) }
     var anchorTop by remember { mutableFloatStateOf(0f) }
     val animationSpeed = animationSpeed(AnimationEffect.VideoSpeedMenu)
     val haptic = hapticFeedback(HapticEvent.VideoSpeedSelection)
+    val lockHaptic = hapticFeedback(HapticEvent.VideoSpeedLock)
     val label = stringResource(R.string.video_speed)
+    val lockAction = stringResource(if (locked) R.string.unlock_video_speed else R.string.lock_video_speed)
+    val lockDescription = stringResource(R.string.video_speed_locked)
+    val style = MaterialTheme.typography.labelMedium
     Box(Modifier.onGloballyPositioned { anchorTop = it.boundsInWindow().top }) {
-        Box(Modifier.height(40.dp).widthIn(min = 48.dp)
-            .clickable(enabled = enabled, role = Role.Button, onClickLabel = label) { expanded = true }
-            .padding(end = 4.dp), contentAlignment = Alignment.CenterEnd) {
-            Text(videoSpeedOptions.first { it.first == state.speed }.second, style = MaterialTheme.typography.labelMedium)
+        Row(Modifier.height(40.dp).widthIn(min = 48.dp)
+            .combinedClickable(
+                enabled = enabled, role = Role.Button, onClickLabel = label.takeUnless { locked },
+                onClick = { if (!locked) expanded = true },
+                onLongClickLabel = lockAction, hapticFeedbackEnabled = false,
+                onLongClick = {
+                    state.toggleSpeedLock()?.let { locked ->
+                        lockHaptic(if (locked) HapticFeedbackConstantsCompat.CONFIRM
+                            else HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_DEACTIVATE)
+                    }
+                },
+            )
+            .semantics { if (locked) stateDescription = lockDescription }
+            .padding(end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+        ) {
+            if (locked) {
+                val iconSize = with(LocalDensity.current) { style.fontSize.toDp() }
+                Icon(Icons.Outlined.Lock, null, Modifier.size(iconSize))
+            }
+            Text(videoSpeedOptions.first { it.first == state.speed }.second, style = style)
         }
         if (expanded) {
             Popup(AboveSpeedButton, onDismissRequest = { expanded = false }, properties = PopupProperties(focusable = true)) {

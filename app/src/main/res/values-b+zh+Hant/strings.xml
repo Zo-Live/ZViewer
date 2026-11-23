@@ -229,6 +229,9 @@
     <string name="play_video">播放影片</string>
     <string name="video_playback_progress">影片播放進度</string>
     <string name="video_speed">播放倍速</string>
+    <string name="lock_video_speed">鎖定播放倍速</string>
+    <string name="unlock_video_speed">解鎖播放倍速</string>
+    <string name="video_speed_locked">播放倍速已鎖定</string>
     <string name="update_prompt">偵測到新版本：%1$s\n要立即更新嗎？</string>
     <string name="update_later">稍後更新</string>
     <string name="update_now">Update</string>

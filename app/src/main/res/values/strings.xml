@@ -230,6 +230,9 @@
     <string name="play_video">播放视频</string>
     <string name="video_playback_progress">视频播放进度</string>
     <string name="video_speed">播放倍速</string>
+    <string name="lock_video_speed">锁定播放倍速</string>
+    <string name="unlock_video_speed">解锁播放倍速</string>
+    <string name="video_speed_locked">播放倍速已锁定</string>
     <string name="update_prompt">检测到新版本：%1$s\n是否立即更新？</string>
     <string name="update_later">稍后更新</string>
     <string name="update_now">立即更新</string>

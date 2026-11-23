@@ -26,7 +26,7 @@ import dev.zolive.zviewer.data.*
 import dev.zolive.zviewer.reader.ZoomVideoView
 import dev.zolive.zviewer.reader.ZoomImageView
 import dev.zolive.zviewer.ui.ReaderScreen
-import dev.zolive.zviewer.ui.createVideoPlaybackState
+import dev.zolive.zviewer.ui.VideoPlaybackPool
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Rule
@@ -555,6 +555,40 @@ class ReaderInteractionTest {
         rule.onNode(button and hasText(displayed)).assertIsDisplayed()
     }
 
+    @Test fun toolbarSpeedLockFollowsMixedContentAndUnlockKeepsCurrentRate() {
+        open(mixed = true, vertical = false, loop = false,
+            names = listOf("moving-video/moving.mp4", "page1.png", "video-folder/video2.mp4"))
+        toggleControls()
+        val button = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
+        val menuItem = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
+        val locked = SemanticsMatcher.expectValue(
+            SemanticsProperties.StateDescription, rule.activity.getString(R.string.video_speed_locked),
+        )
+        val speed = rule.onNode(button and hasText("1.5x"))
+        rule.onNode(button and hasText("1.0x")).performClick()
+        rule.onNode(menuItem and hasText("1.5x")).performClick()
+        speed.performTouchInput { longClick() }.assert(locked)
+        rule.onNode(menuItem and hasText("1.5x")).assertDoesNotExist()
+
+        swipe(vertical = false)
+        rule.waitUntil(15_000) { currentPage == 1 }
+        swipe(vertical = false)
+        rule.waitUntil(15_000) { currentPage == 2 }
+        waitForVideo()
+        speed.assert(locked)
+        rule.runOnIdle { assertEquals(1.5f, currentVideoView().playerView.player!!.playbackParameters.speed, 0f) }
+        speed.performTouchInput { longClick() }.assert(!locked)
+        rule.runOnIdle { assertEquals(1.5f, currentVideoView().playerView.player!!.playbackParameters.speed, 0f) }
+
+        swipe(forward = false, vertical = false)
+        rule.waitUntil(15_000) { currentPage == 1 }
+        swipe(forward = false, vertical = false)
+        rule.waitUntil(15_000) { currentPage == 0 }
+        waitForVideo()
+        rule.onNode(button and hasText("1.0x")).assertIsDisplayed()
+        rule.runOnIdle { assertEquals(1f, currentVideoView().playerView.player!!.playbackParameters.speed, 0f) }
+    }
+
     @Test fun horizontalVideoSwipeSeeksOnlyWhenEnabledAndDirectionMatches() {
         open(names = listOf("moving-video/moving.mp4", "video-folder/video2.mp4"))
         val player = rule.runOnIdle { currentVideoView().playerView.player!! }
@@ -978,7 +1012,8 @@ class ReaderInteractionTest {
     @Test fun staleVideoViewReleaseKeepsNewOwnerSurface() {
         rule.runOnUiThread {
             val context = rule.activity
-            val state = createVideoPlaybackState(context)
+            val pool = VideoPlaybackPool(context, mutableStateOf(null))
+            val state = pool.acquire(0)
             try {
                 val active = ZoomVideoView(context)
                 val transient = ZoomVideoView(context)
@@ -998,7 +1033,7 @@ class ReaderInteractionTest {
                 assertNull(active.playerView.player)
                 assertNull(state.ownerView)
             } finally {
-                state.release()
+                pool.releaseAll()
             }
         }
     }

@@ -229,6 +229,9 @@
     <string name="play_video">Play video</string>
     <string name="video_playback_progress">Video playback position</string>
     <string name="video_speed">Playback speed</string>
+    <string name="lock_video_speed">Lock playback speed</string>
+    <string name="unlock_video_speed">Unlock playback speed</string>
+    <string name="video_speed_locked">Playback speed locked</string>
     <string name="update_prompt">Version %1$s is available.\nWould you like to update now?</string>
     <string name="update_later">Later</string>
     <string name="update_now">Update now</string>

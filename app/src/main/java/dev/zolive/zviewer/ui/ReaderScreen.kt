@@ -203,7 +203,10 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             renderedPreviewPage = null
         }
     }
-    val videoPool = remember(session.book.cacheKey, videoBook) { if (videoBook) VideoPlaybackPool(context) else null }
+    val videoPool = if (videoBook) {
+        val speedLock = rememberSaveable(session.book.cacheKey) { mutableStateOf<Float?>(null) }
+        remember(session, context) { VideoPlaybackPool(context, speedLock) }
+    } else null
     val videoPagerItems = remember(session, paging) { mutableMapOf<Int, @Composable (VideoPagerItem) -> Unit>() }
     DisposableEffect(videoPool) {
         onDispose { videoPool?.releaseAll() }
