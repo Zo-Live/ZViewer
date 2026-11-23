@@ -516,6 +516,29 @@ class ReaderInteractionTest {
             .fetchSemanticsNode().boundsInRoot.center.y
         root.performTouchInput { longClick(Offset(width * .30f, toolbarY), 650) }
         assertEquals(1f, speed(), 0f)
+
+        val button = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
+        val menuItem = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
+        for ((label, rate) in listOf("0.5x" to .5f, "0.75x" to .75f, "1.5x" to 1.5f)) {
+            rule.onNode(button and hasText("1.0x")).performClick()
+            rule.onNode(menuItem and hasText(label)).performClick()
+            assertEquals(rate, speed(), 0f)
+
+            hold()
+            rule.waitUntil(4_000) { speed() == 2f }
+            root.performTouchInput { up() }
+            assertEquals(rate, speed(), 0f)
+
+            hold()
+            rule.waitUntil(4_000) { speed() == 2f }
+            root.performTouchInput { moveBy(Offset(0f, height * .15f)); up() }
+            assertEquals(1f, speed(), 0f)
+        }
+
+        hold()
+        rule.waitUntil(4_000) { speed() == 2f }
+        root.performTouchInput { moveBy(Offset(0f, height * .15f)); up() }
+        assertEquals(1f, speed(), 0f)
         hold()
         rule.waitUntil(4_000) { speed() == 2f }
         root.performTouchInput { cancel() }
@@ -622,7 +645,24 @@ class ReaderInteractionTest {
         swipe(forward = false, vertical = false)
         rule.waitUntil(15_000) { currentPage == 1 }
         waitForVideo()
-        rule.onNode(button and hasText("1.0x")).assertIsDisplayed()
+        val normalSpeed = rule.onNode(button and hasText("1.0x"))
+        normalSpeed.assertIsDisplayed()
+        assertPlayerSpeed(1f)
+
+        normalSpeed.performTouchInput { longClick() }.assert(locked)
+        normalSpeed.performClick()
+        rule.onNode(menuItem and hasText("0.75x")).performClick()
+        speed.assert(locked)
+        root.performTouchInput { down(Offset(width * .82f, height * .45f)); advanceEventTime(650) }
+        rule.waitUntil(4_000) { rule.runOnIdle { currentVideoView().playerView.player!!.playbackParameters.speed == 2f } }
+        root.performTouchInput { moveBy(Offset(0f, height * .15f)); up() }
+        normalSpeed.assert(locked)
+        assertPlayerSpeed(1f)
+
+        swipe(forward = false, vertical = false)
+        rule.waitUntil(15_000) { currentPage == 0 }
+        waitForVideo()
+        normalSpeed.assert(locked)
         assertPlayerSpeed(1f)
     }
 

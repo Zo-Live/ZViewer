@@ -116,7 +116,6 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
     var speed by mutableFloatStateOf(NormalSpeed)
         private set
     val speedLocked: Boolean get() = pool.lockedSpeed != null
-    private var holdSpeedLocked = false
     private var speedBeforeHold: Float? = null
     private var playingBeforeHold = false
     var saveProgress: (Int, Long) -> Unit = { _, _ -> }
@@ -232,21 +231,20 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
         if (end == SpeedHoldEnd.Cancel) {
             playRequested = playingBeforeHold
             applySpeed(original)
-        } else if (end == SpeedHoldEnd.Up && !holdSpeedLocked) {
+        } else if (end == SpeedHoldEnd.Up && original != FastSpeed) {
             changeSpeed(FastSpeed)
             return HapticFeedbackConstantsCompat.CONFIRM
-        } else if (end == SpeedHoldEnd.Down && holdSpeedLocked) {
+        } else if (end == SpeedHoldEnd.Down && original != NormalSpeed) {
             changeSpeed(NormalSpeed)
             return HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_DEACTIVATE
-        } else if (!holdSpeedLocked) {
-            applySpeed(pool.lockedSpeed ?: NormalSpeed)
+        } else {
+            applySpeed(original)
         }
         return HapticFeedbackConstantsCompat.NO_HAPTICS
     }
 
     fun resetSpeed(value: Float = pool.lockedSpeed ?: NormalSpeed) {
         finishSpeedHold(SpeedHoldEnd.Cancel)
-        holdSpeedLocked = value == FastSpeed
         applySpeed(value)
     }
 
