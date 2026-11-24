@@ -24,6 +24,8 @@ internal class ReaderPageGroups(private val videos: List<Boolean>, looping: Bool
 
     fun offsetOf(page: Int): Int = Math.floorMod(page - start, videos.size) - groupStarts[groupAt(page)]
 
+    fun cycleOffsetOf(page: Int): Int = if (page < start) 1 else 0
+
     fun pageAt(group: Int, offset: Int = 0): Int = (start + groupStarts[group] + offset) % videos.size
 
     fun pageCount(group: Int): Int = (groupStarts.getOrNull(group + 1) ?: videos.size) - groupStarts[group]

@@ -1,5 +1,7 @@
 package dev.zolive.zviewer.reader
 
+internal data class ReaderMediaItem(val page: Int, val cycle: Int)
+
 class ReaderPaging(val pageCount: Int, loop: Boolean) {
     init { require(pageCount > 0) }
 
@@ -9,6 +11,15 @@ class ReaderPaging(val pageCount: Int, loop: Boolean) {
     fun pageAt(item: Int): Int = Math.floorMod(item, pageCount)
 
     fun anchor(page: Int): Int = if (looping) (itemCount / pageCount / 2) * pageCount + page else page
+
+    internal fun cycleAt(item: Int): Int = if (looping) item / pageCount - anchor(0) / pageCount else 0
+
+    internal fun itemInCycle(page: Int, cycle: Int): Int {
+        if (!looping) return page
+        val anchorCycle = anchor(0) / pageCount
+        val targetCycle = (anchorCycle + cycle).coerceIn(0, itemCount / pageCount - 1)
+        return targetCycle * pageCount + page
+    }
 
     fun destination(target: Int): Int = if (looping) Math.floorMod(target, pageCount) else target.coerceIn(0, pageCount - 1)
 

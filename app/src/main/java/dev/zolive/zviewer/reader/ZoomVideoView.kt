@@ -3,8 +3,11 @@ package dev.zolive.zviewer.reader
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.RectF
 import android.graphics.SurfaceTexture
 import android.graphics.drawable.BitmapDrawable
 import android.view.GestureDetector
@@ -27,6 +30,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 internal enum class SpeedHoldEnd { Release, Up, Down, Cancel }
+internal data class VideoZoom(val scale: Float, val offsetX: Float, val offsetY: Float)
 
 class ZoomVideoView(context: Context) : FrameLayout(context) {
     val playerView = LayoutInflater.from(context).inflate(R.layout.reader_video, this, false) as PlayerView
@@ -80,6 +84,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     private var fillScreen = false
     private var panLimitX = 0f
     private var panLimitY = 0f
+    private var pendingZoom: VideoZoom? = null
     private val zoomAnimator = ZoomAnimator()
     private var multiTouch = false
     private var lastCommand = 0
@@ -165,6 +170,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         page = index
         zoomAnimator.cancel()
         zoom = 1f
+        pendingZoom = null
         offsetX = 0f
         offsetY = 0f
         updateTransform()
@@ -216,6 +222,33 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         coverView.visibility = if (visible) INVISIBLE else VISIBLE
     }
 
+    internal fun zoomPosition() = pendingZoom ?: VideoZoom(zoom, offsetX, offsetY)
+
+    internal fun restoreZoom(position: VideoZoom) {
+        pendingZoom = position
+        updateTransform()
+    }
+
+    internal fun captureVideoFrame(): Bitmap? {
+        if (coverView.visibility == VISIBLE || !textureView.isAvailable || width <= 0 || height <= 0) return null
+        val textureScale = minOf(1f, 1600f / maxOf(textureView.width, textureView.height).coerceAtLeast(1))
+        val source = textureView.getBitmap((textureView.width * textureScale).roundToInt().coerceAtLeast(1),
+            (textureView.height * textureScale).roundToInt().coerceAtLeast(1)) ?: return null
+        val scale = minOf(1f, 1600f / maxOf(width, height))
+        val frame = Bitmap.createBitmap((width * scale).roundToInt().coerceAtLeast(1),
+            (height * scale).roundToInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        val centerX = width / 2f + offsetX
+        val centerY = height / 2f + offsetY
+        val halfWidth = textureView.width * zoom / 2f
+        val halfHeight = textureView.height * zoom / 2f
+        val rect = RectF(centerX - halfWidth, centerY - halfHeight, centerX + halfWidth, centerY + halfHeight)
+        Canvas(frame).apply {
+            scale(scale, scale)
+            drawBitmap(source, null, rect, Paint(Paint.FILTER_BITMAP_FLAG))
+        }
+        return frame
+    }
+
     fun command(sequence: Int, action: Int) {
         if (sequence == lastCommand) return
         lastCommand = sequence
@@ -241,6 +274,14 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     }
 
     private fun updateTransform() {
+        if (width > 0 && height > 0 && (!fillScreen || isVideoLayoutReady)) {
+            pendingZoom?.let { position ->
+                zoom = position.scale
+                offsetX = position.offsetX
+                offsetY = position.offsetY
+                pendingZoom = null
+            }
+        }
         var frameWidth = width
         var frameHeight = height
         if (fillScreen) {

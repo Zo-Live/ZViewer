@@ -72,6 +72,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -86,6 +87,7 @@ import dev.zolive.zviewer.data.PagedImageFit
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.PageSource
 import dev.zolive.zviewer.reader.ImageLoader
+import dev.zolive.zviewer.reader.ReaderMediaItem
 import dev.zolive.zviewer.reader.ReaderPageGroups
 import dev.zolive.zviewer.reader.ReaderPaging
 import dev.zolive.zviewer.reader.ZoomImageView
@@ -98,6 +100,7 @@ import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -106,6 +109,7 @@ private const val FastPagePreviewHoldMillis = 250L
 private typealias ReaderPagerItem = @Composable (Int) -> Unit
 private data class ReaderItem(val panel: Int, val index: Int)
 private data class ImageRunJump(val item: ReaderItem, val anchor: Pair<Int, Int>? = null)
+private data class VideoModeTransition(val state: VideoPlaybackState, val frame: Bitmap)
 
 private fun LazyListState.anchor() = firstVisibleItemIndex to firstVisibleItemScrollOffset
 
@@ -167,9 +171,21 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         val panel = paging.pageAt(item)
         return groups?.pageAt(panel, offset) ?: panel
     }
+    fun mediaItem(item: Int, index: Int) = ReaderMediaItem(index,
+        if (paging.looping) paging.cycleAt(item) + (groups?.cycleOffsetOf(index) ?: 0) else 0)
+    var currentCycle by rememberSaveable(session.book.id) { mutableIntStateOf(0) }
     var zoomItem by remember(session, paging, pagerReading, verticalReading, reverseReading) { mutableStateOf<ReaderItem?>(null) }
-    val listState = rememberLazyListState(pagePaging.anchor(currentPage))
-    val pagerState = rememberPagerState(initialPage = paging.anchor(panelOf(currentPage))) { paging.itemCount }
+    val listState = key(pagePaging, pagerReading) { rememberLazyListState(pagePaging.itemInCycle(currentPage, currentCycle)) }
+    val currentPagerItem = paging.itemInCycle(
+        panelOf(currentPage), currentCycle - (groups?.cycleOffsetOf(currentPage) ?: 0),
+    )
+    val pagerState = rememberPagerState(initialPage = currentPagerItem) { paging.itemCount }
+    var positionedPaging by remember { mutableStateOf(paging) }
+    val targetItem = currentPagerItem.takeIf { positionedPaging !== paging }
+    if (targetItem != null) SideEffect {
+        if (pagerReading) pagerState.requestScrollToPage(targetItem)
+        positionedPaging = paging
+    }
     val flingBehavior = pageFlingBehavior(pagerState, pagingSpeed)
     val orientation = if (verticalReading) Orientation.Vertical else Orientation.Horizontal
     val reverseDirection = ScrollableDefaults.reverseDirection(LocalLayoutDirection.current, orientation, reverseReading)
@@ -178,7 +194,8 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         ReaderImageRunScroll(pagerState, verticalReading, reverseDirection, flingThreshold, pagingSpeed)
     } else null
     val latestRunScroll by rememberUpdatedState(runScroll)
-    val settledItem by remember(pagerState) { derivedStateOf { latestRunScroll?.settledPage ?: pagerState.settledPage } }
+    val actualSettledItem by remember(pagerState) { derivedStateOf { latestRunScroll?.settledPage ?: pagerState.settledPage } }
+    val settledItem = targetItem ?: actualSettledItem
     val runLists = remember(groups) { mutableStateMapOf<Int, LazyListState>() }
     var imageJump by remember(groups) { mutableStateOf<ImageRunJump?>(null) }
     val currentList = if (pagerReading) runLists[settledItem] else listState
@@ -209,10 +226,10 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         val first = if (pagerReading) pagerState.currentPage else listState.firstVisibleItemIndex
         val visible = if (pagerReading) emptyList() else listState.layoutInfo.visibleItemsInfo.map { it.index }
         val last = visible.lastOrNull() ?: first
-        (listOf(first) + visible + listOf(last + 1, first - 1))
+        val adjacent = (listOf(first) + visible + listOf(last + 1, first - 1))
             .filter { it in 0 until paging.itemCount }
             .map(paging::pageAt)
-            .distinct()
+        (listOf(currentPage) + adjacent).distinct()
     } else null
     val videoCovers = remember(session) { VideoCoverCache() }
     val pagePreviews = rememberReaderPagePreview(
@@ -261,7 +278,19 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         val speedLock = rememberSaveable(session.book.cacheKey) { mutableStateOf<Float?>(null) }
         remember(session, context) { VideoPlaybackPool(context, speedLock) }
     } else null
-    val pagerItems = remember(session, paging) { mutableMapOf<Int, @Composable (ReaderPagerItem) -> Unit>() }
+    // 视频页在切页模式变化后可能对应新的虚拟位置，按媒体及其所在的循环保留同一页。
+    fun pagerKey(item: Int): String {
+        val index = pageAt(item)
+        val media = mediaItem(item, index)
+        val kind = when {
+            session.pages[index].isVideo -> "video"
+            groups != null -> "group"
+            else -> "image"
+        }
+        return "${session.book.cacheKey}-$kind-$index-${media.cycle}"
+    }
+    val pagerItems = remember(session) { mutableMapOf<String, @Composable (ReaderPagerItem, Int) -> Unit>() }
+    val currentImage = remember(session) { CurrentReaderImage() }
     DisposableEffect(videoPool) {
         onDispose { videoPool?.releaseAll() }
     }
@@ -297,13 +326,11 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         }
     }
 
-    var positionedPaging by remember { mutableStateOf<ReaderPaging?>(null) }
-    LaunchedEffect(pagerReading, paging, verticalReading, reverseReading, videoPool, continuous && settings.continuousImageFitScreen) {
+    LaunchedEffect(paging, listState, pagerReading, verticalReading, reverseReading, videoPool, continuous && settings.continuousImageFitScreen) {
         jumpJob?.cancel()
         val panel = panelOf(currentPage)
-        val item = if (pagerReading && positionedPaging === paging) paging.nearestItem(panel, pagerState.settledPage)
-            else paging.anchor(panel)
-        positionedPaging = if (pagerReading) paging else null
+        val item = if (pagerReading) targetItem ?: paging.nearestItem(panel, pagerState.settledPage)
+            else paging.nearestItem(currentPage, listState.firstVisibleItemIndex)
         if (pagerReading) {
             if (groups != null && !session.pages[currentPage].isVideo) {
                 val offset = groups.offsetOf(currentPage)
@@ -316,7 +343,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         snapshotFlow {
             if (scrubbing) null
             else if (pagerReading) {
-                val panel = settledItem
+                val panel = actualSettledItem
                 val first = pageAt(panel)
                 if (groups == null || session.pages[first].isVideo) panel to first
                 else {
@@ -338,14 +365,33 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             lastItem = item
             if (imageJump?.item?.panel != item) imageJump = null
             videoPool?.onPageSettled(page)
+            val occurrence = if (pagerReading) item else listState.firstVisibleItemIndex
+            currentCycle = mediaItem(occurrence, page).cycle
             currentPage = page
             onProgress(page)
             DiagnosticLog.log("Reader", "停靠到第 ${page + 1}/${session.pages.size} 项")
         }
     }
-    LaunchedEffect(videoBook, settledItem, active) {
+    val settledMediaItem = if (videoBook) mediaItem(settledItem, pageAt(settledItem)) else null
+    val settledVideoItem = settledMediaItem?.takeIf { session.pages[it.page].isVideo }
+    DisposableEffect(videoPool, settledVideoItem) {
+        // 视图换到新的 Pager 位置时，停靠的视频仍持有同一个播放器。
+        if (videoPool != null && settledVideoItem != null) videoPool.acquire(settledVideoItem)
+        onDispose { if (videoPool != null && settledVideoItem != null) videoPool.release(settledVideoItem) }
+    }
+    var videoModeTransition by remember(session) { mutableStateOf<VideoModeTransition?>(null) }
+    LaunchedEffect(videoModeTransition, settings.paged) {
+        val transition = videoModeTransition ?: return@LaunchedEffect
+        withFrameNanos { }
+        withTimeoutOrNull(1500L) {
+            snapshotFlow { transition.state.frameReady || transition.state.failed || transition.state.isReleased() }.first { it }
+        }
+        withFrameNanos { }
+        if (videoModeTransition === transition) videoModeTransition = null
+    }
+    LaunchedEffect(settledMediaItem, active) {
         if (!videoBook || !active) return@LaunchedEffect
-        videoPool?.snapshot()?.forEach { (item, state) -> if (item != settledItem) state.pause() }
+        videoPool?.snapshot()?.forEach { (item, state) -> if (item != settledMediaItem) state.pause() }
     }
     val pageInteractions = if (pagerReading) pagerState.interactionSource else listState.interactionSource
     LaunchedEffect(pageInteractions) {
@@ -452,7 +498,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     val currentPageIsVideo = session.pages[currentPage].isVideo
     val toolbarVideoState = if (scrubbing) pageSliderVideoState
         else if (currentPageIsVideo && pageAt(settledItem) == currentPage) {
-            videoPool?.get(settledItem) ?: pageSliderVideoState
+            settledMediaItem?.let { videoPool?.get(it) } ?: pageSliderVideoState
         } else null
     val onVideoEnded: (VideoPlaybackState) -> Unit = onEnded@{ state ->
         if (scrubbing) return@onEnded
@@ -489,7 +535,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                                 if (zoomItem == item) zoomItem = null
                             }
                         }
-                        ReaderPage(session, index, repository, settings, viewport,
+                        ReaderPage(session, index, repository, settings, viewport, currentImage, index == currentPage,
                             active = active && settled && displayed && normalPageLoading,
                             foreground = foreground, zoomSequence = if (item == zoomItem) zoomSequence else 0,
                             zoomAction = zoomAction, initialRatio = ratios[index], onRatio = { ratios[index] = it },
@@ -538,7 +584,8 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                             imageList(state, item, count)
                         }
                         videoPool != null && session.pages[index].isVideo -> {
-                            ReaderVideoPage(item, index, session, settledItem, repository, videoPool, videoCovers,
+                            ReaderVideoPage(mediaItem(item, index), session, settled = settledItem == item,
+                                neighbor = abs(item - settledItem) <= 1, repository, videoPool, videoCovers,
                                 active, allowPlayback = visible && !scrubbing, settings, foreground, background,
                                 videoPosition, onVideoProgress,
                                 if (zoomItem == ReaderItem(item, 0)) zoomSequence else 0, zoomAction,
@@ -547,7 +594,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         }
                         else -> {
                             val current = if (videoBook) settledItem == item else pagerState.currentPage == item
-                            ReaderPage(session, index, repository, settings, viewport,
+                            ReaderPage(session, index, repository, settings, viewport, currentImage, index == currentPage,
                                 active = active && normalPageLoading && current,
                                 foreground = foreground, zoomSequence = if (zoomItem == ReaderItem(item, 0)) zoomSequence else 0,
                                 zoomAction = zoomAction, loadEnabled = priorityPage == index ||
@@ -559,29 +606,38 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                     }
                 }
                 val itemContent: ReaderPagerItem = { item ->
-                    val content = pagerItems.getOrPut(item) {
-                        movableContentOf<ReaderPagerItem> { page ->
-                            DisposableEffect(item) { onDispose { pagerItems.remove(item) } }
-                            page(item)
+                    if (session.pages[pageAt(item)].isVideo) {
+                        val key = pagerKey(item)
+                        val content = pagerItems.getOrPut(key) {
+                            movableContentOf<ReaderPagerItem, Int> { page, position ->
+                                DisposableEffect(key) { onDispose { pagerItems.remove(key) } }
+                                page(position)
+                            }
                         }
+                        content(pageContent, item)
+                    } else {
+                        pageContent(item)
                     }
-                    content(pageContent)
                 }
                 val nestedScroll = runScroll ?: PagerDefaults.pageNestedScrollConnection(pagerState, orientation)
                 if (verticalReading) {
                     VerticalPager(state = pagerState, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1,
                         flingBehavior = flingBehavior, pageNestedScrollConnection = nestedScroll,
-                        key = { "${session.book.cacheKey}-$it" }) { item -> itemContent(item) }
+                        key = ::pagerKey) { item -> itemContent(item) }
                 } else {
                     HorizontalPager(state = pagerState, reverseLayout = reverseReading, modifier = Modifier.fillMaxSize(),
                         flingBehavior = flingBehavior, pageNestedScrollConnection = nestedScroll,
-                        beyondViewportPageCount = 1, key = { "${session.book.cacheKey}-$it" }) { item -> itemContent(item) }
+                        beyondViewportPageCount = 1, key = ::pagerKey) { item -> itemContent(item) }
                 }
             } else {
                 imageList(listState, -1, paging.itemCount)
             }
             if (controls && (scrubbing || pendingPreviewPage != null) && !showingRenderedPreview) {
                 ReaderPreviewOverlay(pagePreviews, session, settings, viewport, reverseReading, background)
+            }
+            videoModeTransition?.takeIf { it.state.index == currentPage }?.let { transition ->
+                Image(remember(transition.frame) { transition.frame.asImageBitmap() }, null,
+                    Modifier.fillMaxSize().background(background), contentScale = ContentScale.FillBounds)
             }
             if (!controls) {
                 Surface(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(12.dp),
@@ -677,7 +733,14 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
                 Text(stringResource(R.string.reader_settings), style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(24.dp))
-                ReaderPreferences(settings, onSettings)
+                ReaderPreferences(settings) { updated ->
+                    if (mixedBook && updated.paged != settings.paged && settledVideoItem?.page == currentPage) {
+                        val playback = videoPool?.get(settledVideoItem)
+                        val frame = playback?.ownerView?.captureVideoFrame()
+                        if (playback != null && frame != null) videoModeTransition = VideoModeTransition(playback, frame)
+                    }
+                    onSettings(updated)
+                }
                 Spacer(Modifier.height(20.dp))
             }
         }
@@ -712,7 +775,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
  */
 @Composable
 private fun ReaderVideoPage(
-    item: Int, index: Int, session: BookSession, settledItem: Int, repository: BookRepository,
+    item: ReaderMediaItem, session: BookSession, settled: Boolean, neighbor: Boolean, repository: BookRepository,
     pool: VideoPlaybackPool, covers: VideoCoverCache,
     active: Boolean, allowPlayback: Boolean, settings: ReaderSettings, foreground: Color, background: Color,
     videoPosition: (Int) -> Long, onVideoProgress: (Int, Long) -> Unit,
@@ -720,8 +783,7 @@ private fun ReaderVideoPage(
     onEntryReady: (() -> Unit)?,
     onTap: () -> Unit, onEnded: (VideoPlaybackState) -> Unit,
 ) {
-    val settled = settledItem == item
-    val neighbor = abs(item - settledItem) <= 1
+    val index = item.page
     val cover = rememberVideoCover(session, index, repository, covers)
     val state = if (neighbor) remember(item) { pool.acquire(item) } else null
     DisposableEffect(state) { onDispose { if (state != null) pool.release(item) } }
@@ -849,9 +911,23 @@ private fun ReaderPreviewImage(preview: ReaderPagePreview, modifier: Modifier, v
     ), modifier, alignment = alignment, contentScale = scale)
 }
 
+private data class ReaderImageKey(val index: Int, val width: Int, val animationWidth: Int)
+
+private class CurrentReaderImage {
+    private var key: ReaderImageKey? = null
+    private var drawable: Drawable? = null
+
+    operator fun get(key: ReaderImageKey): Drawable? = drawable.takeIf { this.key == key }
+
+    fun retain(key: ReaderImageKey, image: Drawable) {
+        this.key = key
+        drawable = image
+    }
+}
+
 @Composable
 private fun ReaderPage(session: BookSession, index: Int, repository: BookRepository, settings: ReaderSettings,
-    viewport: IntSize, active: Boolean,
+    viewport: IntSize, currentImage: CurrentReaderImage, retainImage: Boolean, active: Boolean,
     foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float? = null,
     onRatio: (Float) -> Unit = {}, loadEnabled: Boolean = true, onLoaded: () -> Unit = {},
     pdfPages: SnapshotStateMap<Int, Result<Bitmap>>? = null,
@@ -878,8 +954,11 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
     val animationWidth = viewportWidth.coerceIn(480, 3200)
     var retry by remember { mutableIntStateOf(0) }
     var failure by remember(session, index, width, animationWidth, retry) { mutableStateOf(false) }
-    val drawable by key(session, index, width, animationWidth, retry) {
-        produceState<Drawable?>(null, loadEnabled) {
+    val imageKey = ReaderImageKey(index, width, animationWidth)
+    val retained = remember(session, imageKey) { currentImage[imageKey].takeIf { retainImage } }
+    val drawable by key(session, imageKey, retry) {
+        val bitmap = remember { (retained as? BitmapDrawable)?.constantState?.newDrawable() }
+        produceState(bitmap, loadEnabled) {
             if (!loadEnabled || value != null || failure) return@produceState
             try {
                 val file = repository.pageFile(session, index)
@@ -891,6 +970,14 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
             }
         }
     }
+    if (retainImage && active) SideEffect { drawable?.let { currentImage.retain(imageKey, it) } }
+    val retainedPreview = if (drawable == null && retained != null && retained !is BitmapDrawable) remember(retained) {
+        // 动图从当前帧接替，新的页面在后台准备自己的动画实例。
+        val scale = minOf(1f, 1600f / maxOf(retained.intrinsicWidth, retained.intrinsicHeight))
+        val frameWidth = (retained.intrinsicWidth * scale).roundToInt().coerceAtLeast(1)
+        val frameHeight = (retained.intrinsicHeight * scale).roundToInt().coerceAtLeast(1)
+        ReaderPagePreview(index, retained.toBitmap(frameWidth, frameHeight))
+    } else null
     val loaded = drawable != null || failure
     LaunchedEffect(loaded, waitingForPreview) {
         if (loaded) {
@@ -899,7 +986,7 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
         }
     }
     ReaderPageContent(index, drawable, failure, settings, viewport, active, foreground, zoomSequence, zoomAction,
-        initialRatio, onRatio, onTap, onRetry = { retry++ }, preview = preview, clipPage = clipPage)
+        initialRatio, onRatio, onTap, onRetry = { retry++ }, preview = retainedPreview ?: preview, clipPage = clipPage)
 }
 
 @Composable

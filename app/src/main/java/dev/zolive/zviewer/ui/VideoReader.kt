@@ -68,6 +68,8 @@ import dev.zolive.zviewer.data.HapticEvent
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.reader.SpeedHoldEnd
 import dev.zolive.zviewer.reader.ZoomVideoView
+import dev.zolive.zviewer.reader.ReaderMediaItem
+import dev.zolive.zviewer.reader.VideoZoom
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.conflate
@@ -89,6 +91,7 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
     var duration by mutableLongStateOf(0L)
     var playing by mutableStateOf(false)
     var playRequested by mutableStateOf(false)
+    private var previewByDefault: Boolean? = null
     var playbackState by mutableIntStateOf(Player.STATE_IDLE)
     var ready by mutableStateOf(false)
     private var surfaceReady by mutableStateOf(false)
@@ -99,7 +102,9 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
      * bound the player. Keeping the owner explicit lets binding transfer in a deterministic order
      * and stops stale views from clearing the player's surface.
      */
-    var ownerView: ZoomVideoView? = null
+    var ownerView by mutableStateOf<ZoomVideoView?>(null)
+        private set
+    private var retainedZoom: VideoZoom? = null
 
     /** Whether the owner view's TextureView currently has a usable Surface for rendering. */
     var surfaceAttached by mutableStateOf(false)
@@ -265,6 +270,12 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
         refresh()
     }
 
+    fun updatePreviewDefault(preview: Boolean) {
+        if (previewByDefault == preview) return
+        previewByDefault = preview
+        playRequested = !preview
+    }
+
     /** 重新从头播放。用于过渡期间当前视频播完时保持循环。 */
     fun replay() {
         player.seekTo(0L)
@@ -292,6 +303,7 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
         }
         val previous = ownerView
         if (previous != null && previous.playerView.player === player) {
+            retainedZoom = previous.zoomPosition()
             previous.showVideoFrame(false)
             previous.bindPlayer(null)
         }
@@ -299,6 +311,8 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
         firstFrameReady = false
         view.showVideoFrame(false)
         view.bindPlayer(player)
+        retainedZoom?.let(view::restoreZoom)
+        retainedZoom = null
         surfaceStateChanged(view, view.isVideoLayoutReady)
     }
 
@@ -310,6 +324,7 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
     fun releaseOwner(view: ZoomVideoView) {
         if (activeView === view) activeView = null
         if (ownerView !== view) return
+        retainedZoom = view.zoomPosition()
         ownerView = null
         surfaceAttached = false
         surfaceReady = false
@@ -350,7 +365,7 @@ internal class VideoPlaybackState(val player: ExoPlayer, private val pool: Video
 internal class VideoPlaybackPool(private val context: Context, private val speedLock: MutableState<Float?>) {
     private class Entry(val state: VideoPlaybackState) { var refs = 0 }
 
-    private val entries = mutableStateMapOf<Int, Entry>()
+    private val entries = mutableStateMapOf<ReaderMediaItem, Entry>()
     private var unlockedPlayback: VideoPlaybackState? = null
 
     var lockedSpeed by speedLock
@@ -358,13 +373,13 @@ internal class VideoPlaybackPool(private val context: Context, private val speed
 
     val size: Int get() = entries.size
 
-    fun acquire(item: Int): VideoPlaybackState {
+    fun acquire(item: ReaderMediaItem): VideoPlaybackState {
         val entry = entries.getOrPut(item) { Entry(VideoPlaybackState(ExoPlayer.Builder(context).build(), this)) }
         entry.refs++
         return entry.state
     }
 
-    fun release(item: Int) {
+    fun release(item: ReaderMediaItem) {
         val entry = entries[item] ?: return
         entry.refs--
         if (entry.refs > 0) return
@@ -373,7 +388,7 @@ internal class VideoPlaybackPool(private val context: Context, private val speed
         entry.state.release()
     }
 
-    fun get(item: Int): VideoPlaybackState? = entries[item]?.state
+    fun get(item: ReaderMediaItem): VideoPlaybackState? = entries[item]?.state
 
     fun setLockedSpeed(value: Float?, current: VideoPlaybackState) {
         lockedSpeed = value
@@ -394,7 +409,7 @@ internal class VideoPlaybackPool(private val context: Context, private val speed
         state.resetSpeed()
     }
 
-    fun snapshot(): List<Pair<Int, VideoPlaybackState>> = entries.map { it.key to it.value.state }
+    fun snapshot(): List<Pair<ReaderMediaItem, VideoPlaybackState>> = entries.map { it.key to it.value.state }
 
     fun releaseAll() {
         unlockedPlayback = null
@@ -486,7 +501,7 @@ internal fun rememberVideoPlayback(
         } else Player.REPEAT_MODE_OFF
     }
     LaunchedEffect(state, settings.videoPreview) {
-        state.playRequested = !settings.videoPreview
+        state.updatePreviewDefault(settings.videoPreview)
     }
     val scrubbing = state.scrubPosition != null
     val shouldPlay = active && allowPlayback && !scrubbing && state.playRequested && state.ready && !state.failed && state.surfaceAttached

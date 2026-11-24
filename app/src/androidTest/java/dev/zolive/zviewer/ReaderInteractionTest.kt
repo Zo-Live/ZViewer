@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.drawable.BitmapDrawable
 import android.os.SystemClock
 import android.provider.DocumentsContract
 import android.view.InputDevice
@@ -28,6 +29,7 @@ import androidx.lifecycle.Lifecycle
 import dev.zolive.zviewer.data.*
 import dev.zolive.zviewer.reader.ZoomVideoView
 import dev.zolive.zviewer.reader.ZoomImageView
+import dev.zolive.zviewer.reader.ReaderMediaItem
 import dev.zolive.zviewer.ui.ReaderScreen
 import dev.zolive.zviewer.ui.VideoPlaybackPool
 import kotlinx.coroutines.runBlocking
@@ -941,6 +943,43 @@ class ReaderInteractionTest {
         }
     }
 
+    @Test fun switchingPageModeReusesTheCurrentImageBitmap() {
+        open(video = false, vertical = false, loop = true, paged = true)
+        rule.runOnIdle { readerSettings.value = readerSettings.value.copy(continuousImageFitScreen = true) }
+        val first = rule.activity.getString(R.string.image_accessibility, 1)
+        fun imageView(): ZoomImageView = descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>()
+            .single { it.contentDescription == first && it.getGlobalVisibleRect(Rect()) }
+        val bitmap = rule.runOnIdle { (imageView().drawable as BitmapDrawable).bitmap }
+        for (paged in listOf(false, true, false)) {
+            rule.runOnIdle { readerSettings.value = readerSettings.value.copy(paged = paged) }
+            rule.runOnIdle {
+                assertEquals(0, currentPage)
+                assertSame(bitmap, (imageView().drawable as BitmapDrawable).bitmap)
+            }
+        }
+    }
+
+    @Test fun switchingPageModeKeepsTheMixedBookPlayerEvenWhenTheVideoMovesBetweenPagerPositions() {
+        open(mixed = true, initialPage = 3, preview = false,
+            names = listOf("page1.png", "page2.png", "page10.png", "moving-video/moving.mp4", "static.png", "video-folder/video10.mp4", "static.jpg"))
+        waitForPlayback()
+        val video = rule.runOnIdle { currentVideoView() }
+        val player = rule.runOnIdle { video.playerView.player!! }
+        val textureView = video.playerView.videoSurfaceView as android.view.TextureView
+        val texture = rule.runOnIdle { textureView.surfaceTexture }
+        for (paged in listOf(true, false, true)) {
+            rule.runOnIdle { readerSettings.value = readerSettings.value.copy(paged = paged) }
+            waitForVideo()
+            rule.runOnIdle {
+                assertEquals(3, currentPage)
+                val current = currentVideoView()
+                assertSame(player, current.playerView.player)
+                if (current === video) assertSame(texture, textureView.surfaceTexture)
+            }
+        }
+        waitForPlayback()
+    }
+
     @Test fun horizontalContinuousImagesMeetWithoutSpacing() {
         open(video = false, loop = false, vertical = false, paged = false)
         dragAcrossHorizontalImage()
@@ -1287,7 +1326,7 @@ class ReaderInteractionTest {
         rule.runOnUiThread {
             val context = rule.activity
             val pool = VideoPlaybackPool(context, mutableStateOf(null))
-            val state = pool.acquire(0)
+            val state = pool.acquire(ReaderMediaItem(0, 0))
             try {
                 val active = ZoomVideoView(context)
                 val transient = ZoomVideoView(context)
