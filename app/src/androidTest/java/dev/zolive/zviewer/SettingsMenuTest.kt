@@ -22,6 +22,7 @@ import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.AnimationSpeed
 import dev.zolive.zviewer.data.AutoLockInterval
 import dev.zolive.zviewer.data.HapticEvent
+import dev.zolive.zviewer.data.PagedImageFit
 import dev.zolive.zviewer.data.PreferenceStore
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -58,7 +59,7 @@ class SettingsMenuTest {
         val sections = listOf(
             "外观" to "应用主题",
             "偏好" to "语言",
-            "阅读" to "切页模式",
+            "阅读" to "画面适配",
             "书库与存储" to "清理阅读缓存",
             "诊断" to "查看日志",
             "安全与隐私" to "启动时验证",
@@ -153,6 +154,49 @@ class SettingsMenuTest {
         mode.assert(hasText("分页"))
         assertTrue(store.settings().paged)
         assertTrue(store.settings().vertical)
+    }
+
+    @Test fun readingFitExpandsInlineAndKeepsSeparateChoices() {
+        setting("阅读").performClick()
+        val fit = setting("画面适配")
+        val image = setting("图片与 PDF")
+        val video = setting("视频")
+        val mode = setting("切页模式")
+        image.assertDoesNotExist()
+        video.assertDoesNotExist()
+        fit.performClick()
+        val rows = listOf(fit, image, video, mode).map { it.fetchSemanticsNode().boundsInRoot.top }
+        assertTrue(rows.zipWithNext().all { (above, below) -> above < below })
+        val labelPositions = listOf("画面适配", "图片与 PDF", "视频").map {
+            rule.onNodeWithText(it, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot.left
+        }
+        assertEquals(1, labelPositions.distinct().size)
+
+        image.assert(hasText("填充屏幕")).performClick()
+        option("填充屏幕").assertIsSelected()
+        option("适应宽度").assertDoesNotExist()
+        option("适应屏幕").performClick()
+        video.assert(hasText("适应屏幕")).performClick()
+        option("填充屏幕").performClick()
+
+        mode.performClick()
+        option("分页").performClick()
+        image.assert(hasText("适应屏幕")).performClick()
+        option("填充屏幕").assertDoesNotExist()
+        option("适应宽度").assertIsNotSelected()
+        option("适应高度").performClick()
+        fit.performClick()
+        image.assertDoesNotExist()
+        video.assertDoesNotExist()
+        fit.performClick()
+        image.assert(hasText("适应高度"))
+        video.assert(hasText("填充屏幕"))
+        mode.performClick()
+        option("连续").performClick()
+        image.assert(hasText("适应屏幕"))
+        assertEquals(PagedImageFit.Height, store.settings().pagedImageFit)
+        assertTrue(store.settings().continuousImageFitScreen)
+        assertTrue(store.settings().videoFillScreen)
     }
 
     @Test fun interactionPreferencesFollowLanguageAndPersist() {

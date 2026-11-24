@@ -5,10 +5,12 @@ import android.view.ViewGroup
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
+import android.graphics.RectF
 import android.os.SystemClock
 import android.provider.DocumentsContract
 import android.view.InputDevice
 import android.view.MotionEvent
+import android.widget.ImageView
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.*
 import androidx.compose.ui.geometry.Offset
@@ -853,6 +855,69 @@ class ReaderInteractionTest {
         assertEquals(setOf(1), visibleImageBounds().keys)
         swipe()
         rule.waitUntil(10_000) { currentPage == 1 && visibleImageBounds().keys == setOf(2) }
+    }
+
+    @Test fun horizontalContinuousFitShowsTheWholePageAtBaseScale() {
+        open(video = false, loop = false, vertical = false, paged = false)
+        val viewport = rule.onRoot().fetchSemanticsNode().boundsInRoot
+        val first = rule.activity.getString(R.string.image_accessibility, 1)
+        fun pageSize(): Pair<Int, Int> = rule.runOnIdle {
+            val view = descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>()
+                .single { it.contentDescription == first }
+            view.width to view.height
+        }
+        assertTrue(pageSize().first > viewport.width)
+        rule.runOnIdle { readerSettings.value = readerSettings.value.copy(continuousImageFitScreen = true) }
+        rule.waitUntil(5_000) { pageSize().first == viewport.width.roundToInt() }
+        assertTrue(pageSize().second < viewport.height)
+        val visible = visibleImageBounds().getValue(1)
+        assertEquals(pageSize().first, visible.width())
+        assertEquals(pageSize().second, visible.height())
+        assertEquals(0, rule.runOnIdle { currentPage })
+    }
+
+    @Test fun pagedFitHeightLetsTheReaderPanThenTurnThePage() {
+        open(video = false, loop = false, vertical = false, paged = true)
+        rule.runOnIdle { readerSettings.value = readerSettings.value.copy(pagedImageFit = PagedImageFit.Height) }
+        val first = rule.activity.getString(R.string.image_accessibility, 1)
+        fun pageFrame(): Pair<RectF, Int> = rule.runOnIdle {
+            val view = descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>()
+                .single { it.contentDescription == first }
+            val image = view.drawable
+            val frame = RectF(0f, 0f, image.intrinsicWidth.toFloat(), image.intrinsicHeight.toFloat())
+            view.imageMatrix.mapRect(frame)
+            frame to view.width
+        }
+        val (initial, width) = pageFrame()
+        assertEquals(0f, initial.left, 1f)
+        assertTrue(initial.right > width)
+        rule.onRoot().performTouchInput {
+            swipe(Offset(width * .65f, centerY), Offset(width * .45f, centerY), 350)
+        }
+        assertTrue(pageFrame().first.left < -1f)
+        assertEquals(0, rule.runOnIdle { currentPage })
+        dragAcrossHorizontalImage()
+        if (rule.runOnIdle { currentPage } == 0) swipe(vertical = false)
+        rule.waitUntil(5_000) { rule.runOnIdle { currentPage } == 1 }
+    }
+
+    @Test fun videoFillUsesTheSameCropForTheCoverAndThePlayer() {
+        open(loop = false, preview = false)
+        rule.waitUntil(10_000) { rule.runOnIdle { currentVideoView().isVideoLayoutReady } }
+        rule.runOnIdle {
+            val view = currentVideoView()
+            assertEquals(ImageView.ScaleType.FIT_CENTER, (view.getChildAt(1) as ImageView).scaleType)
+            assertTrue(view.playerView.videoSurfaceView!!.height < view.height)
+            readerSettings.value = readerSettings.value.copy(videoFillScreen = true)
+        }
+        rule.waitUntil(10_000) {
+            rule.runOnIdle {
+                val view = currentVideoView()
+                val surface = requireNotNull(view.playerView.videoSurfaceView)
+                surface.height == view.height && surface.width > view.width && view.isVideoLayoutReady &&
+                    (view.getChildAt(1) as ImageView).scaleType == ImageView.ScaleType.CENTER_CROP
+            }
+        }
     }
 
     @Test fun horizontalContinuousImagesMeetWithoutSpacing() {

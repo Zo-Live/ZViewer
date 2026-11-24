@@ -16,6 +16,11 @@ internal fun readSettings(value: (String, Any?) -> Any?): ReaderSettings {
         readerDark = boolean("reader_dark", true),
         vertical = vertical,
         paged = boolean("paged", !vertical),
+        pagedImageFit = string("paged_image_fit", PagedImageFit.Screen.key).let { key ->
+            PagedImageFit.entries.firstOrNull { it.key == key } ?: PagedImageFit.Screen
+        },
+        continuousImageFitScreen = boolean("continuous_image_fit_screen", false),
+        videoFillScreen = boolean("video_fill_screen", false),
         rightToLeft = boolean("rtl", false),
         horizontalVideoSeek = boolean("horizontal_video_seek", true),
         keepScreenOn = boolean("keep_screen", true),
@@ -68,6 +73,9 @@ internal fun settingsValues(settings: ReaderSettings): Map<String, Any?> = mapOf
     "reader_dark" to settings.readerDark,
     "vertical" to settings.vertical,
     "paged" to settings.paged,
+    "paged_image_fit" to settings.pagedImageFit.key,
+    "continuous_image_fit_screen" to settings.continuousImageFitScreen,
+    "video_fill_screen" to settings.videoFillScreen,
     "rtl" to settings.rightToLeft,
     "keep_screen" to settings.keepScreenOn,
     "horizontal_video_seek" to settings.horizontalVideoSeek,

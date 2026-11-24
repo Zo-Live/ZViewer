@@ -12,7 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.unit.IntSize
 import androidx.core.net.toUri
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
@@ -31,9 +31,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 internal data class ReaderPagePreview(val index: Int, val bitmap: Bitmap) {
-    val ratio: Float get() = (bitmap.width.toFloat() / bitmap.height).coerceAtLeast(.03f)
+    val ratio: Float get() = bitmap.width.toFloat() / bitmap.height
 }
 
 internal data class ReaderPreviewViewport(
@@ -41,6 +42,16 @@ internal data class ReaderPreviewViewport(
     val pages: List<ReaderPagePreview>,
     val alignEnd: Boolean,
 )
+
+internal fun continuousPageSize(viewport: IntSize, ratio: Float, vertical: Boolean, fitScreen: Boolean): IntSize {
+    val width = viewport.width.toFloat()
+    val height = viewport.height.toFloat()
+    val aspect = if (fitScreen) ratio else ratio.coerceAtLeast(.03f)
+    val pageWidth = if (vertical) width else height * aspect
+    val pageHeight = if (vertical) width / aspect else height
+    val scale = if (fitScreen) minOf(1f, width / pageWidth, height / pageHeight) else 1f
+    return IntSize((pageWidth * scale).roundToInt().coerceAtLeast(1), (pageHeight * scale).roundToInt().coerceAtLeast(1))
+}
 
 private const val ImagePreviewMaxPixels = 280_000
 private const val PdfPreviewMaxPixels = 180_000
@@ -50,8 +61,10 @@ internal fun rememberReaderPagePreview(
     session: BookSession,
     repository: BookRepository,
     videoCovers: VideoCoverCache,
+    viewport: IntSize,
     continuous: Boolean,
     vertical: Boolean,
+    fitContinuous: Boolean,
     groups: ReaderPageGroups?,
     looping: Boolean,
     canDecode: () -> Boolean,
@@ -60,7 +73,6 @@ internal fun rememberReaderPagePreview(
     requestedPage: () -> Int?,
 ): State<ReaderPreviewViewport?> {
     val resolver = LocalContext.current.contentResolver
-    val viewport = LocalWindowInfo.current.containerSize
     val width = if (session.pdf != null) {
         (viewport.width / 3).coerceIn(240, 480)
     } else {
@@ -71,7 +83,7 @@ internal fun rememberReaderPagePreview(
             override fun sizeOf(key: Int, value: Bitmap) = value.allocationByteCount
         }
     }
-    val previewState = remember(cache, viewport, continuous, vertical, groups, looping) {
+    val previewState = remember(cache, viewport, continuous, vertical, fitContinuous, groups, looping) {
         mutableStateOf<ReaderPreviewViewport?>(null)
     }
     val latestPage by rememberUpdatedState(requestedPage)
@@ -81,7 +93,7 @@ internal fun rememberReaderPagePreview(
     val store = remember(repository, session, width) {
         ReaderPreviewStore(repository.previewDirectory(session, width), session)
     }
-    LaunchedEffect(cache, store, viewport, continuous, vertical, groups, looping, pdfPages) {
+    LaunchedEffect(cache, store, viewport, continuous, vertical, fitContinuous, groups, looping, pdfPages) {
         store.initialize()
         val failed = mutableSetOf<Int>()
         val count = session.pages.size
@@ -126,8 +138,11 @@ internal fun rememberReaderPagePreview(
             return bitmap
         }
 
-        val viewportLength = (if (vertical) viewport.height else viewport.width).toFloat()
-        fun length(page: ReaderPagePreview) = if (vertical) viewport.width / page.ratio else viewport.height * page.ratio
+        val viewportLength = if (vertical) viewport.height else viewport.width
+        fun length(page: ReaderPagePreview): Int {
+            val size = continuousPageSize(viewport, page.ratio, vertical, fitContinuous)
+            return if (vertical) size.height else size.width
+        }
         fun viewportIndices(target: Int): IntRange = when {
             !continuous || session.pages[target].isVideo -> target..target
             groups != null -> {
@@ -175,7 +190,8 @@ internal fun rememberReaderPagePreview(
                 var before = target - 1
                 while (remaining > 0 && before in indices) {
                     val index = Math.floorMod(before, count)
-                    val preview = ReaderPagePreview(index, bitmapAt(index) ?: return null)
+                    val bitmap = bitmapAt(index) ?: return null
+                    val preview = ReaderPagePreview(index, bitmap)
                     pages.add(0, preview)
                     remaining -= length(preview)
                     before--

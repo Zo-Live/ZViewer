@@ -34,6 +34,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -70,6 +71,7 @@ import dev.zolive.zviewer.data.CacheLimits
 import dev.zolive.zviewer.data.DefaultThemeAccent
 import dev.zolive.zviewer.data.DiagnosticLog
 import dev.zolive.zviewer.data.HapticEvent
+import dev.zolive.zviewer.data.PagedImageFit
 import dev.zolive.zviewer.data.UpdateDownload
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -781,6 +783,7 @@ private fun <T> PreferenceMenu(
 
 @Composable
 fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> Unit) {
+    ReaderFitPreferences(settings, onSettings)
     PreferenceMenu(
         title = stringResource(R.string.page_turn_mode),
         selectedValue = settings.paged,
@@ -805,6 +808,40 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
     PreferenceSwitch(stringResource(R.string.loop_single_video), stringResource(R.string.loop_single_video_hint), settings.videoLoopSingle) { onSettings(settings.copy(videoLoopSingle = it)) }
     PreferenceSwitch(stringResource(R.string.video_preview), stringResource(R.string.video_preview_hint), settings.videoPreview) { onSettings(settings.copy(videoPreview = it)) }
     PreferenceSwitch(stringResource(R.string.loop_mode), stringResource(R.string.loop_mode_hint), settings.loopMode) { onSettings(settings.copy(loopMode = it)) }
+}
+
+@Composable
+private fun ReaderFitPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> Unit) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val action = stringResource(if (expanded) R.string.menu_collapse else R.string.menu_expand)
+    val state = stringResource(if (expanded) R.string.menu_expanded else R.string.menu_collapsed)
+    SettingsListItem(
+        headlineContent = { Text(stringResource(R.string.reader_frame_fit)) },
+        trailingContent = {
+            val arrow = if (expanded) Icons.Outlined.KeyboardArrowDown else Icons.AutoMirrored.Outlined.KeyboardArrowRight
+            Icon(arrow, null)
+        },
+        modifier = Modifier.clickable(role = Role.Button, onClickLabel = action) { expanded = !expanded }
+            .semantics { stateDescription = state },
+    )
+    if (expanded) {
+        val imageTitle = stringResource(R.string.reader_image_and_pdf)
+        val fitScreen = stringResource(R.string.reader_fit_screen)
+        val fillScreen = stringResource(R.string.reader_fill_screen)
+        if (settings.paged) {
+            PreferenceMenu(imageTitle, settings.pagedImageFit, listOf(
+                PagedImageFit.Screen to fitScreen,
+                PagedImageFit.Width to stringResource(R.string.reader_fit_width),
+                PagedImageFit.Height to stringResource(R.string.reader_fit_height),
+            )) { onSettings(settings.copy(pagedImageFit = it)) }
+        } else {
+            PreferenceMenu(imageTitle, settings.continuousImageFitScreen, listOf(false to fillScreen, true to fitScreen)) {
+                onSettings(settings.copy(continuousImageFitScreen = it))
+            }
+        }
+        PreferenceMenu(stringResource(R.string.reader_video_fit), settings.videoFillScreen,
+            listOf(false to fitScreen, true to fillScreen)) { onSettings(settings.copy(videoFillScreen = it)) }
+    }
 }
 
 @Composable

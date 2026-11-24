@@ -53,6 +53,10 @@ enum class AnimationSpeed(val durationScale: Float) {
     Moderate(1f), Enhanced(0.6f),
 }
 
+enum class PagedImageFit(val key: String) {
+    Screen("screen"), Width("width"), Height("height"),
+}
+
 internal const val DefaultThemeAccent = 0xFF49684DL
 
 data class ReaderSettings(
@@ -61,6 +65,9 @@ data class ReaderSettings(
     val readerDark: Boolean = true,
     val vertical: Boolean = true,
     val paged: Boolean = false,
+    val pagedImageFit: PagedImageFit = PagedImageFit.Screen,
+    val continuousImageFitScreen: Boolean = false,
+    val videoFillScreen: Boolean = false,
     val rightToLeft: Boolean = false,
     val horizontalVideoSeek: Boolean = true,
     val keepScreenOn: Boolean = true,

@@ -156,6 +156,13 @@
     <string name="license_notices_intro">ZViewer open-source component licenses\n\nBelow are the licenses for the components used by ZViewer and their native dependencies. The license texts appear in their original languages.</string>
     <string name="loading_licenses">Loading licenses…</string>
     <string name="close">Close</string>
+    <string name="reader_frame_fit">Display fit</string>
+    <string name="reader_image_and_pdf">Images and PDFs</string>
+    <string name="reader_video_fit">Video</string>
+    <string name="reader_fit_screen">Fit screen</string>
+    <string name="reader_fill_screen">Fill screen</string>
+    <string name="reader_fit_width">Fit width</string>
+    <string name="reader_fit_height">Fit height</string>
     <string name="page_turn_mode">Page turn mode</string>
     <string name="page_turn_direction">Page turn direction</string>
     <string name="reading_continuous">Continuous</string>

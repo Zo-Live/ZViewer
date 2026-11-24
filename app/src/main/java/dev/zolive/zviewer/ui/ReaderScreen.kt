@@ -44,6 +44,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.snapshots.SnapshotStateMap
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -54,6 +55,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -63,6 +65,7 @@ import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -79,6 +82,7 @@ import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
 import dev.zolive.zviewer.data.DiagnosticLog
 import dev.zolive.zviewer.data.HapticEvent
+import dev.zolive.zviewer.data.PagedImageFit
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.PageSource
 import dev.zolive.zviewer.reader.ImageLoader
@@ -145,6 +149,13 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     val verticalReading = settings.vertical
     val reverseReading = !verticalReading && settings.rightToLeft
     val continuous = !settings.paged
+    var measuredViewport by remember { mutableStateOf(IntSize.Zero) }
+    val viewport = if (measuredViewport.width > 0 && measuredViewport.height > 0) {
+        measuredViewport
+    } else {
+        val window = LocalWindowInfo.current.containerSize
+        IntSize(window.width.coerceAtLeast(1), window.height.coerceAtLeast(1))
+    }
     val groups = remember(session, settings.loopMode, continuous) {
         if (continuous && mixedBook) ReaderPageGroups(session.pages.map(PageSource::isVideo), settings.loopMode) else null
     }
@@ -205,7 +216,8 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     } else null
     val videoCovers = remember(session) { VideoCoverCache() }
     val pagePreviews = rememberReaderPagePreview(
-        session, repository, videoCovers, continuous, verticalReading, groups, looping = paging.looping,
+        session, repository, videoCovers, viewport, continuous, verticalReading, settings.continuousImageFitScreen,
+        groups, looping = paging.looping,
         canDecode = {
             active && controls && (initialImageLoaded || videoBook) && session.pages.size > 1 && previewPage == null
         },
@@ -286,7 +298,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     }
 
     var positionedPaging by remember { mutableStateOf<ReaderPaging?>(null) }
-    LaunchedEffect(pagerReading, paging, verticalReading, reverseReading, videoPool) {
+    LaunchedEffect(pagerReading, paging, verticalReading, reverseReading, videoPool, continuous && settings.continuousImageFitScreen) {
         jumpJob?.cancel()
         val panel = panelOf(currentPage)
         val item = if (pagerReading && positionedPaging === paging) paging.nearestItem(panel, pagerState.settledPage)
@@ -455,7 +467,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)
         .then(if (visible) Modifier else Modifier.semantics { hideFromAccessibility() })) {
-        Box(Modifier.fillMaxSize().graphicsLayer {
+        Box(Modifier.fillMaxSize().onSizeChanged { measuredViewport = it }.graphicsLayer {
             translationX = size.width * backProgress * .24f
             scaleX = 1f - backProgress * .08f
             scaleY = 1f - backProgress * .08f
@@ -477,23 +489,23 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                                 if (zoomItem == item) zoomItem = null
                             }
                         }
-                        ReaderPage(session, index, repository, continuousVertical = verticalReading,
+                        ReaderPage(session, index, repository, settings, viewport,
                             active = active && settled && displayed && normalPageLoading,
-                            doubleTapZoomEnabled = settings.doubleTapZoom,
                             foreground = foreground, zoomSequence = if (item == zoomItem) zoomSequence else 0,
                             zoomAction = zoomAction, initialRatio = ratios[index], onRatio = { ratios[index] = it },
                             loadEnabled = priorityPage == index || normalPageLoading && (initialImageLoaded || videoBook || first),
                             onLoaded = { onInitialImageLoaded(); loadedItems[item] = Unit }, pdfPages = pdfPages,
                             waitingForPreview = previewPage == index && settled && displayed,
                             onPreviewReady = onPreviewReady, preview = continuousPreviews[index],
-                            onTap = { controls = !controls })
+                            onTap = { controls = !controls }, clipPage = true)
                     }
                 }
                 val modifier = Modifier.fillMaxSize()
                 if (verticalReading) {
-                    LazyColumn(state = state, modifier = modifier, overscrollEffect = if (panel == -1) rememberOverscrollEffect() else null, content = items)
+                    LazyColumn(state = state, modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally,
+                        overscrollEffect = if (panel == -1) rememberOverscrollEffect() else null, content = items)
                 } else {
-                    LazyRow(state = state, modifier = modifier, reverseLayout = reverseReading,
+                    LazyRow(state = state, modifier = modifier, reverseLayout = reverseReading, verticalAlignment = Alignment.CenterVertically,
                         overscrollEffect = if (panel == -1) rememberOverscrollEffect() else null, content = items)
                 }
             }
@@ -535,15 +547,14 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         }
                         else -> {
                             val current = if (videoBook) settledItem == item else pagerState.currentPage == item
-                            ReaderPage(session, index, repository, continuousVertical = null,
+                            ReaderPage(session, index, repository, settings, viewport,
                                 active = active && normalPageLoading && current,
-                                doubleTapZoomEnabled = settings.doubleTapZoom,
                                 foreground = foreground, zoomSequence = if (zoomItem == ReaderItem(item, 0)) zoomSequence else 0,
                                 zoomAction = zoomAction, loadEnabled = priorityPage == index ||
                                     normalPageLoading && (initialImageLoaded || videoBook || current),
                                 onLoaded = onInitialImageLoaded, pdfPages = pdfPages,
                                 waitingForPreview = previewPage == index && current, onPreviewReady = onPreviewReady,
-                                onTap = { controls = !controls }, clipPage = videoBook)
+                                onTap = { controls = !controls }, clipPage = videoBook || settings.pagedImageFit != PagedImageFit.Screen)
                         }
                     }
                 }
@@ -570,7 +581,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 imageList(listState, -1, paging.itemCount)
             }
             if (controls && (scrubbing || pendingPreviewPage != null) && !showingRenderedPreview) {
-                ReaderPreviewOverlay(pagePreviews, session, continuous, verticalReading, reverseReading, background)
+                ReaderPreviewOverlay(pagePreviews, session, settings, viewport, reverseReading, background)
             }
             if (!controls) {
                 Surface(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(12.dp),
@@ -769,20 +780,22 @@ private fun Modifier.blockVideoGestures(): Modifier = pointerInput(Unit) {
 
 @Composable
 private fun ReaderPreviewOverlay(
-    previews: State<ReaderPreviewViewport?>, session: BookSession, continuous: Boolean,
-    vertical: Boolean, reverse: Boolean, background: Color,
+    previews: State<ReaderPreviewViewport?>, session: BookSession, settings: ReaderSettings,
+    viewport: IntSize, reverse: Boolean, background: Color,
 ) {
     val frame = previews.value ?: return
     val pages = frame.pages
-    if (!continuous || session.pages[frame.target].isVideo) {
+    val video = session.pages[frame.target].isVideo
+    if (settings.paged || video) {
         val preview = pages.first()
-        ReaderPreviewImage(preview, Modifier.fillMaxSize().background(background),
-            video = session.pages[preview.index].isVideo)
-    } else if (vertical) {
+        ReaderPreviewImage(preview, Modifier.fillMaxSize().background(background).clipToBounds(),
+            video = video, fit = settings.pagedImageFit, reverse = reverse, videoFill = settings.videoFillScreen)
+    } else if (settings.vertical) {
         Column(Modifier.fillMaxSize().background(background).clipToBounds()
-            .wrapContentHeight(if (frame.alignEnd) Alignment.Bottom else Alignment.Top, unbounded = true)) {
+            .wrapContentHeight(if (frame.alignEnd) Alignment.Bottom else Alignment.Top, unbounded = true),
+            horizontalAlignment = Alignment.CenterHorizontally) {
             for (preview in pages) {
-                ReaderPreviewImage(preview, Modifier.fillMaxWidth().aspectRatio(preview.ratio))
+                ReaderPreviewImage(preview, continuousPageLayout(viewport, preview.ratio, settings))
             }
         }
     } else {
@@ -790,9 +803,10 @@ private fun ReaderPreviewOverlay(
         val readingDirection = if (!reverse) direction else if (direction == LayoutDirection.Ltr) LayoutDirection.Rtl else LayoutDirection.Ltr
         CompositionLocalProvider(LocalLayoutDirection provides readingDirection) {
             Row(Modifier.fillMaxSize().background(background).clipToBounds()
-                .wrapContentWidth(if (frame.alignEnd) Alignment.End else Alignment.Start, unbounded = true)) {
+                .wrapContentWidth(if (frame.alignEnd) Alignment.End else Alignment.Start, unbounded = true),
+                verticalAlignment = Alignment.CenterVertically) {
                 for (preview in pages) {
-                    ReaderPreviewImage(preview, Modifier.fillMaxHeight().aspectRatio(preview.ratio, matchHeightConstraintsFirst = true))
+                    ReaderPreviewImage(preview, continuousPageLayout(viewport, preview.ratio, settings))
                 }
             }
         }
@@ -802,22 +816,47 @@ private fun ReaderPreviewOverlay(
 private val imageDecodeDispatcher = Dispatchers.IO.limitedParallelism(2)
 
 @Composable
-private fun ReaderPreviewImage(preview: ReaderPagePreview, modifier: Modifier, video: Boolean = false) {
-    val bitmap = remember(preview.bitmap) { preview.bitmap.asImageBitmap() }
-    Image(bitmap, stringResource(
-        if (video) R.string.video_accessibility_without_zoom else R.string.image_accessibility_without_zoom,
-        preview.index + 1,
-    ), modifier, contentScale = ContentScale.Fit)
+private fun continuousPageLayout(viewport: IntSize, ratio: Float, settings: ReaderSettings): Modifier {
+    val size = continuousPageSize(viewport, ratio, settings.vertical, settings.continuousImageFitScreen)
+    return with(LocalDensity.current) { Modifier.size(size.width.toDp(), size.height.toDp()) }
 }
 
 @Composable
-private fun ReaderPage(session: BookSession, index: Int, repository: BookRepository, continuousVertical: Boolean?, active: Boolean,
-    doubleTapZoomEnabled: Boolean,
+private fun ReaderPreviewImage(preview: ReaderPagePreview, modifier: Modifier, video: Boolean = false,
+    fit: PagedImageFit = PagedImageFit.Screen, reverse: Boolean = false, videoFill: Boolean = false) {
+    val bitmap = remember(preview.bitmap) { preview.bitmap.asImageBitmap() }
+    val scale = if (video) {
+        if (videoFill) ContentScale.Crop else ContentScale.Fit
+    } else when (fit) {
+        PagedImageFit.Screen -> ContentScale.Fit
+        PagedImageFit.Width -> ContentScale.FillWidth
+        PagedImageFit.Height -> ContentScale.FillHeight
+    }
+    val alignment = if (video || fit == PagedImageFit.Screen) Alignment.Center else remember(fit, reverse) {
+        Alignment { size, space, direction ->
+            val anchor = when {
+                fit == PagedImageFit.Width && size.height > space.height -> Alignment.TopCenter
+                fit == PagedImageFit.Height && size.width > space.width ->
+                    if (reverse) AbsoluteAlignment.CenterRight else AbsoluteAlignment.CenterLeft
+                else -> Alignment.Center
+            }
+            anchor.align(size, space, direction)
+        }
+    }
+    Image(bitmap, stringResource(
+        if (video) R.string.video_accessibility_without_zoom else R.string.image_accessibility_without_zoom,
+        preview.index + 1,
+    ), modifier, alignment = alignment, contentScale = scale)
+}
+
+@Composable
+private fun ReaderPage(session: BookSession, index: Int, repository: BookRepository, settings: ReaderSettings,
+    viewport: IntSize, active: Boolean,
     foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float? = null,
     onRatio: (Float) -> Unit = {}, loadEnabled: Boolean = true, onLoaded: () -> Unit = {},
     pdfPages: SnapshotStateMap<Int, Result<Bitmap>>? = null,
     waitingForPreview: Boolean, onPreviewReady: (Int) -> Unit, preview: ReaderPagePreview? = null, onTap: () -> Unit,
-    clipPage: Boolean = continuousVertical != null) {
+    clipPage: Boolean) {
     if (pdfPages != null) {
         val bitmap = pdfPages[index]?.getOrNull()
         val resources = LocalContext.current.resources
@@ -829,8 +868,8 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
                 if (waitingForPreview) onPreviewReady(index)
             }
         }
-        ReaderPageContent(index, image, pdfPages[index]?.isFailure == true, continuousVertical, active,
-            doubleTapZoomEnabled, foreground, zoomSequence, zoomAction, initialRatio, onRatio, onTap,
+        ReaderPageContent(index, image, pdfPages[index]?.isFailure == true, settings, viewport, active,
+            foreground, zoomSequence, zoomAction, initialRatio, onRatio, onTap,
             onRetry = { pdfPages.remove(index) }, preview = preview, clipPage = clipPage)
         return
     }
@@ -859,35 +898,34 @@ private fun ReaderPage(session: BookSession, index: Int, repository: BookReposit
             if (waitingForPreview) onPreviewReady(index)
         }
     }
-    ReaderPageContent(index, drawable, failure, continuousVertical, active, doubleTapZoomEnabled, foreground, zoomSequence, zoomAction,
+    ReaderPageContent(index, drawable, failure, settings, viewport, active, foreground, zoomSequence, zoomAction,
         initialRatio, onRatio, onTap, onRetry = { retry++ }, preview = preview, clipPage = clipPage)
 }
 
 @Composable
-private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, continuousVertical: Boolean?, active: Boolean,
-    doubleTapZoomEnabled: Boolean, foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float?, onRatio: (Float) -> Unit,
+private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, settings: ReaderSettings, viewport: IntSize, active: Boolean,
+    foreground: Color, zoomSequence: Int, zoomAction: Int, initialRatio: Float?, onRatio: (Float) -> Unit,
     onTap: () -> Unit, onRetry: () -> Unit, preview: ReaderPagePreview?, clipPage: Boolean) {
     val speed = animationSpeed(AnimationEffect.ReaderImageZoom)
     val imageDescription = stringResource(
-        if (doubleTapZoomEnabled) R.string.image_accessibility else R.string.image_accessibility_without_zoom,
+        if (settings.doubleTapZoom) R.string.image_accessibility else R.string.image_accessibility_without_zoom,
         index + 1,
     )
-    val ratio = image?.let { it.intrinsicWidth.toFloat() / it.intrinsicHeight.coerceAtLeast(1) } ?: initialRatio ?: preview?.ratio ?: .70f
+    val ratio = image?.let { it.intrinsicWidth.coerceAtLeast(1).toFloat() / it.intrinsicHeight.coerceAtLeast(1) }
+        ?: initialRatio ?: preview?.ratio ?: .70f
     LaunchedEffect(image) { if (image != null) onRatio(ratio) }
-    val layout = when (continuousVertical) {
-        true -> Modifier.fillMaxWidth().aspectRatio(ratio.coerceAtLeast(.03f))
-        false -> Modifier.fillMaxHeight().aspectRatio(ratio.coerceAtLeast(.03f), matchHeightConstraintsFirst = true)
-        null -> Modifier.fillMaxSize()
-    }
+    val fit = if (settings.paged) settings.pagedImageFit else PagedImageFit.Screen
+    val reverse = fit == PagedImageFit.Height && !settings.vertical && settings.rightToLeft
+    val layout = if (settings.paged) Modifier.fillMaxSize() else continuousPageLayout(viewport, ratio, settings)
     Box(if (clipPage) layout.clipToBounds() else layout, contentAlignment = Alignment.Center) {
         if (image != null) {
             AndroidView(factory = { context -> ZoomImageView(context) }, modifier = Modifier.fillMaxSize(),
                 onRelease = ZoomImageView::clearImage,
                 update = { view ->
                     view.onTap = onTap
-                    view.doubleTapZoomEnabled = doubleTapZoomEnabled
+                    view.doubleTapZoomEnabled = settings.doubleTapZoom
                     view.zoomAnimationSpeed = speed
-                    view.bind(image, imageDescription, active)
+                    view.bind(image, imageDescription, active, fit, reverse)
                     if (zoomSequence > 0) view.command(zoomSequence, zoomAction)
                 })
         } else if (failure) {
@@ -900,7 +938,7 @@ private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, co
                 }
             }
         } else if (preview != null) {
-            ReaderPreviewImage(preview, Modifier.fillMaxSize())
+            ReaderPreviewImage(preview, Modifier.fillMaxSize().clipToBounds(), fit = fit, reverse = reverse)
         } else AppCircularProgressIndicator(Modifier.size(28.dp), color = foreground)
     }
 }

@@ -16,6 +16,7 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.widget.FrameLayout
 import android.widget.ImageView
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import androidx.media3.common.Player
 import dev.zolive.zviewer.R
@@ -162,6 +163,12 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
 
     fun setCoverBackground(color: Int) {
         coverView.setBackgroundColor(color)
+    }
+
+    @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+    internal fun setFillScreen(fill: Boolean) {
+        playerView.resizeMode = if (fill) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
+        coverView.scaleType = if (fill) ImageView.ScaleType.CENTER_CROP else ImageView.ScaleType.FIT_CENTER
     }
 
     fun bindPlayer(player: Player?) {

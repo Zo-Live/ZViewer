@@ -157,6 +157,13 @@
     <string name="license_notices_intro">ZViewer 开源组件许可\n\n以下为所使用组件及其原生依赖的许可文本。许可原文保留其原始语言。</string>
     <string name="loading_licenses">正在读取许可文本…</string>
     <string name="close">关闭</string>
+    <string name="reader_frame_fit">画面适配</string>
+    <string name="reader_image_and_pdf">图片与 PDF</string>
+    <string name="reader_video_fit">视频</string>
+    <string name="reader_fit_screen">适应屏幕</string>
+    <string name="reader_fill_screen">填充屏幕</string>
+    <string name="reader_fit_width">适应宽度</string>
+    <string name="reader_fit_height">适应高度</string>
     <string name="page_turn_mode">切页模式</string>
     <string name="page_turn_direction">切页方向</string>
     <string name="reading_continuous">连续</string>

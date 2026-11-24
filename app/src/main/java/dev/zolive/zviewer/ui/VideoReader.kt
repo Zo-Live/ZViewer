@@ -612,6 +612,7 @@ internal fun VideoPage(
             }, update = { view ->
                 viewRef.value = view
                 view.bindPage(index)
+                view.setFillScreen(settings.videoFillScreen)
                 view.bindCover(cover)
                 view.setCoverBackground(background.toArgb())
                 view.onTap = onTap
