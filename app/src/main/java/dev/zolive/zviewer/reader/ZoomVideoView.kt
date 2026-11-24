@@ -93,10 +93,10 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     private var touchStartY = 0f
     private var speedHeld = false
     private var ignoreTouch = false
-    private val zoomed: Boolean get() = (zoomAnimator.target ?: zoom) > 1f || zoom > 1f
+    private val magnified: Boolean get() = (zoomAnimator.target ?: zoom) > 1f || zoom > 1f
     private val hasCrop: Boolean get() = fillScreen && (panLimitX > 1f || panLimitY > 1f)
     internal val acceptsSwipeSeek: Boolean
-        get() = !zoomed && !hasCrop && !multiTouch && !speedHeld && !ignoreTouch && !scaleDetector.isInProgress
+        get() = !magnified && !hasCrop && !multiTouch && !speedHeld && !ignoreTouch && !scaleDetector.isInProgress
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
             zoomAnimator.cancel()
@@ -114,7 +114,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         override fun onDoubleTap(event: MotionEvent): Boolean {
             if (doubleTapZoomEnabled) {
                 multiTouch = true
-                animateZoom(if ((zoomAnimator.target ?: zoom) > 1.1f) 1f else 2.5f, event.x, event.y)
+                animateZoom(zoomAnimator.doubleTapTarget(zoom), event.x, event.y)
             }
             return true
         }
@@ -257,8 +257,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
             offsetY = 0f
             updateTransform()
         }
-        val target = zoomAnimator.target ?: zoom
-        animateZoom(when (action) { 1 -> target * 1.5f; -1 -> target / 1.5f; else -> 1f }, width / 2f, height / 2f)
+        animateZoom(zoomAnimator.stepTarget(zoom, action), width / 2f, height / 2f)
     }
 
     private fun animateZoom(value: Float, focusX: Float, focusY: Float) {
@@ -267,7 +266,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
 
     private fun setZoom(value: Float, focusX: Float, focusY: Float) {
         val previous = zoom
-        zoom = value.coerceIn(1f, 5f)
+        zoom = value.coerceIn(MinReaderZoom, MaxReaderZoom)
         offsetX = (offsetX - (focusX - width / 2f)) * zoom / previous + (focusX - width / 2f)
         offsetY = (offsetY - (focusY - height / 2f)) * zoom / previous + (focusY - height / 2f)
         updateTransform()
@@ -295,8 +294,8 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
                 frameHeight = maxOf(height, (width / ratio).roundToInt())
             }
         }
-        panLimitX = (frameWidth * zoom - width) / 2f
-        panLimitY = (frameHeight * zoom - height) / 2f
+        panLimitX = ((frameWidth * zoom - width) / 2f).coerceAtLeast(0f)
+        panLimitY = ((frameHeight * zoom - height) / 2f).coerceAtLeast(0f)
         offsetX = offsetX.coerceIn(-panLimitX, panLimitX)
         offsetY = offsetY.coerceIn(-panLimitY, panLimitY)
         playerView.scaleX = zoom
@@ -347,7 +346,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
             touchStartY = event.y
             multiTouch = false
             ignoreTouch = false
-            parent?.requestDisallowInterceptTouchEvent(zoomed || hasCrop)
+            parent?.requestDisallowInterceptTouchEvent(magnified || hasCrop)
         }
         if (ignoreTouch) {
             if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {

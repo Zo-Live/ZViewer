@@ -1012,7 +1012,7 @@ private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, se
                     view.onTap = onTap
                     view.doubleTapZoomEnabled = settings.doubleTapZoom
                     view.zoomAnimationSpeed = speed
-                    view.bind(image, imageDescription, active, fit, reverse)
+                    view.bind(image, imageDescription, active, fit, reverse, viewport.width, viewport.height)
                     if (zoomSequence > 0) view.command(zoomSequence, zoomAction)
                 })
         } else if (failure) {

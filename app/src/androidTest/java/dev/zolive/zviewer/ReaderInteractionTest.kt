@@ -422,6 +422,14 @@ class ReaderInteractionTest {
         }
         rule.onRoot().performTouchInput { doubleClick(Offset(width * .8f, height * .4f)) }
         waitForVideoZoom(1f)
+        rule.onRoot().performTouchInput {
+            val y = height * .4f
+            pinch(Offset(width * .2f, y), Offset(width * .4f, y),
+                Offset(width * .8f, y), Offset(width * .6f, y), durationMillis = 250)
+        }
+        rule.runOnIdle { assertTrue(currentVideoView().playerView.scaleX < .8f) }
+        rule.onRoot().performTouchInput { doubleClick(Offset(centerX, height * .4f)) }
+        waitForVideoZoom(1f)
         swipe(forward = true, vertical = false)
         rule.waitUntil(15_000) { currentPage == 0 }
     }
@@ -440,10 +448,20 @@ class ReaderInteractionTest {
         Thread.sleep(300)
         rule.runOnIdle { assertEquals(1f, currentVideoView().playerView.scaleX, .01f) }
         toggleControls()
-        rule.onNodeWithContentDescription(rule.activity.getString(R.string.zoom_in_video)).performClick()
-        waitForVideoZoom(1.5f)
-        rule.onNodeWithContentDescription(rule.activity.getString(R.string.zoom_out_video)).performClick()
-        waitForVideoZoom(1f)
+        val zoomIn = rule.onNodeWithContentDescription(rule.activity.getString(R.string.zoom_in_video))
+        val zoomOut = rule.onNodeWithContentDescription(rule.activity.getString(R.string.zoom_out_video))
+        for (scale in listOf(1.5f, 2.25f, 3.375f, 5f)) {
+            zoomIn.performClick()
+            waitForVideoZoom(scale)
+        }
+        for (scale in listOf(3.375f, 2.25f, 1.5f, 1f, 1f / 1.5f, 1f / 2.25f, 1f / 3.375f, .2f, .2f)) {
+            zoomOut.performClick()
+            waitForVideoZoom(scale)
+        }
+        for (scale in listOf(1f / 3.375f, 1f / 2.25f, 1f / 1.5f, 1f)) {
+            zoomIn.performClick()
+            waitForVideoZoom(scale)
+        }
     }
 
     @Test fun progressControlsSeekAndHideTogether() {
@@ -848,8 +866,12 @@ class ReaderInteractionTest {
         zoomIn.performClick()
         rule.waitUntil(5_000) { scale(second) > secondScale * 1.45f }
         assertEquals(firstScale, scale(first), .001f)
-        rule.onNodeWithContentDescription(rule.activity.getString(R.string.zoom_out_image)).performClick()
+        val zoomOut = rule.onNodeWithContentDescription(rule.activity.getString(R.string.zoom_out_image))
+        zoomOut.performClick()
         rule.waitUntil(5_000) { kotlin.math.abs(scale(second) - secondScale) < .001f }
+        zoomOut.performClick()
+        rule.waitUntil(5_000) { kotlin.math.abs(scale(second) / secondScale - 1f / 1.5f) < .001f }
+        assertEquals(firstScale, scale(first), .001f)
     }
 
     @Test fun verticalPagedImagesSnapOnePageAtATime() {

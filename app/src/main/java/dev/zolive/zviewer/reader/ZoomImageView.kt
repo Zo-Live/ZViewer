@@ -3,6 +3,7 @@ package dev.zolive.zviewer.reader
 import android.content.Context
 import android.annotation.SuppressLint
 import android.graphics.Matrix
+import android.graphics.Rect
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
 import android.view.GestureDetector
@@ -21,6 +22,8 @@ class ZoomImageView(context: Context) : ImageView(context) {
     private var offsetY = 0f
     private var limitX = 0f
     private var limitY = 0f
+    private var viewportWidth = 0
+    private var viewportHeight = 0
     private var fit = PagedImageFit.Screen
     private var reverse = false
     private var resetPosition = false
@@ -50,7 +53,7 @@ class ZoomImageView(context: Context) : ImageView(context) {
         override fun onSingleTapConfirmed(event: MotionEvent): Boolean { performClick(); return true }
         override fun onDoubleTap(event: MotionEvent): Boolean {
             if (doubleTapZoomEnabled) {
-                animateZoom(if ((zoomAnimator.target ?: zoom) > 1.1f) 1f else 2.5f, event.x, event.y)
+                animateZoom(zoomAnimator.doubleTapTarget(zoom), event.x, event.y)
             }
             return true
         }
@@ -68,8 +71,11 @@ class ZoomImageView(context: Context) : ImageView(context) {
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
     }
 
-    fun bind(image: Drawable, description: String, animate: Boolean, fit: PagedImageFit, reverse: Boolean) {
+    fun bind(image: Drawable, description: String, animate: Boolean, fit: PagedImageFit, reverse: Boolean,
+        viewportWidth: Int, viewportHeight: Int) {
         contentDescription = description
+        this.viewportWidth = viewportWidth
+        this.viewportHeight = viewportHeight
         if (drawable !== image) {
             setAnimationStarted(false)
             setImageDrawable(image)
@@ -104,8 +110,13 @@ class ZoomImageView(context: Context) : ImageView(context) {
     fun command(sequence: Int, action: Int) {
         if (sequence == lastCommand) return
         lastCommand = sequence
-        val target = zoomAnimator.target ?: zoom
-        animateZoom(when (action) { 1 -> target * 1.5f; -1 -> target / 1.5f; else -> 1f }, width / 2f, height / 2f)
+        val target = zoomAnimator.stepTarget(zoom, action)
+        val visible = Rect()
+        val focusOnVisibleArea = (target < 1f || zoom < 1f) &&
+            (width > viewportWidth || height > viewportHeight) && getLocalVisibleRect(visible)
+        val focusX = if (focusOnVisibleArea && width > viewportWidth) visible.exactCenterX() else width / 2f
+        val focusY = if (focusOnVisibleArea && height > viewportHeight) visible.exactCenterY() else height / 2f
+        animateZoom(target, focusX, focusY)
     }
 
     private fun animateZoom(value: Float, focusX: Float, focusY: Float) {
@@ -114,7 +125,7 @@ class ZoomImageView(context: Context) : ImageView(context) {
 
     private fun setZoom(value: Float, focusX: Float, focusY: Float) {
         val previous = zoom
-        zoom = value.coerceIn(1f, 5f)
+        zoom = value.coerceIn(MinReaderZoom, MaxReaderZoom)
         offsetX = (offsetX - (focusX - width / 2f)) * zoom / previous + (focusX - width / 2f)
         offsetY = (offsetY - (focusY - height / 2f)) * zoom / previous + (focusY - height / 2f)
         updateMatrix()
@@ -143,17 +154,20 @@ class ZoomImageView(context: Context) : ImageView(context) {
             offsetY = limitY
             resetPosition = false
         }
-        offsetX = offsetX.coerceIn(-limitX, limitX)
-        offsetY = offsetY.coerceIn(-limitY, limitY)
+        // 连续长页缩小后允许向可见部分偏移，避免画面退到视口外的页中心。
+        val offsetLimitX = if (zoom < 1f && width > viewportWidth) maxOf(limitX, (width - scaledWidth) / 2) else limitX
+        val offsetLimitY = if (zoom < 1f && height > viewportHeight) maxOf(limitY, (height - scaledHeight) / 2) else limitY
+        offsetX = offsetX.coerceIn(-offsetLimitX, offsetLimitX)
+        offsetY = offsetY.coerceIn(-offsetLimitY, offsetLimitY)
         transform.setScale(scale, scale)
         transform.postTranslate((width - scaledWidth) / 2 + offsetX, (height - scaledHeight) / 2 + offsetY)
         imageMatrix = transform
     }
 
-    private val canPanAtBaseScale: Boolean
+    private val hasCrop: Boolean
         get() = fit != PagedImageFit.Screen && (limitX > .5f || limitY > .5f)
 
-    private fun panAtBaseScale(x: Float, y: Float) {
+    private fun panCrop(x: Float, y: Float) {
         val dx = x - lastX
         val dy = y - lastY
         val horizontal = abs(x - downX) > abs(y - downY)
@@ -181,7 +195,7 @@ class ZoomImageView(context: Context) : ImageView(context) {
                 downY = event.y
                 lastX = event.x
                 lastY = event.y
-                parent?.requestDisallowInterceptTouchEvent((zoomAnimator.target ?: zoom) > 1f || zoom > 1f || canPanAtBaseScale)
+                parent?.requestDisallowInterceptTouchEvent((zoomAnimator.target ?: zoom) > 1f || zoom > 1f || hasCrop)
             }
             MotionEvent.ACTION_POINTER_DOWN -> parent?.requestDisallowInterceptTouchEvent(true)
             MotionEvent.ACTION_MOVE -> {
@@ -192,9 +206,9 @@ class ZoomImageView(context: Context) : ImageView(context) {
                         offsetX += event.x - lastX
                         offsetY += event.y - lastY
                         updateMatrix()
-                    } else if (zoom == 1f && canPanAtBaseScale &&
+                    } else if (zoom <= 1f && hasCrop &&
                         kotlin.math.hypot(event.x - downX, event.y - downY) > touchSlop) {
-                        panAtBaseScale(event.x, event.y)
+                        panCrop(event.x, event.y)
                     }
                 }
                 lastX = event.x; lastY = event.y
