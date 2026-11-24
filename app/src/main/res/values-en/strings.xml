@@ -156,9 +156,12 @@
     <string name="license_notices_intro">ZViewer open-source component licenses\n\nBelow are the licenses for the components used by ZViewer and their native dependencies. The license texts appear in their original languages.</string>
     <string name="loading_licenses">Loading licenses…</string>
     <string name="close">Close</string>
-    <string name="reading_mode">Reading mode</string>
-    <string name="reading_vertical">Continuous vertical</string>
-    <string name="reading_horizontal">Horizontal paging</string>
+    <string name="page_turn_mode">Page turn mode</string>
+    <string name="page_turn_direction">Page turn direction</string>
+    <string name="reading_continuous">Continuous</string>
+    <string name="reading_paged">Paged</string>
+    <string name="reading_vertical">Vertical</string>
+    <string name="reading_horizontal">Horizontal</string>
     <string name="reader_dark">Dark reading background</string>
     <string name="reader_dark_hint">Turn off for a light reading background regardless of the app theme</string>
     <string name="reader_rtl">Right-to-left paging</string>

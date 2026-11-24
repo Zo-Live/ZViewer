@@ -58,7 +58,7 @@ class SettingsMenuTest {
         val sections = listOf(
             "外观" to "应用主题",
             "偏好" to "语言",
-            "阅读" to "阅读模式",
+            "阅读" to "切页模式",
             "书库与存储" to "清理阅读缓存",
             "诊断" to "查看日志",
             "安全与隐私" to "启动时验证",
@@ -146,12 +146,13 @@ class SettingsMenuTest {
 
         rule.onNodeWithContentDescription("返回设置").performClick()
         setting("阅读").performClick()
-        val reading = setting("阅读模式").performScrollTo()
-        reading.assert(hasText("垂直连续")).performClick()
-        option("垂直连续").assertIsSelected()
-        option("水平翻页").performClick()
-        reading.assert(hasText("水平翻页"))
-        assertFalse(store.settings().vertical)
+        val mode = setting("切页模式").performScrollTo()
+        mode.assert(hasText("连续")).performClick()
+        option("连续").assertIsSelected()
+        option("分页").performClick()
+        mode.assert(hasText("分页"))
+        assertTrue(store.settings().paged)
+        assertTrue(store.settings().vertical)
     }
 
     @Test fun interactionPreferencesFollowLanguageAndPersist() {
@@ -311,41 +312,66 @@ class SettingsMenuTest {
         awaitSetting("语言", "简体中文")
     }
 
-    @Test fun readingSettingsFollowModeAndPersistSwitches() {
+    @Test fun readingSettingsFollowDirectionIndependentlyOfMode() {
         setting("阅读").performClick()
-        val mode = setting("阅读模式")
-        val direction = setting("从右向左翻页")
+        val mode = setting("切页模式").assert(hasText("连续"))
+        val direction = setting("切页方向").assert(hasText("垂直"))
+        val rightToLeft = setting("从右向左翻页")
+        rule.onNodeWithText("阅读模式").assertDoesNotExist()
         val horizontalSeek = setting("左右滑动调整视频播放进度")
         val volume = setting("使用音量键翻页")
         val zoom = setting("双击以放缩")
-        direction.assertDoesNotExist()
+        rightToLeft.assertDoesNotExist()
         horizontalSeek.assertIsOn()
-        assertTrue(mode.fetchSemanticsNode().boundsInRoot.bottom <= horizontalSeek.fetchSemanticsNode().boundsInRoot.top)
+        val topRows = listOf(mode, direction, horizontalSeek).map { it.fetchSemanticsNode().boundsInRoot }
+        topRows.zipWithNext().forEach { (upper, lower) -> assertTrue(upper.bottom <= lower.top) }
         horizontalSeek.performClick().assertIsOff()
         volume.assertIsOff()
         zoom.assertIsOn()
         mode.performClick()
-        option("水平翻页").performClick()
+        option("分页").performClick()
+        horizontalSeek.assertIsOff()
+        rightToLeft.assertDoesNotExist()
+        direction.performClick()
+        option("水平").performClick()
+        mode.assert(hasText("分页"))
         horizontalSeek.assertDoesNotExist()
-        direction.assertIsOff()
-        val rows = listOf(mode, direction, setting("阅读时屏幕常亮"), volume, zoom,
+        rightToLeft.assertIsOff()
+        val rows = listOf(mode, direction, rightToLeft, setting("阅读时屏幕常亮"), volume, zoom,
             setting("深色阅读背景")).map { it.fetchSemanticsNode().boundsInRoot }
         rows.zipWithNext().forEach { (upper, lower) -> assertTrue(upper.bottom <= lower.top) }
         rule.onNodeWithText("适用于右开本的水平阅读模式").assertDoesNotExist()
         rule.onNodeWithText("离开阅读器后恢复系统设置").assertDoesNotExist()
-        direction.performClick().assertIsOn()
+        rightToLeft.performClick().assertIsOn()
         volume.performClick().assertIsOn()
         zoom.performClick().assertIsOff()
         mode.performClick()
-        option("垂直连续").performClick()
-        direction.assertDoesNotExist()
+        option("连续").performClick()
+        rightToLeft.assertIsOn()
+        horizontalSeek.assertDoesNotExist()
+        direction.performClick()
+        option("垂直").performClick()
+        rightToLeft.assertDoesNotExist()
         horizontalSeek.assertIsOff()
-        assertFalse(store.settings().horizontalVideoSeek)
-        mode.performClick()
-        option("水平翻页").performClick()
-        direction.assertIsOn()
-        assertTrue(store.settings().volumeKeyPaging)
-        assertFalse(store.settings().doubleTapZoom)
+        direction.performClick()
+        option("水平").performClick()
+        rightToLeft.assertIsOn()
+        val saved = store.settings()
+        assertFalse(saved.paged)
+        assertFalse(saved.vertical)
+        assertFalse(saved.horizontalVideoSeek)
+        assertTrue(saved.volumeKeyPaging)
+        assertFalse(saved.doubleTapZoom)
+    }
+
+    @Test fun legacyHorizontalReadingKeepsPagingUntilModeIsChanged() {
+        val preferences = context.getSharedPreferences("zviewer", Context.MODE_PRIVATE)
+        preferences.edit().putBoolean("vertical", false).remove("paged").commit()
+        assertFalse(store.settings().vertical)
+        assertTrue(store.settings().paged)
+        store.saveSettings(store.settings().copy(paged = false))
+        assertFalse(store.settings().vertical)
+        assertFalse(store.settings().paged)
     }
 
     @Test fun verificationThemeIsShownOnlyWithStartupVerificationAndPersists() {

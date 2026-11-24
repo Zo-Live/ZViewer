@@ -156,9 +156,12 @@
     <string name="license_notices_intro">ZViewer 開放原始碼元件授權\n\n以下是 ZViewer 使用的元件及其原生相依套件的授權條款。各份授權條款皆以原始語言呈現。</string>
     <string name="loading_licenses">正在讀取授權文字…</string>
     <string name="close">關閉</string>
-    <string name="reading_mode">閱讀模式</string>
-    <string name="reading_vertical">垂直連續</string>
-    <string name="reading_horizontal">水平翻頁</string>
+    <string name="page_turn_mode">切頁模式</string>
+    <string name="page_turn_direction">切頁方向</string>
+    <string name="reading_continuous">連續</string>
+    <string name="reading_paged">分頁</string>
+    <string name="reading_vertical">垂直</string>
+    <string name="reading_horizontal">水平</string>
     <string name="reader_dark">深色閱讀背景</string>
     <string name="reader_dark_hint">關閉後使用淺色背景，與應用程式主題無關。</string>
     <string name="reader_rtl">從右向左翻頁</string>

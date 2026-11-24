@@ -782,7 +782,12 @@ private fun <T> PreferenceMenu(
 @Composable
 fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> Unit) {
     PreferenceMenu(
-        title = stringResource(R.string.reading_mode),
+        title = stringResource(R.string.page_turn_mode),
+        selectedValue = settings.paged,
+        options = listOf(false to stringResource(R.string.reading_continuous), true to stringResource(R.string.reading_paged)),
+    ) { onSettings(settings.copy(paged = it)) }
+    PreferenceMenu(
+        title = stringResource(R.string.page_turn_direction),
         selectedValue = settings.vertical,
         options = listOf(true to stringResource(R.string.reading_vertical), false to stringResource(R.string.reading_horizontal)),
     ) { onSettings(settings.copy(vertical = it)) }

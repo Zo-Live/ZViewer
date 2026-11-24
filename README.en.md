@@ -29,7 +29,7 @@ Android usually does not allow granting access to the internal storage root, the
 | Animated images | APNG, Animated WebP, GIF, Animated AVIF                                                                  |
 | Video           | MP4, M4V, MKV, WebM, AVI, MOV, 3GP, MPG, MPEG, TS, MTS, M2TS, FLV, WMV, OGV, and more                    |
 | Library         | Recursive scan, search, reading-status filter, recently read, favorites                                  |
-| Reading         | Continuous vertical / horizontal / right-to-left paging, mixed images and videos, looping, auto-saved progress |
+| Reading         | Vertical or horizontal scrolling and paging, right-to-left navigation, mixed images and videos, looping, auto-saved progress |
 
 - The interface defaults to Simplified Chinese. Choose Traditional Chinese, English, or Japanese under Settings → Preferences → Language.
 - Long-press any comic cover to manage favorites in bulk.

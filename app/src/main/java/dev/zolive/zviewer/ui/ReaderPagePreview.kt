@@ -12,14 +12,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
-import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.BookSession
 import dev.zolive.zviewer.data.ReaderPreviewStore
 import dev.zolive.zviewer.reader.ImageLoader
+import dev.zolive.zviewer.reader.ReaderPageGroups
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -40,10 +39,8 @@ internal data class ReaderPagePreview(val index: Int, val bitmap: Bitmap) {
 internal data class ReaderPreviewViewport(
     val target: Int,
     val pages: List<ReaderPagePreview>,
-    val alignBottom: Boolean,
+    val alignEnd: Boolean,
 )
-
-internal val ReaderPageSpacing = 4.dp
 
 private const val ImagePreviewMaxPixels = 280_000
 private const val PdfPreviewMaxPixels = 180_000
@@ -54,6 +51,8 @@ internal fun rememberReaderPagePreview(
     repository: BookRepository,
     videoCovers: VideoCoverCache,
     continuous: Boolean,
+    vertical: Boolean,
+    groups: ReaderPageGroups?,
     looping: Boolean,
     canDecode: () -> Boolean,
     idlePage: () -> Int?,
@@ -67,13 +66,14 @@ internal fun rememberReaderPagePreview(
     } else {
         (viewport.width * .45f).toInt().coerceIn(320, 640)
     }
-    val spacing = with(LocalDensity.current) { ReaderPageSpacing.toPx() }
     val cache = remember(session, width) {
         object : LruCache<Int, Bitmap>(24 * 1024 * 1024) {
             override fun sizeOf(key: Int, value: Bitmap) = value.allocationByteCount
         }
     }
-    val previewState = remember(cache, viewport, continuous, looping) { mutableStateOf<ReaderPreviewViewport?>(null) }
+    val previewState = remember(cache, viewport, continuous, vertical, groups, looping) {
+        mutableStateOf<ReaderPreviewViewport?>(null)
+    }
     val latestPage by rememberUpdatedState(requestedPage)
     val latestIdlePage by rememberUpdatedState(idlePage)
     val latestCanDecode by rememberUpdatedState(canDecode)
@@ -81,7 +81,7 @@ internal fun rememberReaderPagePreview(
     val store = remember(repository, session, width) {
         ReaderPreviewStore(repository.previewDirectory(session, width), session)
     }
-    LaunchedEffect(cache, store, viewport, spacing, continuous, looping, pdfPages) {
+    LaunchedEffect(cache, store, viewport, continuous, vertical, groups, looping, pdfPages) {
         store.initialize()
         val failed = mutableSetOf<Int>()
         val count = session.pages.size
@@ -126,7 +126,17 @@ internal fun rememberReaderPagePreview(
             return bitmap
         }
 
-        fun next(index: Int): Int = if (looping && index + 1 == count) 0 else index + 1
+        val viewportLength = (if (vertical) viewport.height else viewport.width).toFloat()
+        fun length(page: ReaderPagePreview) = if (vertical) viewport.width / page.ratio else viewport.height * page.ratio
+        fun viewportIndices(target: Int): IntRange = when {
+            !continuous || session.pages[target].isVideo -> target..target
+            groups != null -> {
+                val offset = groups.offsetOf(target)
+                (target - offset) until (target - offset + groups.pageCount(groups.groupAt(target)))
+            }
+            looping -> Int.MIN_VALUE..Int.MAX_VALUE
+            else -> session.pages.indices
+        }
 
         fun publish(frame: ReaderPreviewViewport, approximate: Boolean = false) {
             val latest = latestPage() ?: latestIdlePage() ?: return
@@ -141,8 +151,9 @@ internal fun rememberReaderPagePreview(
         }
 
         suspend fun readViewport(target: Int, allowSource: Boolean): ReaderPreviewViewport? {
-            var remainingHeight = viewport.height.toFloat()
-            var index = target
+            var remaining = viewportLength
+            var position = target
+            val indices = viewportIndices(target)
             val pages = mutableListOf<ReaderPagePreview>()
             suspend fun bitmapAt(index: Int): Bitmap? {
                 cached(index)?.let { return it }
@@ -153,23 +164,25 @@ internal fun rememberReaderPagePreview(
                 return bitmap
             }
             do {
+                val index = Math.floorMod(position, count)
                 val bitmap = pages.firstOrNull { it.index == index }?.bitmap ?: bitmapAt(index) ?: return null
                 val preview = ReaderPagePreview(index, bitmap)
                 pages += preview
-                remainingHeight -= viewport.width / preview.ratio + spacing
-                index = next(index)
-            } while (continuous && remainingHeight > 0 && index in session.pages.indices)
-            val alignBottom = continuous && !looping && index == count && remainingHeight > 0
-            if (alignBottom) {
+                remaining -= length(preview)
+                position++
+            } while (remaining > 0 && position in indices)
+            if (remaining > 0) {
                 var before = target - 1
-                while (remainingHeight > 0 && before >= 0) {
-                    val preview = ReaderPagePreview(before, bitmapAt(before) ?: return null)
+                while (remaining > 0 && before in indices) {
+                    val index = Math.floorMod(before, count)
+                    val preview = ReaderPagePreview(index, bitmapAt(index) ?: return null)
                     pages.add(0, preview)
-                    remainingHeight -= viewport.width / preview.ratio + spacing
+                    remaining -= length(preview)
                     before--
                 }
+                return ReaderPreviewViewport(target, pages, alignEnd = remaining <= 0)
             }
-            return ReaderPreviewViewport(target, pages, alignBottom && remainingHeight <= 0)
+            return ReaderPreviewViewport(target, pages, alignEnd = false)
         }
 
         suspend fun showNearby(target: Int) {
@@ -224,14 +237,14 @@ internal fun rememberReaderPagePreview(
                         for (anchor in spreadAnchors) {
                             if (store.full) break
                             if (anchor in preparedAnchors) continue
-                            var remainingHeight = viewport.height.toFloat()
-                            var index = anchor
+                            var remaining = viewportLength
+                            val indices = viewportIndices(anchor)
+                            var position = anchor
                             do {
-                                val page = warm(index) ?: break
-                                remainingHeight -= viewport.width / page.ratio + spacing
-                                index = next(index)
-                            } while (continuous && remainingHeight > 0 && index in session.pages.indices &&
-                                index != anchor && !store.full)
+                                val page = warm(position % count) ?: break
+                                remaining -= length(page)
+                                position++
+                            } while (remaining > 0 && position in indices && position - anchor < count && !store.full)
                             preparedAnchors.add(anchor)
                         }
                         for (index in session.pages.indices) {

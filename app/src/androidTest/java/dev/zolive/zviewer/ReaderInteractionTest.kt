@@ -15,6 +15,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect as ComposeRect
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.layout.positionOnScreen
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -44,7 +45,7 @@ class ReaderInteractionTest {
     private fun open(video: Boolean = true, vertical: Boolean = true, loop: Boolean = true,
         rightToLeft: Boolean = false, preview: Boolean = true, initialPage: Int = 0, archive: Boolean = false,
         mixed: Boolean = false, mixedVideos: Boolean = false, names: List<String>? = null,
-        doubleTapZoom: Boolean = true) {
+        doubleTapZoom: Boolean = true, paged: Boolean = !vertical) {
         val context = rule.activity
         val assets = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().context.assets
         val names = names ?: if (mixed && mixedVideos) listOf("page1.png", "video-folder/video2.mp4", "video-folder/video10.mp4", "page2.png")
@@ -64,7 +65,7 @@ class ReaderInteractionTest {
             runBlocking { repository.open(Book("archive-test", uri.toString(), "视频压缩包测试", "zip", 0, 0)) }
         } else BookSession(book, pages)
         currentPage = initialPage
-        readerSettings = mutableStateOf(ReaderSettings(vertical = vertical, loopMode = loop,
+        readerSettings = mutableStateOf(ReaderSettings(vertical = vertical, paged = paged, loopMode = loop,
             rightToLeft = rightToLeft, videoPreview = preview, doubleTapZoom = doubleTapZoom))
         rule.setContent {
             ReaderScreen(session, initialPage, readerSettings.value, repository,
@@ -847,6 +848,96 @@ class ReaderInteractionTest {
         rule.waitUntil(5_000) { kotlin.math.abs(scale(second) - secondScale) < .001f }
     }
 
+    @Test fun verticalPagedImagesSnapOnePageAtATime() {
+        open(video = false, loop = false, paged = true)
+        assertEquals(setOf(1), visibleImageBounds().keys)
+        swipe()
+        rule.waitUntil(10_000) { currentPage == 1 && visibleImageBounds().keys == setOf(2) }
+    }
+
+    @Test fun horizontalContinuousImagesMeetWithoutSpacing() {
+        open(video = false, loop = false, vertical = false, paged = false)
+        dragAcrossHorizontalImage()
+        assertTouchingImages(vertical = false, reverse = false, first = 1, second = 2)
+        assertEquals(0, currentPage)
+    }
+
+    @Test fun continuousVerticalMixedContentScrollsImagesAndSnapsAroundVideo() {
+        checkContinuousMixedContent(vertical = true, reverse = false)
+    }
+
+    @Test fun continuousHorizontalMixedContentScrollsImagesAndSnapsAroundVideoFromRightToLeft() {
+        checkContinuousMixedContent(vertical = false, reverse = true)
+    }
+
+    private fun checkContinuousMixedContent(vertical: Boolean, reverse: Boolean) {
+        open(mixed = true, vertical = vertical, rightToLeft = reverse, paged = false, loop = false,
+            names = listOf("page1.png", "page2.png", "moving-video/moving.mp4", "page10.png", "page1.png"))
+        if (!vertical) dragAcrossHorizontalImage(reverse)
+        assertTouchingImages(vertical, reverse, first = 1, second = 2)
+
+        val pagerAction = if (vertical) SemanticsActions.PageDown else SemanticsActions.PageRight
+        val run = rule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.ScrollToIndex) and
+            !SemanticsMatcher.keyIsDefined(pagerAction))
+        run.performScrollToIndex(1)
+        if (!vertical) dragAcrossHorizontalImage(reverse)
+        rule.waitUntil(10_000) { currentPage == 1 }
+
+        rule.onRoot().performTouchInput {
+            val start = if (vertical) Offset(centerX, height * .55f) else Offset(width * .45f, centerY)
+            val drag = if (vertical) Offset(0f, -height * .2f) else Offset(width * .2f * if (reverse) 1f else -1f, 0f)
+            down(start)
+            moveBy(drag, 500)
+        }
+        rule.waitUntil(10_000) { rule.runOnIdle { videoViews().any { it.getGlobalVisibleRect(Rect()) } } }
+        assertEquals(1, currentPage)
+        rule.onRoot().performTouchInput { cancel() }
+        rule.waitUntil(10_000) { rule.runOnIdle { videoViews().none { it.getGlobalVisibleRect(Rect()) } } }
+
+        swipe(forward = !reverse, vertical = vertical)
+        rule.waitUntil(10_000) { currentPage == 2 && visibleImageBounds().isEmpty() }
+        waitForVideo()
+        swipe(forward = reverse, vertical = vertical)
+        rule.waitUntil(10_000) { currentPage == 1 }
+        swipe(forward = !reverse, vertical = vertical)
+        rule.waitUntil(10_000) { currentPage == 2 && visibleImageBounds().isEmpty() }
+        swipe(forward = !reverse, vertical = vertical)
+        rule.waitUntil(10_000) { currentPage == 3 }
+        if (!vertical) dragAcrossHorizontalImage(reverse)
+        assertTouchingImages(vertical, reverse, first = 4, second = 5)
+    }
+
+    private fun dragAcrossHorizontalImage(reverse: Boolean = false) {
+        rule.onRoot().performTouchInput {
+            val start = Offset(width * .92f, centerY)
+            val end = Offset(width * .08f, centerY)
+            swipe(if (reverse) end else start, if (reverse) start else end, 1150)
+        }
+    }
+
+    private fun visibleImageBounds(): Map<Int, Rect> = rule.runOnIdle {
+        val pages = session.pages.indices.associateBy { rule.activity.getString(R.string.image_accessibility, it + 1) }
+        descendants(rule.activity.window.decorView).filterIsInstance<ZoomImageView>().mapNotNull { view ->
+            val page = pages[view.contentDescription] ?: return@mapNotNull null
+            val rect = Rect()
+            if (view.drawable != null && view.getGlobalVisibleRect(rect)) (page + 1) to rect else null
+        }.toMap()
+    }
+
+    private fun assertTouchingImages(vertical: Boolean, reverse: Boolean, first: Int, second: Int) {
+        rule.waitUntil(10_000) {
+            val bounds = visibleImageBounds()
+            val before = bounds[first] ?: return@waitUntil false
+            val after = bounds[second] ?: return@waitUntil false
+            val gap = when {
+                vertical -> after.top - before.bottom
+                reverse -> before.left - after.right
+                else -> after.left - before.right
+            }
+            kotlin.math.abs(gap) <= 1
+        }
+    }
+
     @Test fun horizontalImageLoopHasAdjacentPagesInBothDirections() {
         open(video = false, vertical = false, initialPage = 2)
         rule.onRoot().performTouchInput {
@@ -962,13 +1053,14 @@ class ReaderInteractionTest {
     }
 
     @Test fun changingReadingDirectionOnImageKeepsThePreloadedVideoTexture() {
-        open(mixed = true, preview = false)
+        open(mixed = true, preview = false, loop = false)
         val preloaded = rule.runOnIdle { videoViews().single { it.playerView.player != null } }
         val player = rule.runOnIdle { preloaded.playerView.player!! }
         rule.waitUntil(10_000) { rule.runOnIdle { preloaded.isSurfaceAvailable } }
         val texture = rule.runOnIdle { (preloaded.playerView.videoSurfaceView as android.view.TextureView).surfaceTexture }
         rule.runOnIdle { readerSettings.value = readerSettings.value.copy(vertical = false) }
         rule.runOnIdle { assertEquals(0, currentPage) }
+        dragAcrossHorizontalImage()
         swipe(vertical = false)
         rule.waitUntil(15_000) { currentPage == 1 }
         waitForPlayback()

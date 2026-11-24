@@ -60,6 +60,7 @@ data class ReaderSettings(
     val accent: Long = DefaultThemeAccent,
     val readerDark: Boolean = true,
     val vertical: Boolean = true,
+    val paged: Boolean = false,
     val rightToLeft: Boolean = false,
     val horizontalVideoSeek: Boolean = true,
     val keepScreenOn: Boolean = true,

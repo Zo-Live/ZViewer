@@ -7,13 +7,15 @@ internal fun readSettings(value: (String, Any?) -> Any?): ReaderSettings {
     fun long(key: String, default: Long) = value(key, default) as Long
     @Suppress("UNCHECKED_CAST")
     fun keys(key: String) = value(key, emptySet<String>()) as Set<String>
+    val vertical = boolean("vertical", true)
     return ReaderSettings(
         theme = string("theme", "system") ?: "system",
         accent = long("accent", DefaultThemeAccent),
         dynamicColor = boolean("dynamic_color", false),
         verificationFollowsTheme = boolean("verification_follows_theme", true),
         readerDark = boolean("reader_dark", true),
-        vertical = boolean("vertical", true),
+        vertical = vertical,
+        paged = boolean("paged", !vertical),
         rightToLeft = boolean("rtl", false),
         horizontalVideoSeek = boolean("horizontal_video_seek", true),
         keepScreenOn = boolean("keep_screen", true),
@@ -65,6 +67,7 @@ internal fun settingsValues(settings: ReaderSettings): Map<String, Any?> = mapOf
     "verification_follows_theme" to settings.verificationFollowsTheme,
     "reader_dark" to settings.readerDark,
     "vertical" to settings.vertical,
+    "paged" to settings.paged,
     "rtl" to settings.rightToLeft,
     "keep_screen" to settings.keepScreenOn,
     "horizontal_video_seek" to settings.horizontalVideoSeek,
