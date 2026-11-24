@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
@@ -38,9 +39,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -52,7 +56,10 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.offset
 import androidx.core.view.HapticFeedbackConstantsCompat
 import androidx.core.view.ViewCompat
 import androidx.lifecycle.Lifecycle
@@ -78,6 +85,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private val SettingsContentInset = 24.dp
@@ -423,6 +431,9 @@ private fun CacheLimitSlider(limitMiB: Int, onLimitChanged: (Int) -> Unit) {
         else -> "${(mib / 1024f).toString().removeSuffix(".0")} GiB"
     }
     SettingsListItem(headlineContent = { Text(label) }, trailingContent = { Text(displayedLimit) })
+    val interactionSource = remember { MutableInteractionSource() }
+    val thumbSize = DpSize(4.dp, 44.dp)
+    val thumbTrackGap = 6.dp
     Slider(
         value = index.toFloat(),
         onValueChange = {
@@ -441,22 +452,47 @@ private fun CacheLimitSlider(limitMiB: Int, onLimitChanged: (Int) -> Unit) {
         onValueChangeFinished = { onLimitChanged(options[index]) },
         valueRange = 0f..options.lastIndex.toFloat(),
         steps = options.lastIndex - 1,
+        interactionSource = interactionSource,
         modifier = Modifier
-            .consumeWindowInsets(PaddingValues(horizontal = SettingsContentInset))
-            .windowInsetsPadding(WindowInsets.systemGestures.only(WindowInsetsSides.Horizontal))
             .fillMaxWidth()
+            .layout { measurable, constraints ->
+                // 滑块居中经过轨道两端，向两侧借用滑块的宽度，使轨道与设置行齐平。
+                val thumbWidth = thumbSize.width.roundToPx()
+                val slider = measurable.measure(constraints.offset(horizontal = thumbWidth))
+                layout(constraints.maxWidth, slider.height) { slider.placeRelative(-thumbWidth / 2, 0) }
+            }
+            .systemGestureExclusion()
             .semantics {
                 contentDescription = label
                 stateDescription = displayedLimit
             },
+        thumb = {
+            Box(Modifier.width(thumbSize.width), contentAlignment = Alignment.Center) {
+                SliderDefaults.Thumb(interactionSource, thumbSize = thumbSize)
+            }
+        },
         track = { sliderState ->
-            SliderDefaults.Track(sliderState, drawTick = { position, color ->
-                // 刻度在轨道两端各留出半个轨道高度，相邻主刻度之间有四个间隔。
-                val inset = size.height / 2
-                val tick = ((position.x - inset) * options.lastIndex / (size.width - 2 * inset)).roundToInt()
-                val radius = if (tick % CacheLimits.STEPS_PER_DOUBLING == 0) 1.5.dp else 0.75.dp
-                drawCircle(color, radius.toPx(), position)
-            })
+            val colors = SliderDefaults.colors()
+            SliderDefaults.Track(
+                sliderState,
+                modifier = Modifier.drawWithContent {
+                    drawContent()
+                    // 按滑块的实际行程等分轨道，点按刻度即可选中对应档位。
+                    val gap = (thumbSize.width / 2 + thumbTrackGap).toPx()
+                    val stepWidth = size.width / options.lastIndex
+                    for (tick in 1 until options.lastIndex) {
+                        val radius = (if (tick % CacheLimits.STEPS_PER_DOUBLING == 0) 1.5.dp else 0.75.dp).toPx()
+                        if (abs(tick - index) * stepWidth <= gap + radius) continue
+                        val x = if (layoutDirection == LayoutDirection.Rtl) size.width - tick * stepWidth else tick * stepWidth
+                        val color = if (tick < index) colors.activeTickColor else colors.inactiveTickColor
+                        drawCircle(color, radius, Offset(x, center.y))
+                    }
+                },
+                colors = colors,
+                drawStopIndicator = null,
+                drawTick = { _, _ -> },
+                thumbTrackGapSize = thumbTrackGap,
+            )
         },
     )
 }
