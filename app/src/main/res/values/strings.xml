@@ -25,6 +25,10 @@
     <string name="haptic_feedback">触感反馈</string>
     <string name="animation_settings">动画设置</string>
     <string name="haptic_settings">触感设置</string>
+    <string name="interaction_all_options">全部选项</string>
+    <string name="interaction_all_enabled">全部开启</string>
+    <string name="interaction_all_disabled">全部关闭</string>
+    <string name="interaction_some_enabled">部分开启</string>
     <string name="back_to_preferences">返回偏好</string>
     <string name="interaction_general">通用</string>
     <string name="interaction_video">视频</string>

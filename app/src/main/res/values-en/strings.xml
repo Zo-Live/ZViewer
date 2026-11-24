@@ -25,6 +25,10 @@
     <string name="haptic_feedback">Haptic feedback</string>
     <string name="animation_settings">Animation settings</string>
     <string name="haptic_settings">Haptic settings</string>
+    <string name="interaction_all_options">All options</string>
+    <string name="interaction_all_enabled">All enabled</string>
+    <string name="interaction_all_disabled">All disabled</string>
+    <string name="interaction_some_enabled">Some enabled</string>
     <string name="back_to_preferences">Back to preferences</string>
     <string name="interaction_general">General</string>
     <string name="interaction_video">Video</string>

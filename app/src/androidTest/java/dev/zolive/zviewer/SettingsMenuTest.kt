@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.lifecycle.ViewModelProvider
@@ -190,6 +191,7 @@ class SettingsMenuTest {
         val animationLink = setting("动画设置")
         val hapticsLink = setting("触感设置")
         val back = rule.onNodeWithContentDescription("返回偏好")
+        val isSwitch = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)
         animationLink.assertDoesNotExist()
         hapticsLink.assertIsDisplayed()
 
@@ -197,8 +199,8 @@ class SettingsMenuTest {
         option("增强").performClick()
         assertEquals(speed.fetchSemanticsNode().boundsInRoot.bottom, animationLink.fetchSemanticsNode().boundsInRoot.top, 1f)
         animationLink.performClick()
-        rule.onAllNodes(isToggleable()).assertCountEquals(AnimationEffect.entries.size)
-        rule.onAllNodes(isToggleable() and isOn()).assertCountEquals(AnimationEffect.entries.size)
+        rule.onAllNodes(isSwitch).assertCountEquals(AnimationEffect.entries.size)
+        rule.onAllNodes(isSwitch and isOn()).assertCountEquals(AnimationEffect.entries.size)
         setting("播放倍速菜单").performScrollTo().performClick().assertIsOff()
         setting("视频缩放").assertIsOn()
         scenario.recreate()
@@ -213,8 +215,8 @@ class SettingsMenuTest {
         back.performClick()
 
         hapticsLink.performClick()
-        rule.onAllNodes(isToggleable()).assertCountEquals(HapticEvent.entries.size)
-        rule.onAllNodes(isToggleable() and isOn()).assertCountEquals(HapticEvent.entries.size)
+        rule.onAllNodes(isSwitch).assertCountEquals(HapticEvent.entries.size)
+        rule.onAllNodes(isSwitch and isOn()).assertCountEquals(HapticEvent.entries.size)
         setting("添加和取消收藏").performScrollTo().performClick().assertIsOff()
         setting("进入和退出收藏管理").assertIsOn()
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
@@ -232,6 +234,54 @@ class SettingsMenuTest {
         setting("进入和退出收藏管理").assertIsOn()
         assertEquals(setOf(AnimationEffect.VideoSpeedMenu), store.settings().disabledAnimations)
         assertEquals(setOf(HapticEvent.Favorite), store.settings().disabledHaptics)
+    }
+
+    @Test fun interactionPageCheckboxTogglesAllOptionsAndPersists() {
+        setting("偏好").performClick()
+        setting("动画速度").performClick()
+        option("增强").performClick()
+
+        val allOptions = rule.onNodeWithContentDescription("全部选项")
+        val isSwitch = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)
+        val partiallyEnabled = SemanticsMatcher.expectValue(
+            SemanticsProperties.ToggleableState, ToggleableState.Indeterminate,
+        )
+        val back = rule.onNodeWithContentDescription("返回偏好")
+
+        for ((page, item, count) in listOf(
+            Triple("动画设置", "播放倍速菜单", AnimationEffect.entries.size),
+            Triple("触感设置", "添加和取消收藏", HapticEvent.entries.size),
+        )) {
+            setting(page).performClick()
+            allOptions.assertIsOn().performTouchInput { click() }.assertIsOff()
+            rule.onAllNodes(isSwitch and isOff()).assertCountEquals(count)
+
+            setting(item).performScrollTo().performClick().assertIsOn()
+            allOptions.assert(partiallyEnabled).performTouchInput { click() }.assertIsOn()
+            rule.onAllNodes(isSwitch and isOn()).assertCountEquals(count)
+
+            allOptions.performTouchInput { click() }.assertIsOff()
+            allOptions.performTouchInput { click() }.assertIsOn()
+            rule.onAllNodes(isSwitch and isOn()).assertCountEquals(count)
+            setting(item).performClick().assertIsOff()
+            allOptions.assert(partiallyEnabled).performTouchInput { click() }.assertIsOn()
+            allOptions.performTouchInput { click() }.assertIsOff()
+            back.performClick()
+        }
+
+        scenario.close()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        rule.onNodeWithContentDescription("设置").performClick()
+        setting("偏好").performClick()
+        setting("动画设置").performClick()
+        allOptions.assertIsOff()
+        rule.onAllNodes(isSwitch and isOff()).assertCountEquals(AnimationEffect.entries.size)
+        back.performClick()
+        setting("触感设置").performClick()
+        allOptions.assertIsOff()
+        rule.onAllNodes(isSwitch and isOff()).assertCountEquals(HapticEvent.entries.size)
+        assertEquals(AnimationSpeed.Enhanced, store.settings().animationSpeed)
+        assertTrue(store.settings().hapticFeedback)
     }
 
     @Test fun switchingLanguagesKeepsSettingsOpenAndPersists() {

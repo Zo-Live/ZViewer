@@ -4,11 +4,16 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import dev.zolive.zviewer.R
 import dev.zolive.zviewer.data.AnimationEffect
@@ -94,34 +99,59 @@ internal fun InteractionSettingsScreen(
     onBack: () -> Unit,
     onSettings: (ReaderSettings) -> Unit,
 ) {
-    SettingsPage(page.title, R.string.back_to_preferences, onBack) {
-        when (page) {
-            InteractionSettingsPage.Animation -> InteractionSwitches(animationGroups, settings.disabledAnimations) {
+    when (page) {
+        InteractionSettingsPage.Animation ->
+            InteractionSettingsPageContent(page.title, onBack, animationGroups, settings.disabledAnimations) {
                 onSettings(settings.copy(disabledAnimations = it))
             }
-            InteractionSettingsPage.Haptics -> InteractionSwitches(hapticGroups, settings.disabledHaptics) {
+        InteractionSettingsPage.Haptics ->
+            InteractionSettingsPageContent(page.title, onBack, hapticGroups, settings.disabledHaptics) {
                 onSettings(settings.copy(disabledHaptics = it))
             }
-        }
     }
 }
 
 @Composable
-private fun <T> InteractionSwitches(
+private fun <T> InteractionSettingsPageContent(
+    @StringRes title: Int,
+    onBack: () -> Unit,
     groups: List<InteractionGroup<T>>,
     disabledItems: Set<T>,
     onChange: (Set<T>) -> Unit,
 ) {
-    groups.forEachIndexed { index, group ->
-        Text(
-            stringResource(group.title),
-            Modifier.padding(top = if (index == 0) 8.dp else 24.dp, bottom = 4.dp).semantics { heading() },
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
+    val items = remember(groups) { groups.flatMap { group -> group.options.map { it.first } }.toSet() }
+    val state = when {
+        items.none { it in disabledItems } -> ToggleableState.On
+        disabledItems.containsAll(items) -> ToggleableState.Off
+        else -> ToggleableState.Indeterminate
+    }
+    SettingsPage(title, R.string.back_to_preferences, onBack, action = {
+        val label = stringResource(R.string.interaction_all_options)
+        val description = stringResource(when (state) {
+            ToggleableState.On -> R.string.interaction_all_enabled
+            ToggleableState.Off -> R.string.interaction_all_disabled
+            ToggleableState.Indeterminate -> R.string.interaction_some_enabled
+        })
+        TriStateCheckbox(
+            state = state,
+            onClick = { onChange(if (state == ToggleableState.On) disabledItems + items else disabledItems - items) },
+            modifier = Modifier.semantics {
+                contentDescription = label
+                stateDescription = description
+            },
         )
-        group.options.forEach { (item, title) ->
-            PreferenceSwitch(stringResource(title), checked = item !in disabledItems) { enabled ->
-                onChange(if (enabled) disabledItems - item else disabledItems + item)
+    }) {
+        groups.forEachIndexed { index, group ->
+            Text(
+                stringResource(group.title),
+                Modifier.padding(top = if (index == 0) 8.dp else 24.dp, bottom = 4.dp).semantics { heading() },
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            group.options.forEach { (item, label) ->
+                PreferenceSwitch(stringResource(label), checked = item !in disabledItems) { enabled ->
+                    onChange(if (enabled) disabledItems - item else disabledItems + item)
+                }
             }
         }
     }

@@ -152,6 +152,7 @@ internal fun SettingsPage(
     @StringRes title: Int,
     @StringRes backLabel: Int,
     onBack: () -> Unit,
+    action: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Scaffold(topBar = {
@@ -172,6 +173,9 @@ internal fun SettingsPage(
             IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart).padding(start = backInset)
                 .size(SettingsBackButtonSize)) {
                 Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(backLabel))
+            }
+            if (action != null) {
+                Box(Modifier.align(Alignment.CenterEnd).padding(end = backInset)) { action() }
             }
         }
     }) { padding ->
