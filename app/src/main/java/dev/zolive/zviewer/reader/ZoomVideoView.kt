@@ -14,6 +14,7 @@ import android.view.ScaleGestureDetector
 import android.view.TextureView
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.media3.ui.AspectRatioFrameLayout
@@ -23,6 +24,7 @@ import dev.zolive.zviewer.R
 import dev.zolive.zviewer.data.AnimationSpeed
 import dev.zolive.zviewer.data.DiagnosticLog
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 internal enum class SpeedHoldEnd { Release, Up, Down, Cancel }
 
@@ -75,6 +77,9 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     private var zoom = 1f
     private var offsetX = 0f
     private var offsetY = 0f
+    private var fillScreen = false
+    private var panLimitX = 0f
+    private var panLimitY = 0f
     private val zoomAnimator = ZoomAnimator()
     private var multiTouch = false
     private var lastCommand = 0
@@ -84,8 +89,9 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     private var speedHeld = false
     private var ignoreTouch = false
     private val zoomed: Boolean get() = (zoomAnimator.target ?: zoom) > 1f || zoom > 1f
+    private val hasCrop: Boolean get() = fillScreen && (panLimitX > 1f || panLimitY > 1f)
     internal val acceptsSwipeSeek: Boolean
-        get() = !zoomed && !multiTouch && !speedHeld && !ignoreTouch && !scaleDetector.isInProgress
+        get() = !zoomed && !hasCrop && !multiTouch && !speedHeld && !ignoreTouch && !scaleDetector.isInProgress
     private val scaleDetector = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
             zoomAnimator.cancel()
@@ -119,6 +125,18 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
                 offsetX -= distanceX
                 offsetY -= distanceY
                 updateTransform()
+            } else if (hasCrop && !multiTouch && !scaleDetector.isInProgress && first != null) {
+                val horizontal = abs(second.x - first.x) > abs(second.y - first.y)
+                val distance = if (horizontal) distanceX else distanceY
+                val offset = if (horizontal) offsetX else offsetY
+                val limit = if (horizontal) panLimitX else panLimitY
+                if (distance < 0f && offset < limit || distance > 0f && offset > -limit) {
+                    offsetX -= distanceX
+                    offsetY -= distanceY
+                    updateTransform()
+                } else {
+                    parent?.requestDisallowInterceptTouchEvent(false)
+                }
             }
             return true
         }
@@ -159,6 +177,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
         DiagnosticLog.log("View", "bindCover index=$page view=${hashCode()} " +
             (bitmap?.let { "${it.width}x${it.height}" } ?: "null"))
         coverView.setImageBitmap(bitmap)
+        if (fillScreen) updateTransform()
     }
 
     fun setCoverBackground(color: Int) {
@@ -167,8 +186,20 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
     internal fun setFillScreen(fill: Boolean) {
+        if (fillScreen == fill) return
+        fillScreen = fill
         playerView.resizeMode = if (fill) AspectRatioFrameLayout.RESIZE_MODE_ZOOM else AspectRatioFrameLayout.RESIZE_MODE_FIT
         coverView.scaleType = if (fill) ImageView.ScaleType.CENTER_CROP else ImageView.ScaleType.FIT_CENTER
+        // 只在阅读视口裁切，保留播放器与封面各自超出的部分供平移。
+        var container = textureView.parent as? ViewGroup
+        while (container != null) {
+            container.clipChildren = !fill
+            if (container === this) break
+            container = container.parent as? ViewGroup
+        }
+        offsetX = 0f
+        offsetY = 0f
+        updateTransform()
     }
 
     fun bindPlayer(player: Player?) {
@@ -188,6 +219,11 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     fun command(sequence: Int, action: Int) {
         if (sequence == lastCommand) return
         lastCommand = sequence
+        if (action == 0 && fillScreen) {
+            offsetX = 0f
+            offsetY = 0f
+            updateTransform()
+        }
         val target = zoomAnimator.target ?: zoom
         animateZoom(when (action) { 1 -> target * 1.5f; -1 -> target / 1.5f; else -> 1f }, width / 2f, height / 2f)
     }
@@ -205,8 +241,23 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
     }
 
     private fun updateTransform() {
-        offsetX = offsetX.coerceIn(-width * (zoom - 1f) / 2f, width * (zoom - 1f) / 2f)
-        offsetY = offsetY.coerceIn(-height * (zoom - 1f) / 2f, height * (zoom - 1f) / 2f)
+        var frameWidth = width
+        var frameHeight = height
+        if (fillScreen) {
+            val cover = coverView.drawable
+            if (isVideoLayoutReady) {
+                frameWidth = maxOf(width, textureView.width)
+                frameHeight = maxOf(height, textureView.height)
+            } else if (cover != null && cover.intrinsicWidth > 0 && cover.intrinsicHeight > 0) {
+                val ratio = cover.intrinsicWidth.toFloat() / cover.intrinsicHeight
+                frameWidth = maxOf(width, (height * ratio).roundToInt())
+                frameHeight = maxOf(height, (width / ratio).roundToInt())
+            }
+        }
+        panLimitX = (frameWidth * zoom - width) / 2f
+        panLimitY = (frameHeight * zoom - height) / 2f
+        offsetX = offsetX.coerceIn(-panLimitX, panLimitX)
+        offsetY = offsetY.coerceIn(-panLimitY, panLimitY)
         playerView.scaleX = zoom
         playerView.scaleY = zoom
         playerView.translationX = offsetX
@@ -224,6 +275,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
 
     override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
         super.onLayout(changed, left, top, right, bottom)
+        if (fillScreen) updateTransform()
         onLayoutReady(isVideoLayoutReady)
     }
     override fun onAttachedToWindow() {
@@ -254,7 +306,7 @@ class ZoomVideoView(context: Context) : FrameLayout(context) {
             touchStartY = event.y
             multiTouch = false
             ignoreTouch = false
-            parent?.requestDisallowInterceptTouchEvent(zoomed)
+            parent?.requestDisallowInterceptTouchEvent(zoomed || hasCrop)
         }
         if (ignoreTouch) {
             if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {

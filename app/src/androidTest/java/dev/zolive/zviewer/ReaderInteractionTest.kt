@@ -920,6 +920,27 @@ class ReaderInteractionTest {
         }
     }
 
+    @Test fun filledVideoPansWithoutSeekingAndKeepsTheViewportCovered() {
+        open(loop = false, names = listOf("video-folder/video2.mp4"))
+        rule.runOnIdle { readerSettings.value = readerSettings.value.copy(videoFillScreen = true) }
+        rule.waitUntil(15_000) { rule.runOnIdle { !currentVideoView().acceptsSwipeSeek } }
+        val player = rule.runOnIdle { currentVideoView().playerView.player!! }
+        dragAcrossHorizontalImage(reverse = true)
+        val offset = rule.runOnIdle { currentVideoView().playerView.translationX }
+        assertTrue(offset > 0f)
+        assertEquals(0L, rule.runOnIdle { player.currentPosition })
+        val frame = screenshot("video-fill-panned")
+        for (fraction in listOf(.1f, .5f, .9f)) {
+            val pixel = frame.getPixel((frame.width * fraction).roundToInt(), frame.height / 2)
+            assertTrue(Color.red(pixel) > 200 && Color.green(pixel) < 40)
+        }
+        rule.runOnIdle { readerSettings.value = readerSettings.value.copy(videoFillScreen = false) }
+        rule.runOnIdle {
+            assertEquals(0f, currentVideoView().playerView.translationX, .1f)
+            assertTrue(currentVideoView().acceptsSwipeSeek)
+        }
+    }
+
     @Test fun horizontalContinuousImagesMeetWithoutSpacing() {
         open(video = false, loop = false, vertical = false, paged = false)
         dragAcrossHorizontalImage()
