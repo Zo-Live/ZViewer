@@ -1,6 +1,7 @@
 package dev.zolive.zviewer
 
 import android.app.Application
+import android.app.KeyguardManager
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -18,6 +19,9 @@ import dev.zolive.zviewer.data.PreferenceStore
 import dev.zolive.zviewer.data.ReaderException
 import dev.zolive.zviewer.data.ReaderSettings
 import dev.zolive.zviewer.data.ReadingProgress
+import dev.zolive.zviewer.data.SettingsBackup
+import dev.zolive.zviewer.data.SettingsDirectory
+import dev.zolive.zviewer.data.SettingsImport
 import dev.zolive.zviewer.data.UpdateChecker
 import dev.zolive.zviewer.data.UpdateDownload
 import dev.zolive.zviewer.data.UpdateDownloader
@@ -78,6 +82,10 @@ class LibraryViewModel(
     private val mutable = MutableStateFlow(LibraryState(treeUri = store.treeUri,
         settings = store.settings(), favorites = store.favorites()))
     val state = mutable.asStateFlow()
+    private val mutableSettingsImport = MutableStateFlow<SettingsImport?>(null)
+    internal val settingsImport = mutableSettingsImport.asStateFlow()
+    private val mutableTransferringSettings = MutableStateFlow(false)
+    internal val transferringSettings = mutableTransferringSettings.asStateFlow()
     private val scanMutex = Mutex()
     private val coverRebuildMutex = Mutex()
     private var scanJob: Job? = null
@@ -229,22 +237,9 @@ class LibraryViewModel(
     fun selectLibrary(uri: Uri) {
         try {
             val resolver = getApplication<Application>().contentResolver
-            resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            if (state.value.settings.hideGalleryImages) {
-                runCatching { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
-            }
-            val oldUri = store.treeUri
-            val newUri = uri.toString()
-            if (oldUri != newUri) {
-                scanJob?.cancel()
-                scannedLibraryFolders = null
-                cancelOpen()
-                store.selectLibrary(newUri)
-                indexLoaded = true
-                mutable.update { it.copy(treeUri = newUri, books = emptyList(), progress = emptyMap(), error = null) }
-                updateGalleryVisibility()
-            }
-            refresh()
+            val current = state.value
+            SettingsDirectory.Library.takePermission(resolver, uri, current.settings.hideGalleryImages)
+            if (current.treeUri == uri.toString()) refresh() else applySettings(current.settings, uri.toString())
             DiagnosticLog.log("Permission", "已选择书库 authority=${uri.authority}")
         } catch (error: Exception) { showError(error) }
     }
@@ -399,16 +394,126 @@ class LibraryViewModel(
         mutable.update { state -> state.copy(progress = state.books.associate { it.id to store.progress(it.id) }) }
     }
 
-    fun settings(settings: ReaderSettings) {
-        val previous = mutable.value.settings
-        store.saveSettings(settings)
-        mutable.update { it.copy(settings = settings) }
-        if (previous.hideGalleryImages != settings.hideGalleryImages) updateGalleryVisibility()
-        if (!previous.currentLibraryCacheOnly && settings.currentLibraryCacheOnly) refresh()
+    fun settings(settings: ReaderSettings) = applySettings(settings, null)
+
+    private fun applySettings(settings: ReaderSettings, library: String?) {
+        val current = mutable.value
+        val previous = current.settings
+        val newLibrary = library?.takeUnless { it == current.treeUri }
+        if (newLibrary != null) {
+            scanJob?.cancel()
+            scannedLibraryFolders = null
+            cancelOpen()
+            indexLoaded = true
+        }
+        store.saveSettings(settings, newLibrary)
+        mutable.update {
+            if (newLibrary == null) it.copy(settings = settings) else it.copy(
+                settings = settings, treeUri = newLibrary, books = emptyList(), progress = emptyMap(), error = null,
+            )
+        }
+        if (newLibrary != null || previous.hideGalleryImages != settings.hideGalleryImages) updateGalleryVisibility()
+        if (newLibrary != null || (!previous.currentLibraryCacheOnly && settings.currentLibraryCacheOnly)) refresh()
         if (previous.cacheLimitMiB != settings.cacheLimitMiB) viewModelScope.launch {
             repository.trimCache()
             mutable.update { it.copy(cacheRevision = it.cacheRevision + 1) }
         }
+    }
+
+    internal fun exportSettings(uri: Uri) {
+        val current = state.value
+        val backup = SettingsBackup(current.settings, current.treeUri)
+        transferSettings(R.string.settings_export_error) { application ->
+            withContext(Dispatchers.IO) { backup.write(application.contentResolver, uri) }
+            Toast.makeText(application, message(R.string.settings_exported), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    internal fun importSettings(uri: Uri) {
+        transferSettings(R.string.settings_import_error) { application ->
+            val current = state.value
+            val pending = withContext(Dispatchers.IO) {
+                val backup = SettingsBackup.read(application.contentResolver, uri)
+                val changes = listOfNotNull(
+                    SettingsDirectory.Library.change(application, current.treeUri, backup.library),
+                    SettingsDirectory.Log.change(application, current.settings.logDirectory, backup.settings.logDirectory),
+                )
+                SettingsImport(
+                    backup.copy(library = null, settings = backup.settings.copy(logDirectory = current.settings.logDirectory)),
+                    changes,
+                )
+            }
+            advanceSettingsImport(pending)
+        }
+    }
+
+    private fun transferSettings(@StringRes errorMessage: Int, operation: suspend (Application) -> Unit) {
+        if (mutableTransferringSettings.value || mutableSettingsImport.value != null) return
+        mutableTransferringSettings.value = true
+        val application = getApplication<Application>()
+        viewModelScope.launch {
+            try {
+                operation(application)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                val text = message(errorMessage)
+                DiagnosticLog.error("Settings", text, error)
+                Toast.makeText(application, text, Toast.LENGTH_LONG).show()
+            } finally {
+                mutableTransferringSettings.value = false
+            }
+        }
+    }
+
+    internal fun confirmSettingsDirectory(): Uri? {
+        val pending = mutableSettingsImport.value ?: return null
+        val change = pending.changes.first()
+        if (pending.awaitingDirectory) return null
+        if (change.needsGrant) {
+            mutableSettingsImport.value = pending.copy(awaitingDirectory = true)
+            return change.target
+        }
+        resolveSettingsDirectory(accept = true)
+        return null
+    }
+
+    internal fun resolveSettingsDirectory(accept: Boolean, picked: Uri? = null) {
+        val pending = mutableSettingsImport.value ?: return
+        val change = pending.changes.first()
+        val application = getApplication<Application>()
+        val apply = accept && (!change.needsGrant || (picked != null && picked == change.target && runCatching {
+            change.directory.takePermission(application.contentResolver, picked, pending.backup.settings.hideGalleryImages)
+        }.isSuccess))
+        if (accept && !apply && picked != null) {
+            Toast.makeText(application, message(R.string.settings_directory_unchanged), Toast.LENGTH_LONG).show()
+        }
+        val backup = if (!apply) pending.backup else when (change.directory) {
+            SettingsDirectory.Library -> pending.backup.copy(library = change.target.toString())
+            SettingsDirectory.Log -> pending.backup.copy(
+                settings = pending.backup.settings.copy(logDirectory = change.target?.toString()),
+            )
+        }
+        advanceSettingsImport(SettingsImport(backup, pending.changes.drop(1)))
+    }
+
+    private fun advanceSettingsImport(pending: SettingsImport) {
+        if (pending.changes.isNotEmpty()) {
+            mutableSettingsImport.value = pending
+            return
+        }
+        val application = getApplication<Application>()
+        val imported = pending.backup.settings
+        val verificationUnavailable = (imported.verifyOnStartup || imported.verifyAfterBackground) &&
+            !application.getSystemService(KeyguardManager::class.java).isDeviceSecure
+        val applied = if (verificationUnavailable) {
+            val current = state.value.settings
+            imported.copy(verifyOnStartup = current.verifyOnStartup, verifyAfterBackground = current.verifyAfterBackground)
+        } else imported
+        applySettings(applied, pending.backup.library)
+        mutableSettingsImport.value = null
+        val feedback = if (verificationUnavailable) R.string.settings_imported_without_verification else R.string.settings_imported
+        Toast.makeText(application, message(feedback), Toast.LENGTH_SHORT).show()
     }
 
     private fun updateGalleryVisibility() {

@@ -372,6 +372,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
             title = { Text(stringResource(R.string.opening_reader)) }, text = { Text(state.opening) },
             confirmButton = { TextButton(onClick = model::cancelOpen) { Text(stringResource(R.string.cancel)) } })
     }
+    SettingsImportDialog(model)
     if (state.error != null) {
         AppAlertDialog(onDismissRequest = model::dismissError, icon = { Icon(Icons.Outlined.Info, null) },
             title = { Text(stringResource(R.string.read_error_title)) }, text = { Text(state.error) },

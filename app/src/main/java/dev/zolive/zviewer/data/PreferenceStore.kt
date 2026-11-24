@@ -1,6 +1,7 @@
 package dev.zolive.zviewer.data
 
 import android.content.Context
+import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -10,10 +11,9 @@ class PreferenceStore(context: Context) {
         get() = preferences.getString("library_uri", null)
         set(value) { preferences.edit().putString("library_uri", value).apply() }
 
-    internal fun selectLibrary(treeUri: String) {
-        val retired = retiredLibraryTrees() + listOfNotNull(this.treeUri) - treeUri
-        preferences.edit().putString("library_uri", treeUri).putStringSet("retired_library_uris", retired)
-            .remove("books").apply()
+    private fun SharedPreferences.Editor.selectLibrary(treeUri: String) {
+        val retired = retiredLibraryTrees() + listOfNotNull(this@PreferenceStore.treeUri) - treeUri
+        putString("library_uri", treeUri).putStringSet("retired_library_uris", retired).remove("books")
     }
 
     internal fun retiredLibraryTrees(): Set<String> =
@@ -32,92 +32,31 @@ class PreferenceStore(context: Context) {
     val language: AppLanguage
         get() = AppLanguage.fromTag(preferences.getString("language", null))
 
-    fun settings() = ReaderSettings(
-        theme = preferences.getString("theme", "system") ?: "system",
-        accent = preferences.getLong("accent", DefaultThemeAccent),
-        dynamicColor = preferences.getBoolean("dynamic_color", false),
-        verificationFollowsTheme = preferences.getBoolean("verification_follows_theme", true),
-        readerDark = preferences.getBoolean("reader_dark", true),
-        vertical = preferences.getBoolean("vertical", true),
-        rightToLeft = preferences.getBoolean("rtl", false),
-        horizontalVideoSeek = preferences.getBoolean("horizontal_video_seek", true),
-        keepScreenOn = preferences.getBoolean("keep_screen", true),
-        volumeKeyPaging = preferences.getBoolean("volume_key_paging", false),
-        doubleTapZoom = preferences.getBoolean("double_tap_zoom", true),
-        gridColumns = preferences.getInt("columns", 3).coerceIn(2, 5),
-        showFileType = preferences.getBoolean("show_file_type", false),
-        showFavoriteIcon = preferences.getBoolean("show_favorite_icon", true),
-        videoLoopSingle = preferences.getBoolean("video_loop_single", false),
-        videoPreview = preferences.getBoolean("video_preview", false),
-        loopMode = preferences.getBoolean("loop_mode", false),
-        diagnosticLog = preferences.getBoolean("diagnostic_log", false),
-        logDirectory = preferences.getString("log_directory", null),
-        checkUpdatesOnStartup = preferences.getBoolean("check_updates_on_startup", false),
-        clearCovers = preferences.getBoolean("clear_covers", false),
-        currentLibraryCacheOnly = preferences.getBoolean("current_library_cache_only", false),
-        rebuildLibraryCovers = preferences.getBoolean("rebuild_library_covers", false),
-        cacheLimitMiB = CacheLimits.normalize(preferences.getInt("cache_limit_mib", CacheLimits.DEFAULT_MIB)),
-        clearCacheOnTaskRemoval = preferences.getBoolean("clear_cache_on_task_removal", false),
-        clearProgressOnTaskRemoval = preferences.getBoolean("clear_progress_on_task_removal", false),
-        language = language,
-        animationSpeed = if (preferences.getBoolean("fast_animations", false)) {
-            AnimationSpeed.Enhanced
-        } else {
-            AnimationSpeed.Moderate
-        },
-        hapticFeedback = preferences.getBoolean("haptic_feedback", true),
-        disabledAnimations = preferences.getStringSet("disabled_animations", emptySet()).orEmpty().let { keys ->
-            AnimationEffect.entries.filterTo(mutableSetOf()) { it.key in keys }
-        },
-        disabledHaptics = preferences.getStringSet("disabled_haptics", emptySet()).orEmpty().let { keys ->
-            HapticEvent.entries.filterTo(mutableSetOf()) { it.key in keys }
-        },
-        verifyOnStartup = preferences.getBoolean("verify_on_startup", false),
-        hideRecentPreview = preferences.getBoolean("hide_recent_preview", false),
-        verifyAfterBackground = preferences.getBoolean("verify_after_background", false),
-        autoLockInterval = preferences.getInt("auto_lock_seconds", AutoLockInterval.FifteenSeconds.seconds).let { seconds ->
-            AutoLockInterval.entries.firstOrNull { it.seconds == seconds } ?: AutoLockInterval.FifteenSeconds
-        },
-        hideRecentCard = preferences.getBoolean("hide_recent_card", false),
-        hideGalleryImages = preferences.getBoolean("hide_gallery_images", false),
-    )
+    fun settings() = readSettings { key, default ->
+        when (default) {
+            is Boolean -> preferences.getBoolean(key, default)
+            is Int -> preferences.getInt(key, default)
+            is Long -> preferences.getLong(key, default)
+            is Set<*> -> preferences.getStringSet(key, emptySet()).orEmpty()
+            else -> preferences.getString(key, default as String?)
+        }
+    }
 
-    fun saveSettings(settings: ReaderSettings) {
-        preferences.edit().putString("theme", settings.theme).putLong("accent", settings.accent)
-            .putBoolean("dynamic_color", settings.dynamicColor)
-            .putBoolean("verification_follows_theme", settings.verificationFollowsTheme)
-            .putBoolean("reader_dark", settings.readerDark).putBoolean("vertical", settings.vertical)
-            .putBoolean("rtl", settings.rightToLeft).putBoolean("keep_screen", settings.keepScreenOn)
-            .putBoolean("horizontal_video_seek", settings.horizontalVideoSeek)
-            .putBoolean("volume_key_paging", settings.volumeKeyPaging)
-            .putBoolean("double_tap_zoom", settings.doubleTapZoom)
-            .putInt("columns", settings.gridColumns)
-            .putBoolean("show_file_type", settings.showFileType)
-            .putBoolean("show_favorite_icon", settings.showFavoriteIcon)
-            .putBoolean("video_loop_single", settings.videoLoopSingle)
-            .putBoolean("video_preview", settings.videoPreview)
-            .putBoolean("loop_mode", settings.loopMode)
-            .putBoolean("diagnostic_log", settings.diagnosticLog)
-            .putStringSet("log_directories", logDirectories() + listOfNotNull(settings.logDirectory))
-            .putString("log_directory", settings.logDirectory)
-            .putBoolean("check_updates_on_startup", settings.checkUpdatesOnStartup)
-            .putBoolean("clear_covers", settings.clearCovers)
-            .putBoolean("current_library_cache_only", settings.currentLibraryCacheOnly)
-            .putBoolean("rebuild_library_covers", settings.rebuildLibraryCovers)
-            .putBoolean("clear_cache_on_task_removal", settings.clearCacheOnTaskRemoval)
-            .putBoolean("clear_progress_on_task_removal", settings.clearProgressOnTaskRemoval)
-            .putString("language", settings.language.tag)
-            .putBoolean("fast_animations", settings.animationSpeed == AnimationSpeed.Enhanced)
-            .putBoolean("haptic_feedback", settings.hapticFeedback)
-            .putStringSet("disabled_animations", settings.disabledAnimations.mapTo(mutableSetOf()) { it.key })
-            .putStringSet("disabled_haptics", settings.disabledHaptics.mapTo(mutableSetOf()) { it.key })
-            .putBoolean("verify_on_startup", settings.verifyOnStartup)
-            .putBoolean("hide_recent_preview", settings.hideRecentPreview)
-            .putBoolean("verify_after_background", settings.verifyAfterBackground)
-            .putInt("auto_lock_seconds", settings.autoLockInterval.seconds)
-            .putBoolean("hide_recent_card", settings.hideRecentCard)
-            .putBoolean("hide_gallery_images", settings.hideGalleryImages)
-            .putInt("cache_limit_mib", CacheLimits.normalize(settings.cacheLimitMiB)).apply()
+    fun saveSettings(settings: ReaderSettings) = saveSettings(settings, null)
+
+    internal fun saveSettings(settings: ReaderSettings, newLibrary: String?) {
+        val editor = preferences.edit().putStringSet("log_directories", logDirectories() + listOfNotNull(settings.logDirectory))
+        if (newLibrary != null) editor.selectLibrary(newLibrary)
+        for ((key, value) in settingsValues(settings)) {
+            when (value) {
+                is Boolean -> editor.putBoolean(key, value)
+                is Int -> editor.putInt(key, value)
+                is Long -> editor.putLong(key, value)
+                is Set<*> -> editor.putStringSet(key, value.filterIsInstance<String>().toSet())
+                else -> editor.putString(key, value as String?)
+            }
+        }
+        editor.apply()
     }
 
     internal fun galleryMarkers(): Set<String> =

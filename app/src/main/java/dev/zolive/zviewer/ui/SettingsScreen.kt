@@ -542,6 +542,15 @@ private fun ApplicationSettings(state: LibraryState, model: LibraryViewModel) {
     val settings = state.settings
     val context = LocalContext.current
     val activity = LocalActivity.current
+    val transferring by model.transferringSettings.collectAsState()
+    val pendingImport by model.settingsImport.collectAsState()
+    val canTransfer = !transferring && pendingImport == null
+    val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) model.importSettings(uri)
+    }
+    val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) model.exportSettings(uri)
+    }
     var about by remember { mutableStateOf(false) }
     var licenses by remember { mutableStateOf(false) }
     val download = state.updateDownload
@@ -572,6 +581,26 @@ private fun ApplicationSettings(state: LibraryState, model: LibraryViewModel) {
     PreferenceSwitch(stringResource(R.string.update_check_on_start), checked = settings.checkUpdatesOnStartup) {
         model.settings(settings.copy(checkUpdatesOnStartup = it))
     }
+    SettingsListItem(
+        headlineContent = { Text(stringResource(R.string.settings_import)) },
+        modifier = Modifier.clickable(enabled = canTransfer, role = Role.Button) {
+            try {
+                importPicker.launch(arrayOf("application/json", "text/*", "application/octet-stream"))
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(context, R.string.settings_import_error, Toast.LENGTH_LONG).show()
+            }
+        },
+    )
+    SettingsListItem(
+        headlineContent = { Text(stringResource(R.string.settings_export)) },
+        modifier = Modifier.clickable(enabled = canTransfer, role = Role.Button) {
+            try {
+                exportPicker.launch("ZViewer-settings.json")
+            } catch (_: ActivityNotFoundException) {
+                Toast.makeText(context, R.string.settings_export_error, Toast.LENGTH_LONG).show()
+            }
+        },
+    )
     SettingsListItem(headlineContent = { Text(stringResource(R.string.about)) },
         modifier = Modifier.clickable(role = Role.Button) { about = true })
     SettingsListItem(headlineContent = { Text(stringResource(R.string.view_on_github)) },
