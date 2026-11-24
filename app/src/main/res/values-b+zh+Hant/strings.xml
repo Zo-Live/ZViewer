@@ -83,6 +83,7 @@
     <string name="rebuild_library_covers">自動補齊封面</string>
     <string name="rebuild_library_covers_hint">在背景自動產生書庫中缺少的封面</string>
     <string name="cache_limit">自動清除門檻</string>
+    <string name="cache_limit_unlimited">無限制</string>
     <string name="clear_cache_on_removal">從最近使用的應用程式移除時清除閱讀快取</string>
     <string name="clear_reading_history">清除閱讀記錄</string>
     <string name="clear_reading_history_hint">點兩下以清除所有漫畫的頁碼和影片播放進度</string>

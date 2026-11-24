@@ -50,8 +50,9 @@ class CacheSettingsTest {
     }
 
     private fun setThreshold(mib: Int) {
+        val index = CacheLimits.optionsMiB.indexOf(mib)
         rule.onNodeWithContentDescription("自动清理阈值").performScrollTo()
-            .performSemanticsAction(SemanticsActions.SetProgress) { it(mib.toFloat()) }
+            .performSemanticsAction(SemanticsActions.SetProgress) { it(index.toFloat()) }
         rule.waitUntil(5_000) { store.settings().cacheLimitMiB == mib }
     }
 
@@ -84,11 +85,13 @@ class CacheSettingsTest {
         assertEquals(1536, store.settings().cacheLimitMiB)
         rule.onNodeWithText("清理封面").performClick()
         setThreshold(CacheLimits.MAX_MIB)
-        rule.onNodeWithText("8 GiB").assertExists()
+        rule.onNodeWithText("32 GiB").assertExists()
+        setThreshold(CacheLimits.UNLIMITED_MIB)
+        rule.onNodeWithText("无限制").assertExists()
         scenario.close()
         launchSettings()
         rule.onNodeWithText("清理封面").assertIsOn()
-        rule.onNodeWithText("8 GiB").assertExists()
+        rule.onNodeWithText("无限制").assertExists()
         rule.onNodeWithText("清理封面").performClick()
         setThreshold(CacheLimits.MIN_MIB)
         rule.onNodeWithText("256 MiB").assertExists()
@@ -153,18 +156,19 @@ class CacheSettingsTest {
         rule.onNodeWithContentDescription("返回设置").assertIsDisplayed()
     }
 
-    @Test fun loweringThresholdImmediatelyTrimsAndRaisingItPreservesReadingFiles() = runBlocking {
+    @Test fun unlimitedSkipsCapacityTrimAndLoweringThresholdImmediatelyReclaimsCache() = runBlocking {
         launchSettings()
         rule.onNodeWithText("清理封面").performClick()
         val cover = sparse(context.filesDir, "covers/threshold.jpg", 100)
-        val old = sparse(context.cacheDir, "books/threshold/old.bin", 300L * 1024 * 1024)
+        setThreshold(CacheLimits.UNLIMITED_MIB)
+        val old = sparse(context.cacheDir, "books/threshold/old.bin", 33L * 1024 * 1024 * 1024)
         BookRepository(context).use { it.trimCache() }
         assertTrue(old.isFile)
         setThreshold(256)
         rule.waitUntil(5_000) { !old.exists() }
         assertTrue(cover.isFile)
-        setThreshold(512)
-        val reusable = sparse(context.cacheDir, "books/threshold/reusable.bin", 400L * 1024 * 1024)
+        setThreshold(640)
+        val reusable = sparse(context.cacheDir, "books/threshold/reusable.bin", 600L * 1024 * 1024)
         BookRepository(context).use { it.trimCache() }
         assertTrue(reusable.isFile)
         assertTrue(cover.isFile)
@@ -179,9 +183,7 @@ class CacheSettingsTest {
         rule.waitForIdle()
         rule.onNodeWithText("清理封面").assertExists()
         rule.onNodeWithContentDescription("返回设置").assertIsDisplayed()
-        val limit = store.settings().cacheLimitMiB
-        assertTrue(limit > 1536)
-        assertEquals(0, limit % CacheLimits.STEP_MIB)
-        assertTrue(limit in CacheLimits.MIN_MIB..CacheLimits.MAX_MIB)
+        assertEquals(20480, store.settings().cacheLimitMiB)
+        rule.onNodeWithText("20 GiB").assertExists()
     }
 }

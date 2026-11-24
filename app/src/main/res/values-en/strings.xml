@@ -83,6 +83,7 @@
     <string name="rebuild_library_covers">Generate missing covers</string>
     <string name="rebuild_library_covers_hint">Automatically generate missing library covers in the background</string>
     <string name="cache_limit">Automatic cleanup threshold</string>
+    <string name="cache_limit_unlimited">Unlimited</string>
     <string name="clear_cache_on_removal">Clear reading cache when removed from Recents</string>
     <string name="clear_reading_history">Clear reading history</string>
     <string name="clear_reading_history_hint">Double-tap to clear saved pages and video positions</string>

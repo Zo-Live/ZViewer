@@ -83,6 +83,7 @@
     <string name="rebuild_library_covers">自动补全封面</string>
     <string name="rebuild_library_covers_hint">在后台自动生成书库中缺失的封面</string>
     <string name="cache_limit">自动清理阈值</string>
+    <string name="cache_limit_unlimited">无限制</string>
     <string name="clear_cache_on_removal">移除后台时清理阅读缓存</string>
     <string name="clear_reading_history">清除阅读记录</string>
     <string name="clear_reading_history_hint">双击清除所有漫画的页码和视频播放进度</string>

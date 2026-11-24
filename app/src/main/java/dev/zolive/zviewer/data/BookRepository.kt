@@ -666,7 +666,7 @@ class BookRepository(private val context: Context) : Closeable {
     }
 
     suspend fun trimCache(protectedKey: String? = null) = withContext(Dispatchers.IO) {
-        val limit = CacheLimits.bytes(preferences.settings().cacheLimitMiB)
+        val limit = CacheLimits.bytes(preferences.settings().cacheLimitMiB) ?: return@withContext
         val reclaimed = readingCache.trim(protectedKey, limit = limit, target = limit * 2 / 3)
         if (reclaimed > 0) DiagnosticLog.log("Cache", "自动回收 reclaimedBytes=$reclaimed limitBytes=$limit remainingBytes=${readingCache.size()}")
     }

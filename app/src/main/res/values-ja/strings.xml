@@ -83,6 +83,7 @@
     <string name="rebuild_library_covers">表紙を自動生成</string>
     <string name="rebuild_library_covers_hint">ライブラリにない表紙をバックグラウンドで自動生成します</string>
     <string name="cache_limit">自動削除のしきい値</string>
+    <string name="cache_limit_unlimited">無制限</string>
     <string name="clear_cache_on_removal">最近使ったアプリから削除時にキャッシュを消去</string>
     <string name="clear_reading_history">閲覧履歴を消去</string>
     <string name="clear_reading_history_hint">ダブルタップで保存したページと動画の再生位置を消去</string>

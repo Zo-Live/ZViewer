@@ -372,8 +372,6 @@ private fun SecuritySettings(state: LibraryState, model: LibraryViewModel) {
 private fun LibraryStorageSettings(state: LibraryState, model: LibraryViewModel, onChooseLibrary: () -> Unit) {
     val settings = state.settings
     val context = LocalContext.current
-    val haptic = hapticFeedback(HapticEvent.CacheLimit)
-    var cacheLimitMiB by remember(settings.cacheLimitMiB) { mutableIntStateOf(settings.cacheLimitMiB) }
     val cacheSize by produceState(0L, state.cacheRevision) { value = model.repository.cacheSize() }
     SettingsListItem(headlineContent = { Text(stringResource(R.string.library_directory)) }, supportingContent = {
         Text(state.treeUri?.let { Uri.decode(it.substringAfterLast('/')) } ?: stringResource(R.string.no_directory_selected))
@@ -397,28 +395,7 @@ private fun LibraryStorageSettings(state: LibraryState, model: LibraryViewModel,
         stringResource(R.string.rebuild_library_covers_hint), settings.rebuildLibraryCovers) {
         model.settings(settings.copy(rebuildLibraryCovers = it))
     }
-    SettingsListItem(headlineContent = { Text(stringResource(R.string.cache_limit)) },
-        trailingContent = { Text(if (cacheLimitMiB < 1024) "$cacheLimitMiB MiB"
-            else "${(cacheLimitMiB / 1024f).toString().removeSuffix(".0")} GiB") })
-    val cacheLimitDescription = stringResource(R.string.cache_limit)
-    Slider(value = cacheLimitMiB.toFloat(),
-        onValueChange = {
-            val step = (it / CacheLimits.STEP_MIB).roundToInt() * CacheLimits.STEP_MIB
-            if (step != cacheLimitMiB) {
-                cacheLimitMiB = step
-                haptic(
-                    if (step == CacheLimits.MIN_MIB || step == CacheLimits.MAX_MIB) {
-                        HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_ACTIVATE
-                    } else {
-                        HapticFeedbackConstantsCompat.SEGMENT_FREQUENT_TICK
-                    },
-                )
-            }
-        },
-        onValueChangeFinished = { model.settings(settings.copy(cacheLimitMiB = cacheLimitMiB)) },
-        valueRange = CacheLimits.MIN_MIB.toFloat()..CacheLimits.MAX_MIB.toFloat(),
-        steps = (CacheLimits.MAX_MIB - CacheLimits.MIN_MIB) / CacheLimits.STEP_MIB - 1,
-        modifier = Modifier.fillMaxWidth().semantics { contentDescription = cacheLimitDescription })
+    CacheLimitSlider(settings.cacheLimitMiB) { model.settings(settings.copy(cacheLimitMiB = it)) }
     PreferenceSwitch(stringResource(R.string.clear_cache_on_removal), checked = settings.clearCacheOnTaskRemoval) {
         model.settings(settings.copy(clearCacheOnTaskRemoval = it))
     }
@@ -429,6 +406,57 @@ private fun LibraryStorageSettings(state: LibraryState, model: LibraryViewModel,
     PreferenceSwitch(stringResource(R.string.clear_history_on_removal), checked = settings.clearProgressOnTaskRemoval) {
         model.settings(settings.copy(clearProgressOnTaskRemoval = it))
     }
+}
+
+@Composable
+private fun CacheLimitSlider(limitMiB: Int, onLimitChanged: (Int) -> Unit) {
+    val haptic = hapticFeedback(HapticEvent.CacheLimit)
+    val options = CacheLimits.optionsMiB
+    var index by remember(limitMiB) { mutableIntStateOf(options.indexOf(limitMiB)) }
+    val mib = options[index]
+    val label = stringResource(R.string.cache_limit)
+    val displayedLimit = when {
+        mib == CacheLimits.UNLIMITED_MIB -> stringResource(R.string.cache_limit_unlimited)
+        mib < 1024 -> "$mib MiB"
+        else -> "${(mib / 1024f).toString().removeSuffix(".0")} GiB"
+    }
+    SettingsListItem(headlineContent = { Text(label) }, trailingContent = { Text(displayedLimit) })
+    Slider(
+        value = index.toFloat(),
+        onValueChange = {
+            val next = it.roundToInt()
+            if (next != index) {
+                index = next
+                haptic(
+                    if (next == 0 || next == options.lastIndex) {
+                        HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_ACTIVATE
+                    } else {
+                        HapticFeedbackConstantsCompat.SEGMENT_FREQUENT_TICK
+                    },
+                )
+            }
+        },
+        onValueChangeFinished = { onLimitChanged(options[index]) },
+        valueRange = 0f..options.lastIndex.toFloat(),
+        steps = options.lastIndex - 1,
+        modifier = Modifier
+            .consumeWindowInsets(PaddingValues(horizontal = SettingsContentInset))
+            .windowInsetsPadding(WindowInsets.systemGestures.only(WindowInsetsSides.Horizontal))
+            .fillMaxWidth()
+            .semantics {
+                contentDescription = label
+                stateDescription = displayedLimit
+            },
+        track = { sliderState ->
+            SliderDefaults.Track(sliderState, drawTick = { position, color ->
+                // 刻度在轨道两端各留出半个轨道高度，相邻主刻度之间有四个间隔。
+                val inset = size.height / 2
+                val tick = ((position.x - inset) * options.lastIndex / (size.width - 2 * inset)).roundToInt()
+                val radius = if (tick % CacheLimits.STEPS_PER_DOUBLING == 0) 1.5.dp else 0.75.dp
+                drawCircle(color, radius.toPx(), position)
+            })
+        },
+    )
 }
 
 @Composable
