@@ -101,7 +101,10 @@ internal fun InteractionSettingsScreen(
 ) {
     when (page) {
         InteractionSettingsPage.Animation ->
-            InteractionSettingsPageContent(page.title, onBack, animationGroups, settings.disabledAnimations) {
+            InteractionSettingsPageContent(
+                page.title, onBack, animationGroups, settings.disabledAnimations,
+                preserveSwitchAnimationComposition = true,
+            ) {
                 onSettings(settings.copy(disabledAnimations = it))
             }
         InteractionSettingsPage.Haptics ->
@@ -117,6 +120,7 @@ private fun <T> InteractionSettingsPageContent(
     onBack: () -> Unit,
     groups: List<InteractionGroup<T>>,
     disabledItems: Set<T>,
+    preserveSwitchAnimationComposition: Boolean = false,
     onChange: (Set<T>) -> Unit,
 ) {
     val items = remember(groups) { groups.flatMap { group -> group.options.map { it.first } }.toSet() }
@@ -149,7 +153,11 @@ private fun <T> InteractionSettingsPageContent(
                 color = MaterialTheme.colorScheme.primary,
             )
             group.options.forEach { (item, label) ->
-                PreferenceSwitch(stringResource(label), checked = item !in disabledItems) { enabled ->
+                PreferenceSwitch(
+                    stringResource(label),
+                    checked = item !in disabledItems,
+                    preserveAnimationComposition = preserveSwitchAnimationComposition,
+                ) { enabled ->
                     onChange(if (enabled) disabledItems - item else disabledItems + item)
                 }
             }

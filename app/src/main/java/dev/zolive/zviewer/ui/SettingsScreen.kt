@@ -780,6 +780,7 @@ internal fun PreferenceSwitch(
     subtitle: String? = null,
     checked: Boolean,
     feedbackOnToggle: Boolean = true,
+    preserveAnimationComposition: Boolean = false,
     onChange: (Boolean) -> Unit,
 ) {
     val haptic = hapticFeedback(HapticEvent.Switch)
@@ -787,7 +788,7 @@ internal fun PreferenceSwitch(
         headlineContent = { Text(title) },
         supportingContent = subtitle?.let { { Text(it) } },
         trailingContent = {
-            WithAnimationSpeed(animationSpeed(AnimationEffect.Switch)) {
+            WithAnimationSpeed(animationSpeed(AnimationEffect.Switch), preserveComposition = preserveAnimationComposition) {
                 Switch(checked, onCheckedChange = null)
             }
         },

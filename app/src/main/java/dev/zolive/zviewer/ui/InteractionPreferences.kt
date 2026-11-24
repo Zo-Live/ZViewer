@@ -13,12 +13,15 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Recomposer
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.currentCompositionLocalContext
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.graphics.Color
@@ -48,8 +51,10 @@ internal fun AnimationSpeed.stiffness(base: Float): Float = base / (durationScal
 
 internal class PreferredMotionDurationScale(
     inheritedScale: MotionDurationScale?,
-    val speed: AnimationSpeed,
+    speed: AnimationSpeed,
 ) : MotionDurationScale {
+    var speed by mutableStateOf(speed)
+
     private val systemScale: MotionDurationScale? = if (inheritedScale is PreferredMotionDurationScale) {
         inheritedScale.systemScale
     } else {
@@ -74,17 +79,20 @@ internal fun pageFlingBehavior(state: PagerState, speed: AnimationSpeed): Target
 internal fun WithAnimationSpeed(
     speed: AnimationSpeed,
     modifier: Modifier = Modifier,
+    preserveComposition: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val context = rememberCoroutineScope().coroutineContext
     val inheritedScale = context[MotionDurationScale]
     val inheritedSpeed = (inheritedScale as? PreferredMotionDurationScale)?.speed ?: AnimationSpeed.Moderate
-    if (speed == inheritedSpeed) {
+    if (!preserveComposition && speed == inheritedSpeed) {
         Box(modifier) { content() }
         return
     }
-    val recomposer = remember(context, speed) {
-        Recomposer(context + PreferredMotionDurationScale(inheritedScale, speed))
+    val durationScale = remember(inheritedScale) { PreferredMotionDurationScale(inheritedScale, speed) }
+    SideEffect { durationScale.speed = speed }
+    val recomposer = remember(context, durationScale) {
+        Recomposer(context + durationScale)
     }
     val locals by rememberUpdatedState(currentCompositionLocalContext)
     val currentContent by rememberUpdatedState(content)
