@@ -362,7 +362,7 @@ class SettingsMenuTest {
         val direction = setting("切页方向").assert(hasText("垂直"))
         val rightToLeft = setting("从右向左翻页")
         rule.onNodeWithText("阅读模式").assertDoesNotExist()
-        val horizontalSeek = setting("左右滑动调整视频播放进度")
+        val horizontalSeek = setting("左右滑动调整视频进度")
         val volume = setting("使用音量键翻页")
         val zoom = setting("双击以放缩")
         rightToLeft.assertDoesNotExist()

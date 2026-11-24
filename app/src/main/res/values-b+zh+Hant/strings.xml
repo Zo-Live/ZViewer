@@ -172,7 +172,7 @@
     <string name="reader_dark">深色閱讀背景</string>
     <string name="reader_dark_hint">關閉後使用淺色背景，與應用程式主題無關。</string>
     <string name="reader_rtl">從右向左翻頁</string>
-    <string name="horizontal_video_seek">左右滑動調整影片播放進度</string>
+    <string name="horizontal_video_seek">左右滑動調整影片進度</string>
     <string name="keep_screen_on">閱讀時保持螢幕開啟</string>
     <string name="volume_key_paging">使用音量鍵翻頁</string>
     <string name="double_tap_zoom">點兩下以縮放</string>
