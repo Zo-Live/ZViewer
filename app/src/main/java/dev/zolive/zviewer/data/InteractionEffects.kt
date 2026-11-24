@@ -2,6 +2,7 @@ package dev.zolive.zviewer.data
 
 enum class AnimationEffect(internal val key: String) {
     PageTransition("page_transition"),
+    SettingsTransition("settings_transition"),
     Dialog("dialog"),
     DropdownMenu("dropdown_menu"),
     Switch("switch"),

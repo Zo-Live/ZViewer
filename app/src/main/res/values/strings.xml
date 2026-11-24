@@ -33,6 +33,7 @@
     <string name="interaction_general">通用</string>
     <string name="interaction_video">视频</string>
     <string name="motion_page_transition">页面切换</string>
+    <string name="motion_settings_transition">设置过渡</string>
     <string name="motion_dialog">对话框</string>
     <string name="motion_dropdown_menu">下拉菜单</string>
     <string name="motion_switch">开关切换</string>

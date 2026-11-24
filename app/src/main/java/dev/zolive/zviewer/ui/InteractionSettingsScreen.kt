@@ -30,6 +30,7 @@ private data class InteractionGroup<T>(@StringRes val title: Int, val options: L
 private val animationGroups = listOf(
     InteractionGroup(R.string.interaction_general, listOf(
         AnimationEffect.PageTransition to R.string.motion_page_transition,
+        AnimationEffect.SettingsTransition to R.string.motion_settings_transition,
         AnimationEffect.Dialog to R.string.motion_dialog,
         AnimationEffect.DropdownMenu to R.string.motion_dropdown_menu,
         AnimationEffect.Switch to R.string.motion_switch,

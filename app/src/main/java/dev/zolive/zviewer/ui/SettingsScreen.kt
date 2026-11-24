@@ -13,6 +13,13 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -38,6 +45,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
@@ -48,6 +56,7 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.Role
@@ -55,6 +64,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
@@ -96,6 +107,25 @@ private val SettingsTrailingIconSize = 24.dp
 private val SettingsTrailingMinWidth = 52.dp
 private val SettingsTrailingGap = 16.dp
 private val SettingsSupportingMaxWidth = 480.dp
+
+@Composable
+private fun settingsTransitionDuration(millis: Int): Int {
+    val speed = animationSpeed(AnimationEffect.SettingsTransition)
+    val inheritedScale = rememberCoroutineScope().coroutineContext[MotionDurationScale]
+    val inheritedSpeed = (inheritedScale as? PreferredMotionDurationScale)?.speed ?: AnimationSpeed.Moderate
+    // 阅读快捷设置的面板有独立速度，页内选项按自己的速度计算时长。
+    return (millis * speed.durationScale / inheritedSpeed.durationScale).roundToInt()
+}
+
+@Composable
+private fun SettingsVisibility(visible: Boolean, content: @Composable () -> Unit) {
+    val duration = settingsTransitionDuration(220)
+    AnimatedVisibility(
+        visible = visible,
+        enter = expandVertically(tween(duration), expandFrom = Alignment.Top) + fadeIn(tween(duration)),
+        exit = shrinkVertically(tween(duration), shrinkTowards = Alignment.Top) + fadeOut(tween(duration)),
+    ) { content() }
+}
 
 internal enum class SettingsSection(@StringRes val title: Int, val icon: ImageVector, val tag: String) {
     Appearance(R.string.appearance, Icons.Outlined.Style, "settings-appearance-screen"),
@@ -290,8 +320,9 @@ private fun AppPreferences(
             AnimationSpeed.Enhanced to stringResource(R.string.animation_speed_enhanced),
         ),
     ) { onSettings(settings.copy(animationSpeed = it)) }
-    if (settings.animationSpeed == AnimationSpeed.Enhanced) {
-        InteractionSettingsLink(InteractionSettingsPage.Animation, onOpen)
+    val showAnimationSettings = settings.animationSpeed == AnimationSpeed.Enhanced
+    SettingsVisibility(showAnimationSettings) {
+        InteractionSettingsLink(InteractionSettingsPage.Animation, showAnimationSettings, onOpen)
     }
     PreferenceSwitch(
         title = stringResource(R.string.haptic_feedback),
@@ -304,8 +335,8 @@ private fun AppPreferences(
             ViewCompat.performHapticFeedback(view, HapticFeedbackConstantsCompat.TOGGLE_ON)
         }
     }
-    if (settings.hapticFeedback) {
-        InteractionSettingsLink(InteractionSettingsPage.Haptics, onOpen)
+    SettingsVisibility(settings.hapticFeedback) {
+        InteractionSettingsLink(InteractionSettingsPage.Haptics, settings.hapticFeedback, onOpen)
     }
     PreferenceSwitch(stringResource(R.string.show_file_type), stringResource(R.string.show_file_type_hint), settings.showFileType) {
         onSettings(settings.copy(showFileType = it))
@@ -316,11 +347,11 @@ private fun AppPreferences(
 }
 
 @Composable
-private fun InteractionSettingsLink(page: InteractionSettingsPage, onOpen: (InteractionSettingsPage) -> Unit) {
+private fun InteractionSettingsLink(page: InteractionSettingsPage, enabled: Boolean, onOpen: (InteractionSettingsPage) -> Unit) {
     SettingsListItem(
         headlineContent = { Text(stringResource(page.title)) },
         trailingContent = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null) },
-        modifier = Modifier.clickable(role = Role.Button) { onOpen(page) },
+        modifier = Modifier.clickable(enabled = enabled, role = Role.Button) { onOpen(page) },
     )
 }
 
@@ -347,11 +378,12 @@ private fun SecuritySettings(state: LibraryState, model: LibraryViewModel) {
     PreferenceSwitch(
         stringResource(R.string.verify_after_background), checked = settings.verifyAfterBackground,
     ) { if (canEnableVerification(it)) model.settings(settings.copy(verifyAfterBackground = it)) }
-    if (settings.verifyAfterBackground) {
+    SettingsVisibility(settings.verifyAfterBackground) {
         PreferenceMenu(
             title = stringResource(R.string.auto_lock_interval),
             subtitle = stringResource(R.string.auto_lock_interval_hint),
             selectedValue = settings.autoLockInterval,
+            enabled = settings.verifyAfterBackground,
             options = listOf(
                 AutoLockInterval.Immediately to stringResource(R.string.auto_lock_immediately),
                 AutoLockInterval.FifteenSeconds to stringResource(R.string.auto_lock_fifteen_seconds),
@@ -546,13 +578,16 @@ private fun DiagnosticsSettings(
         stringResource(R.string.write_diagnostic_logs_hint), settings.diagnosticLog) {
         model.settings(settings.copy(diagnosticLog = it))
     }
-    if (settings.diagnosticLog) {
+    SettingsVisibility(settings.diagnosticLog) {
         SettingsListItem(headlineContent = { Text(stringResource(R.string.log_directory)) }, supportingContent = {
             Text(settings.logDirectory?.let(::logDirectoryLabel) ?: stringResource(R.string.log_default_directory))
         },
-            trailingContent = if (settings.logDirectory != null) {
-                {
-                    IconButton(onClick = { model.setLogDirectory(null) }, modifier = Modifier.width(SettingsActionWidth)) {
+            trailingContent = {
+                val showReset = settings.logDirectory != null && settings.diagnosticLog
+                val duration = settingsTransitionDuration(180)
+                AnimatedVisibility(visible = showReset, enter = fadeIn(tween(duration)), exit = fadeOut(tween(duration))) {
+                    IconButton(onClick = { model.setLogDirectory(null) }, enabled = showReset,
+                        modifier = Modifier.width(SettingsActionWidth)) {
                         Icon(
                             Icons.Outlined.Refresh, stringResource(R.string.restore_default_directory),
                             Modifier.offset(x = (SettingsActionWidth - SettingsTrailingIconSize) / 2)
@@ -560,8 +595,8 @@ private fun DiagnosticsSettings(
                         )
                     }
                 }
-            } else null,
-            modifier = Modifier.clickable { logPicker.launch(null) })
+            },
+            modifier = Modifier.clickable(enabled = settings.diagnosticLog) { logPicker.launch(null) })
     }
     SettingsListItem(headlineContent = { Text(stringResource(R.string.view_logs)) },
         trailingContent = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null) },
@@ -747,6 +782,7 @@ private fun <T> PreferenceMenu(
     options: List<Pair<T, String>>,
     titleIcon: ImageVector? = null,
     subtitle: String? = null,
+    enabled: Boolean = true,
     onSelect: (T) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -755,7 +791,7 @@ private fun <T> PreferenceMenu(
     val action = stringResource(if (expanded) R.string.menu_collapse else R.string.menu_expand)
     val menuState = stringResource(if (expanded) R.string.menu_expanded else R.string.menu_collapsed)
     EndAlignedDropdownMenu(
-        expanded = expanded,
+        expanded = expanded && enabled,
         onDismissRequest = { expanded = false },
         modifier = Modifier.selectableGroup(),
         anchor = {
@@ -764,7 +800,7 @@ private fun <T> PreferenceMenu(
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = if (subtitle == null) 56.dp else 72.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable(role = Role.Button, onClickLabel = action) { expanded = !expanded }
+                        .clickable(enabled = enabled, role = Role.Button, onClickLabel = action) { expanded = !expanded }
                         .semantics { stateDescription = menuState }
                         .padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(SettingsTrailingGap),
@@ -830,12 +866,12 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
         selectedValue = settings.vertical,
         options = listOf(true to stringResource(R.string.reading_vertical), false to stringResource(R.string.reading_horizontal)),
     ) { onSettings(settings.copy(vertical = it)) }
-    if (settings.vertical) {
-        PreferenceSwitch(stringResource(R.string.horizontal_video_seek), checked = settings.horizontalVideoSeek) {
-            onSettings(settings.copy(horizontalVideoSeek = it))
-        }
-    } else {
-        PreferenceSwitch(stringResource(R.string.reader_rtl), checked = settings.rightToLeft) { onSettings(settings.copy(rightToLeft = it)) }
+    PreferenceSwitch(
+        title = stringResource(if (settings.vertical) R.string.horizontal_video_seek else R.string.reader_rtl),
+        checked = if (settings.vertical) settings.horizontalVideoSeek else settings.rightToLeft,
+        animateTitle = true,
+    ) {
+        onSettings(if (settings.vertical) settings.copy(horizontalVideoSeek = it) else settings.copy(rightToLeft = it))
     }
     PreferenceSwitch(stringResource(R.string.keep_screen_on), checked = settings.keepScreenOn) { onSettings(settings.copy(keepScreenOn = it)) }
     PreferenceSwitch(stringResource(R.string.volume_key_paging), checked = settings.volumeKeyPaging) { onSettings(settings.copy(volumeKeyPaging = it)) }
@@ -860,23 +896,24 @@ private fun ReaderFitPreferences(settings: ReaderSettings, onSettings: (ReaderSe
         modifier = Modifier.clickable(role = Role.Button, onClickLabel = action) { expanded = !expanded }
             .semantics { stateDescription = state },
     )
-    if (expanded) {
-        val imageTitle = stringResource(R.string.reader_image_and_pdf)
-        val fitScreen = stringResource(R.string.reader_fit_screen)
-        val fillScreen = stringResource(R.string.reader_fill_screen)
-        if (settings.paged) {
-            PreferenceMenu(imageTitle, settings.pagedImageFit, listOf(
-                PagedImageFit.Screen to fitScreen,
-                PagedImageFit.Width to stringResource(R.string.reader_fit_width),
-                PagedImageFit.Height to stringResource(R.string.reader_fit_height),
-            )) { onSettings(settings.copy(pagedImageFit = it)) }
-        } else {
-            PreferenceMenu(imageTitle, settings.continuousImageFitScreen, listOf(false to fillScreen, true to fitScreen)) {
-                onSettings(settings.copy(continuousImageFitScreen = it))
+    SettingsVisibility(expanded) {
+        Column {
+            val imageTitle = stringResource(R.string.reader_image_and_pdf)
+            val fitScreen = stringResource(R.string.reader_fit_screen)
+            val fillScreen = stringResource(R.string.reader_fill_screen)
+            if (settings.paged) {
+                PreferenceMenu(imageTitle, settings.pagedImageFit, listOf(
+                    PagedImageFit.Screen to fitScreen,
+                    PagedImageFit.Width to stringResource(R.string.reader_fit_width),
+                    PagedImageFit.Height to stringResource(R.string.reader_fit_height),
+                ), enabled = expanded) { onSettings(settings.copy(pagedImageFit = it)) }
+            } else {
+                PreferenceMenu(imageTitle, settings.continuousImageFitScreen, listOf(false to fillScreen, true to fitScreen),
+                    enabled = expanded) { onSettings(settings.copy(continuousImageFitScreen = it)) }
             }
+            PreferenceMenu(stringResource(R.string.reader_video_fit), settings.videoFillScreen,
+                listOf(false to fitScreen, true to fillScreen), enabled = expanded) { onSettings(settings.copy(videoFillScreen = it)) }
         }
-        PreferenceMenu(stringResource(R.string.reader_video_fit), settings.videoFillScreen,
-            listOf(false to fitScreen, true to fillScreen)) { onSettings(settings.copy(videoFillScreen = it)) }
     }
 }
 
@@ -887,11 +924,20 @@ internal fun PreferenceSwitch(
     checked: Boolean,
     feedbackOnToggle: Boolean = true,
     preserveAnimationComposition: Boolean = false,
+    animateTitle: Boolean = false,
     onChange: (Boolean) -> Unit,
 ) {
     val haptic = hapticFeedback(HapticEvent.Switch)
     SettingsListItem(
-        headlineContent = { Text(title) },
+        headlineContent = {
+            if (animateTitle) {
+                Crossfade(
+                    targetState = title,
+                    modifier = Modifier.clearAndSetSemantics { text = AnnotatedString(title) },
+                    animationSpec = tween(settingsTransitionDuration(180)),
+                ) { Text(it) }
+            } else Text(title)
+        },
         supportingContent = subtitle?.let { { Text(it) } },
         trailingContent = {
             WithAnimationSpeed(animationSpeed(AnimationEffect.Switch), preserveComposition = preserveAnimationComposition) {

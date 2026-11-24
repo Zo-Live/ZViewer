@@ -234,6 +234,7 @@ class SettingsMenuTest {
         val speed = setting("动画速度")
         val haptics = setting("触感反馈")
         val animationLink = setting("动画设置")
+        val settingsTransition = setting("设置过渡")
         val hapticsLink = setting("触感设置")
         val back = rule.onNodeWithContentDescription("返回偏好")
         val isSwitch = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)
@@ -246,6 +247,11 @@ class SettingsMenuTest {
         animationLink.performClick()
         rule.onAllNodes(isSwitch).assertCountEquals(AnimationEffect.entries.size)
         rule.onAllNodes(isSwitch and isOn()).assertCountEquals(AnimationEffect.entries.size)
+        settingsTransition.assertIsOn().performClick().assertIsOff()
+        setting("页面切换").assertIsOn()
+        setting("开关切换").assertIsOn()
+        assertEquals(AnimationSpeed.Moderate, store.settings().animationSpeedFor(AnimationEffect.SettingsTransition))
+        assertEquals(AnimationSpeed.Enhanced, store.settings().animationSpeedFor(AnimationEffect.PageTransition))
         setting("播放倍速菜单").performScrollTo().performClick().assertIsOff()
         setting("视频缩放").assertIsOn()
         scenario.recreate()
@@ -256,6 +262,7 @@ class SettingsMenuTest {
         speed.performClick()
         option("增强").performClick()
         animationLink.performClick()
+        settingsTransition.assertIsOff()
         setting("播放倍速菜单").performScrollTo().assertIsOff()
         back.performClick()
 
@@ -277,7 +284,7 @@ class SettingsMenuTest {
         hapticsLink.performClick()
         setting("添加和取消收藏").performScrollTo().assertIsOff()
         setting("进入和退出收藏管理").assertIsOn()
-        assertEquals(setOf(AnimationEffect.VideoSpeedMenu), store.settings().disabledAnimations)
+        assertEquals(setOf(AnimationEffect.SettingsTransition, AnimationEffect.VideoSpeedMenu), store.settings().disabledAnimations)
         assertEquals(setOf(HapticEvent.Favorite), store.settings().disabledHaptics)
     }
 
