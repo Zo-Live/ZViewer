@@ -433,7 +433,16 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
         },
         bottomBar = {
             WithAnimationSpeed(animationSpeed(AnimationEffect.LibraryTabIndicator)) {
-                NavigationBar {
+                // 放大字号时由 Material 3 测量标签高度。紧凑模式下，背景仍延伸到系统导航区。
+                val barModifier = if (LocalDensity.current.fontScale <= 1f) {
+                    Modifier
+                        .background(NavigationBarDefaults.containerColor)
+                        .windowInsetsPadding(NavigationBarDefaults.windowInsets)
+                        .height(64.dp)
+                } else {
+                    Modifier
+                }
+                NavigationBar(modifier = barModifier) {
                     val icons = listOf(Icons.Outlined.CollectionsBookmark, Icons.Outlined.BookmarkBorder, Icons.Outlined.History)
                     titles.forEachIndexed { index, title ->
                         NavigationBarItem(selected = pagerState.currentPage == index,
