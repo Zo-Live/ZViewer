@@ -7,7 +7,7 @@ import xml.etree.ElementTree as ET
 import uiautomator2 as u2
 
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--version', default='2.2.0')
+parser.add_argument('--version', default='2.2.1')
 parser.add_argument('--output', default='test-output/app-updates/release-ui')
 args = parser.parse_args()
 out = Path(args.output)
