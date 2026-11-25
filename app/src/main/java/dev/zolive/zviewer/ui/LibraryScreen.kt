@@ -415,17 +415,17 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     val columns = state.settings.gridColumns
     val gridPadding = 20.dp
     val gridSpacing = 12.dp
-    val windowWidth = LocalWindowInfo.current.containerSize.width
-    val coverWidth = with(LocalDensity.current) {
-        ((windowWidth - 2 * gridPadding.roundToPx() - (columns - 1) * gridSpacing.roundToPx()) / columns)
-            .coerceAtLeast(1)
+    val window = LocalWindowInfo.current.containerSize
+    val mediumWidth = with(LocalDensity.current) { window.width.toDp() >= 600.dp }
+    val useRail = with(LocalDensity.current) {
+        window.width.toDp() >= 840.dp && window.height.toDp() >= 480.dp
     }
-    val coverSize = remember(coverWidth) { PixelSize(coverWidth, (coverWidth / BookCoverAspectRatio).roundToInt()) }
     BackHandler(enabled = active && (managingFavorites || searching)) {
         if (managingFavorites) changeFavoriteManagement(false)
         else { searching = false; query = "" }
     }
-    Scaffold(
+    LibraryScaffold(
+        useRail = useRail,
         topBar = {
             // 顶栏默认标题 / 操作区边距为 16 / 4 dp；图标在 48 dp 点击区内各留 12 dp。
             TopAppBar(modifier = Modifier.padding(start = contentInset - 16.dp, end = actionInset - 4.dp), title = {
@@ -435,25 +435,10 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                 IconButton(onClick = { changeFavoriteManagement(false); onSettings() }) { Icon(painterResource(R.drawable.ic_symbol_settings), stringResource(R.string.settings)) }
             })
         },
-        bottomBar = {
+        navigation = {
             WithAnimationSpeed(animationSpeed(AnimationEffect.LibraryTabIndicator)) {
-                // 放大字号时由 Material 3 测量标签高度。紧凑模式下，背景仍延伸到系统导航区。
-                val barModifier = if (LocalDensity.current.fontScale <= 1f) {
-                    Modifier
-                        .background(NavigationBarDefaults.containerColor)
-                        .windowInsetsPadding(NavigationBarDefaults.windowInsets)
-                        .height(64.dp)
-                } else {
-                    Modifier
-                }
-                NavigationBar(modifier = barModifier) {
-                    tabs.forEachIndexed { index, tab ->
-                        val selected = pagerState.currentPage == index
-                        NavigationBarItem(selected = selected,
-                            onClick = { pagerState.requestScrollToPage(index) },
-                            icon = { Icon(painterResource(if (selected) tab.filledIcon else tab.outlineIcon), null) },
-                            label = { Text(stringResource(tab.title)) })
-                    }
+                LibraryNavigation(useRail, mediumWidth, pagerState.currentPage) { index ->
+                    pagerState.requestScrollToPage(index)
                 }
             }
         },
@@ -461,8 +446,13 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
             LibraryActions(currentGrid, managingFavorites,
                 onExitManagement = { changeFavoriteManagement(false) })
         },
-    ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding)) {
+    ) {
+        val coverWidth = with(LocalDensity.current) {
+            ((constraints.maxWidth - 2 * gridPadding.roundToPx() - (columns - 1) * gridSpacing.roundToPx()) / columns)
+                .coerceAtLeast(1)
+        }
+        val coverSize = remember(coverWidth) { PixelSize(coverWidth, (coverWidth / BookCoverAspectRatio).roundToInt()) }
+        Column(Modifier.fillMaxSize()) {
             if (state.scanning) WithAnimationSpeed(animationSpeed(AnimationEffect.LibraryScanProgress)) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
             }
@@ -608,6 +598,65 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
             }
         }
     }
+}
+
+@Composable
+private fun LibraryScaffold(
+    useRail: Boolean,
+    topBar: @Composable () -> Unit,
+    navigation: @Composable () -> Unit,
+    floatingActionButton: @Composable () -> Unit,
+    content: @Composable BoxWithConstraintsScope.() -> Unit,
+) {
+    Row(Modifier.fillMaxSize()) {
+        if (useRail) navigation()
+        val modifier = Modifier.weight(1f)
+        Scaffold(
+            modifier = if (useRail) modifier.consumeWindowInsets(WindowInsets.safeDrawing.only(WindowInsetsSides.Start)) else modifier,
+            topBar = topBar,
+            bottomBar = { if (!useRail) navigation() },
+            floatingActionButton = floatingActionButton,
+        ) { padding ->
+            BoxWithConstraints(Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding), content = content)
+        }
+    }
+}
+
+@Composable
+private fun LibraryNavigation(useRail: Boolean, mediumWidth: Boolean, page: Int, onSelect: (Int) -> Unit) {
+    if (useRail) {
+        NavigationRail(
+            modifier = Modifier.testTag("library-navigation-rail"),
+            windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical + WindowInsetsSides.Start),
+        ) {
+            LibraryTab.entries.forEachIndexed { index, tab ->
+                val selected = page == index
+                NavigationRailItem(
+                    selected = selected, onClick = { onSelect(index) },
+                    icon = { LibraryTabIcon(tab, selected) }, label = { Text(stringResource(tab.title)) },
+                )
+            }
+        }
+    } else {
+        ShortNavigationBar(
+            modifier = Modifier.testTag("library-navigation-bar"),
+            arrangement = if (mediumWidth) ShortNavigationBarArrangement.Centered else ShortNavigationBarArrangement.EqualWeight,
+        ) {
+            LibraryTab.entries.forEachIndexed { index, tab ->
+                val selected = page == index
+                ShortNavigationBarItem(
+                    selected = selected, onClick = { onSelect(index) },
+                    icon = { LibraryTabIcon(tab, selected) }, label = { Text(stringResource(tab.title)) },
+                    iconPosition = if (mediumWidth) NavigationItemIconPosition.Start else NavigationItemIconPosition.Top,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LibraryTabIcon(tab: LibraryTab, selected: Boolean) {
+    Icon(painterResource(if (selected) tab.filledIcon else tab.outlineIcon), null)
 }
 
 @Composable

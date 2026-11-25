@@ -604,10 +604,12 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 val itemContent: ReaderPagerItem = { item ->
                     if (session.pages[pageAt(item)].isVideo) {
                         val key = pagerKey(item)
-                        val content = pagerItems.getOrPut(key) {
-                            movableContentOf<ReaderPagerItem, Int> { page, position ->
-                                DisposableEffect(key) { onDispose { pagerItems.remove(key) } }
-                                page(position)
+                        val content = remember(key) {
+                            pagerItems.getOrPut(key) {
+                                movableContentOf<ReaderPagerItem, Int> { page, position ->
+                                    DisposableEffect(key) { onDispose { pagerItems.remove(key) } }
+                                    page(position)
+                                }
                             }
                         }
                         content(pageContent, item)
@@ -616,12 +618,13 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                     }
                 }
                 val nestedScroll = runScroll ?: PagerDefaults.pageNestedScrollConnection(pagerState, orientation)
+                val pagerModifier = runScroll?.trackTouchVelocity(Modifier.fillMaxSize()) ?: Modifier.fillMaxSize()
                 if (verticalReading) {
-                    VerticalPager(state = pagerState, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1,
+                    VerticalPager(state = pagerState, modifier = pagerModifier, beyondViewportPageCount = 1,
                         flingBehavior = flingBehavior, pageNestedScrollConnection = nestedScroll,
                         key = ::pagerKey) { item -> itemContent(item) }
                 } else {
-                    HorizontalPager(state = pagerState, reverseLayout = reverseReading, modifier = Modifier.fillMaxSize(),
+                    HorizontalPager(state = pagerState, reverseLayout = reverseReading, modifier = pagerModifier,
                         flingBehavior = flingBehavior, pageNestedScrollConnection = nestedScroll,
                         beyondViewportPageCount = 1, key = ::pagerKey) { item -> itemContent(item) }
                 }

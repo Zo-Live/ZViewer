@@ -2,13 +2,20 @@ package dev.zolive.zviewer.ui
 
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.pointer.util.addPointerInputChange
 import androidx.compose.ui.unit.Velocity
 import dev.zolive.zviewer.data.AnimationSpeed
 import kotlin.math.abs
@@ -23,6 +30,7 @@ internal class ReaderImageRunScroll(
     private val speed: AnimationSpeed,
 ) : NestedScrollConnection {
     private var origin by mutableStateOf<Int?>(null)
+    private var touchVelocity: Velocity? = null
     val settledPage: Int get() = origin ?: pager.settledPage
     val transitioning: Boolean get() = origin != null
 
@@ -32,6 +40,22 @@ internal class ReaderImageRunScroll(
         if (vertical) Offset(0f, delta * direction) else Offset(delta * direction, 0f)
 
     private fun positionFrom(start: Int): Float = pager.currentPage - start + pager.currentPageOffsetFraction
+
+    fun trackTouchVelocity(modifier: Modifier): Modifier = modifier.pointerInput(this) {
+        val tracker = VelocityTracker()
+        awaitEachGesture {
+            val first = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            touchVelocity = null
+            tracker.resetTracking()
+            tracker.addPointerInputChange(first)
+            do {
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val pointer = event.changes.firstOrNull { it.id == first.id } ?: break
+                tracker.addPointerInputChange(pointer)
+                if (!pointer.pressed) touchVelocity = tracker.calculateVelocity()
+            } while (pointer.pressed)
+        }
+    }
 
     override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
         val start = origin ?: return Offset.Zero
@@ -63,9 +87,11 @@ internal class ReaderImageRunScroll(
     }
 
     override suspend fun onPreFling(available: Velocity): Velocity {
+        val releaseVelocity = touchVelocity ?: available
+        touchVelocity = null
         val start = origin ?: return Velocity.Zero
         val consumed = if (vertical) Velocity(0f, available.y) else Velocity(available.x, 0f)
-        val velocity = (if (vertical) available.y else available.x) * direction
+        val velocity = (if (vertical) releaseVelocity.y else releaseVelocity.x) * direction
         val position = positionFrom(start)
         val step = when {
             position == 0f -> 0
