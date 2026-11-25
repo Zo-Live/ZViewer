@@ -17,11 +17,6 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Check
-import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Pause
-import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,6 +32,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -727,7 +723,7 @@ internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean =
                 state.togglePlayback()
                 playbackHaptic(if (state.playRequested) HapticFeedbackConstantsCompat.TOGGLE_ON else HapticFeedbackConstantsCompat.TOGGLE_OFF)
             }, enabled = enabled && !scrubbing && !state.failed && state.index >= 0) {
-                Icon(if (state.playRequested) Icons.Outlined.Pause else Icons.Outlined.PlayArrow,
+                Icon(painterResource(if (state.playRequested) R.drawable.ic_symbol_pause else R.drawable.ic_symbol_play_arrow),
                     stringResource(if (state.playRequested) R.string.pause_video else R.string.play_video))
             }
             val progressDescription = stringResource(R.string.video_playback_progress)
@@ -778,7 +774,7 @@ private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
         ) {
             if (locked) {
                 val iconSize = with(LocalDensity.current) { style.fontSize.toDp() }
-                Icon(Icons.Outlined.Lock, null, Modifier.size(iconSize))
+                Icon(painterResource(R.drawable.ic_symbol_lock), null, Modifier.size(iconSize))
             }
             Text(videoSpeedOptions.first { it.first == state.speed }.second, style = style)
         }
@@ -823,7 +819,7 @@ private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
                                     selected = isSelected
                                 },
                                 trailingIcon = {
-                                    if (isSelected) Icon(Icons.Outlined.Check, null, tint = MaterialTheme.colorScheme.primary)
+                                    if (isSelected) Icon(painterResource(R.drawable.ic_symbol_check), null, tint = MaterialTheme.colorScheme.primary)
                                 },
                             )
                         }

@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -36,10 +37,6 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -51,10 +48,10 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -127,14 +124,14 @@ private fun SettingsVisibility(visible: Boolean, content: @Composable () -> Unit
     ) { content() }
 }
 
-internal enum class SettingsSection(@StringRes val title: Int, val icon: ImageVector, val tag: String) {
-    Appearance(R.string.appearance, Icons.Outlined.Style, "settings-appearance-screen"),
-    Preferences(R.string.preferences, Icons.Outlined.Tune, "settings-preferences-screen"),
-    Reading(R.string.reading, Icons.Outlined.AutoStories, "settings-reading-screen"),
-    LibraryAndStorage(R.string.library_and_storage, Icons.Outlined.FolderOpen, "settings-storage-screen"),
-    Diagnostics(R.string.diagnostics, Icons.Outlined.BugReport, "settings-diagnostics-screen"),
-    Security(R.string.security_and_privacy, Icons.Outlined.Security, "settings-security-screen"),
-    Application(R.string.app, Icons.Outlined.Info, "settings-application-screen"),
+internal enum class SettingsSection(@StringRes val title: Int, @DrawableRes val icon: Int, val tag: String) {
+    Appearance(R.string.appearance, R.drawable.ic_symbol_style, "settings-appearance-screen"),
+    Preferences(R.string.preferences, R.drawable.ic_symbol_tune, "settings-preferences-screen"),
+    Reading(R.string.reading, R.drawable.ic_symbol_chrome_reader_mode, "settings-reading-screen"),
+    LibraryAndStorage(R.string.library_and_storage, R.drawable.ic_symbol_folder, "settings-storage-screen"),
+    Diagnostics(R.string.diagnostics, R.drawable.ic_symbol_bug_report, "settings-diagnostics-screen"),
+    Security(R.string.security_and_privacy, R.drawable.ic_symbol_security, "settings-security-screen"),
+    Application(R.string.app, R.drawable.ic_symbol_info, "settings-application-screen"),
 }
 
 @Composable
@@ -145,7 +142,7 @@ internal fun SettingsScreen(onBack: () -> Unit, onOpen: (SettingsSection) -> Uni
                 headlineContent = {
                     Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            section.icon, null, Modifier.size(SettingsSectionIconSize),
+                            painterResource(section.icon), null, Modifier.size(SettingsSectionIconSize),
                             tint = MaterialTheme.colorScheme.primary,
                         )
                         Text(stringResource(section.title))
@@ -153,7 +150,7 @@ internal fun SettingsScreen(onBack: () -> Unit, onOpen: (SettingsSection) -> Uni
                 },
                 trailingContent = {
                     Icon(
-                        Icons.AutoMirrored.Outlined.KeyboardArrowRight, null,
+                        painterResource(R.drawable.ic_symbol_keyboard_arrow_right), null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 },
@@ -212,7 +209,7 @@ internal fun SettingsPage(
             )
             IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart).padding(start = backInset)
                 .size(SettingsBackButtonSize)) {
-                Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(backLabel))
+                Icon(painterResource(R.drawable.ic_symbol_arrow_back), stringResource(backLabel))
             }
             if (action != null) {
                 Box(Modifier.align(Alignment.CenterEnd).padding(end = backInset)) { action() }
@@ -274,10 +271,10 @@ private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSett
                 .padding(4.dp).background(Color(color), CircleShape)
                 .then(if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier),
                 contentAlignment = Alignment.Center) {
-                if (selected) Icon(Icons.Outlined.Check, null, Modifier.size(20.dp), Color.White)
+                if (selected) Icon(painterResource(R.drawable.ic_symbol_check), null, Modifier.size(20.dp), Color.White)
             }
         }
-        IconButton(onClick = { customColor = true }, Modifier.size(44.dp)) { Icon(Icons.Outlined.Palette, stringResource(R.string.custom_theme_color)) }
+        IconButton(onClick = { customColor = true }, Modifier.size(44.dp)) { Icon(painterResource(R.drawable.ic_symbol_palette), stringResource(R.string.custom_theme_color)) }
     }
     if (settings.verifyOnStartup) {
         Spacer(Modifier.height(11.5.dp))
@@ -310,7 +307,7 @@ private fun AppPreferences(
         title = stringResource(R.string.language),
         selectedValue = settings.language,
         options = AppLanguage.entries.map { it to it.endonym },
-        titleIcon = Icons.Outlined.Language,
+        titleIcon = R.drawable.ic_symbol_language,
     ) { onSettings(settings.copy(language = it)) }
     PreferenceMenu(
         title = stringResource(R.string.animation_speed),
@@ -350,7 +347,7 @@ private fun AppPreferences(
 private fun InteractionSettingsLink(page: InteractionSettingsPage, enabled: Boolean, onOpen: (InteractionSettingsPage) -> Unit) {
     SettingsListItem(
         headlineContent = { Text(stringResource(page.title)) },
-        trailingContent = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null) },
+        trailingContent = { Icon(painterResource(R.drawable.ic_symbol_keyboard_arrow_right), null) },
         modifier = Modifier.clickable(enabled = enabled, role = Role.Button) { onOpen(page) },
     )
 }
@@ -589,7 +586,7 @@ private fun DiagnosticsSettings(
                     IconButton(onClick = { model.setLogDirectory(null) }, enabled = showReset,
                         modifier = Modifier.width(SettingsActionWidth)) {
                         Icon(
-                            Icons.Outlined.Refresh, stringResource(R.string.restore_default_directory),
+                            painterResource(R.drawable.ic_symbol_refresh), stringResource(R.string.restore_default_directory),
                             Modifier.offset(x = (SettingsActionWidth - SettingsTrailingIconSize) / 2)
                                 .size(SettingsTrailingIconSize),
                         )
@@ -599,7 +596,7 @@ private fun DiagnosticsSettings(
             modifier = Modifier.clickable(enabled = settings.diagnosticLog) { logPicker.launch(null) })
     }
     SettingsListItem(headlineContent = { Text(stringResource(R.string.view_logs)) },
-        trailingContent = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null) },
+        trailingContent = { Icon(painterResource(R.drawable.ic_symbol_keyboard_arrow_right), null) },
         modifier = Modifier.clickable(enabled = !logOperationRunning, role = Role.Button, onClick = onViewLogs))
     SettingsListItem(headlineContent = { Text(stringResource(R.string.export_logs)) },
         modifier = Modifier.clickable(enabled = !logOperationRunning, role = Role.Button) { exportPicker.launch(null) })
@@ -780,7 +777,7 @@ private fun <T> PreferenceMenu(
     title: String,
     selectedValue: T,
     options: List<Pair<T, String>>,
-    titleIcon: ImageVector? = null,
+    @DrawableRes titleIcon: Int? = null,
     subtitle: String? = null,
     enabled: Boolean = true,
     onSelect: (T) -> Unit,
@@ -808,7 +805,7 @@ private fun <T> PreferenceMenu(
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyLarge)
-                            if (titleIcon != null) Icon(titleIcon, null, Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (titleIcon != null) Icon(painterResource(titleIcon), null, Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         if (subtitle != null) {
                             Text(subtitle, Modifier.widthIn(max = SettingsSupportingMaxWidth),
@@ -823,7 +820,7 @@ private fun <T> PreferenceMenu(
                         val tint = MaterialTheme.colorScheme.onSurfaceVariant
                         Text(current.second, Modifier.weight(1f, fill = false),
                             style = MaterialTheme.typography.bodyMedium, color = tint, textAlign = TextAlign.End)
-                        Icon(if (expanded) Icons.Outlined.ArrowDropUp else Icons.Outlined.ArrowDropDown,
+                        Icon(painterResource(if (expanded) R.drawable.ic_symbol_arrow_drop_up else R.drawable.ic_symbol_arrow_drop_down),
                             null, Modifier.size(20.dp), tint)
                     }
                 }
@@ -846,7 +843,7 @@ private fun <T> PreferenceMenu(
                     selected = isSelected
                 },
                 trailingIcon = {
-                    if (isSelected) Icon(Icons.Outlined.Check, null, tint = MaterialTheme.colorScheme.primary)
+                    if (isSelected) Icon(painterResource(R.drawable.ic_symbol_check), null, tint = MaterialTheme.colorScheme.primary)
                 },
             )
         }
@@ -890,8 +887,8 @@ private fun ReaderFitPreferences(settings: ReaderSettings, onSettings: (ReaderSe
     SettingsListItem(
         headlineContent = { Text(stringResource(R.string.reader_frame_fit)) },
         trailingContent = {
-            val arrow = if (expanded) Icons.Outlined.KeyboardArrowDown else Icons.AutoMirrored.Outlined.KeyboardArrowRight
-            Icon(arrow, null)
+            val arrow = if (expanded) R.drawable.ic_symbol_keyboard_arrow_down else R.drawable.ic_symbol_keyboard_arrow_right
+            Icon(painterResource(arrow), null)
         },
         modifier = Modifier.clickable(role = Role.Button, onClickLabel = action) { expanded = !expanded }
             .semantics { stateDescription = state },

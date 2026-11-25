@@ -35,11 +35,6 @@ import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.VerticalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.automirrored.outlined.NavigateBefore
-import androidx.compose.material.icons.automirrored.outlined.NavigateNext
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -60,6 +55,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
@@ -661,8 +657,8 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 TopAppBar(title = {
                     Text(session.book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 }, navigationIcon = {
-                    IconButton(onClick = { onProgress(currentPage); onBack() }) { Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(R.string.back_to_library)) }
-                }, actions = { IconButton(onClick = { preferences = true }) { Icon(Icons.Outlined.Settings, stringResource(R.string.reader_settings)) } },
+                    IconButton(onClick = { onProgress(currentPage); onBack() }) { Icon(painterResource(R.drawable.ic_symbol_arrow_back), stringResource(R.string.back_to_library)) }
+                }, actions = { IconButton(onClick = { preferences = true }) { Icon(painterResource(R.drawable.ic_symbol_settings), stringResource(R.string.reader_settings)) } },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = .97f)))
             }
             val slideSpec = spring(
@@ -717,11 +713,11 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                             },
                         )
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = { jump(currentPage - 1, step = -1) }, enabled = !scrubbing && (settings.loopMode || currentPage > 0)) { Icon(Icons.AutoMirrored.Outlined.NavigateBefore, stringResource(R.string.previous_page)) }
-                            IconButton(onClick = { zoom(-1) }, enabled = !scrubbing) { Icon(Icons.Outlined.ZoomOut, stringResource(if (currentPageIsVideo) R.string.zoom_out_video else R.string.zoom_out_image)) }
+                            IconButton(onClick = { jump(currentPage - 1, step = -1) }, enabled = !scrubbing && (settings.loopMode || currentPage > 0)) { Icon(painterResource(R.drawable.ic_symbol_navigate_before), stringResource(R.string.previous_page)) }
+                            IconButton(onClick = { zoom(-1) }, enabled = !scrubbing) { Icon(painterResource(R.drawable.ic_symbol_zoom_out), stringResource(if (currentPageIsVideo) R.string.zoom_out_video else R.string.zoom_out_image)) }
                             TextButton(onClick = { zoom(0) }, enabled = !scrubbing) { Text(stringResource(R.string.fit_screen)) }
-                            IconButton(onClick = { zoom(1) }, enabled = !scrubbing) { Icon(Icons.Outlined.ZoomIn, stringResource(if (currentPageIsVideo) R.string.zoom_in_video else R.string.zoom_in_image)) }
-                            IconButton(onClick = { jump(currentPage + 1, step = 1) }, enabled = !scrubbing && (settings.loopMode || currentPage < session.pages.lastIndex)) { Icon(Icons.AutoMirrored.Outlined.NavigateNext, stringResource(R.string.next_page)) }
+                            IconButton(onClick = { zoom(1) }, enabled = !scrubbing) { Icon(painterResource(R.drawable.ic_symbol_zoom_in), stringResource(if (currentPageIsVideo) R.string.zoom_in_video else R.string.zoom_in_image)) }
+                            IconButton(onClick = { jump(currentPage + 1, step = 1) }, enabled = !scrubbing && (settings.loopMode || currentPage < session.pages.lastIndex)) { Icon(painterResource(R.drawable.ic_symbol_keyboard_arrow_right), stringResource(R.string.next_page)) }
                         }
                     }
                 }
@@ -1017,7 +1013,7 @@ private fun ReaderPageContent(index: Int, image: Drawable?, failure: Boolean, se
                 })
         } else if (failure) {
             Column(Modifier.padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Outlined.BrokenImage, null, tint = foreground)
+                Icon(painterResource(R.drawable.ic_symbol_broken_image), null, tint = foreground)
                 Text(stringResource(R.string.image_error), Modifier.padding(vertical = 16.dp), color = foreground)
                 Row {
                     TextButton(onClick = onRetry) { Text(stringResource(R.string.retry)) }

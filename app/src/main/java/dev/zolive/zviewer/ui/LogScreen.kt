@@ -27,16 +27,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.ContentCopy
-import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -169,10 +166,10 @@ fun LogDetailScreen(file: DiagnosticLog.LogFile, onBack: () -> Unit) {
             actions = {
                 IconButton(enabled = !actionRunning && content != null, onClick = {
                     shareLog()
-                }) { Icon(Icons.Outlined.Share, stringResource(R.string.share_log)) }
+                }) { Icon(painterResource(R.drawable.ic_symbol_share), stringResource(R.string.share_log)) }
                 IconButton(enabled = !actionRunning && content != null, onClick = {
                     content?.let { copyLog(it) }
-                }) { Icon(Icons.Outlined.ContentCopy, stringResource(R.string.copy_log)) }
+                }) { Icon(painterResource(R.drawable.ic_symbol_content_copy), stringResource(R.string.copy_log)) }
             },
         )
     }) { padding ->
@@ -303,6 +300,6 @@ private class LogSelectionMenu(
 @Composable
 private fun BackButton(description: Int, onBack: () -> Unit) {
     IconButton(onClick = onBack) {
-        Icon(Icons.AutoMirrored.Outlined.ArrowBack, stringResource(description))
+        Icon(painterResource(R.drawable.ic_symbol_arrow_back), stringResource(description))
     }
 }
