@@ -52,6 +52,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.CornerRadius
@@ -67,6 +69,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
@@ -397,6 +401,17 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     val currentGrid = gridStates[pagerState.currentPage]
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
+    var requestSearchFocus by remember { mutableStateOf(false) }
+    val searchFocus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    fun closeSearch() {
+        requestSearchFocus = false
+        focusManager.clearFocus()
+        keyboard?.hide()
+        searching = false
+        query = ""
+    }
     var filter by rememberSaveable { mutableIntStateOf(0) }
     var sort by rememberSaveable { mutableIntStateOf(0) }
     var managingFavorites by rememberSaveable { mutableStateOf(false) }
@@ -422,7 +437,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     }
     BackHandler(enabled = active && (managingFavorites || searching)) {
         if (managingFavorites) changeFavoriteManagement(false)
-        else { searching = false; query = "" }
+        else closeSearch()
     }
     LibraryScaffold(
         useRail = useRail,
@@ -431,8 +446,21 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
             TopAppBar(modifier = Modifier.padding(start = contentInset - 16.dp, end = actionInset - 4.dp), title = {
                 Text("ZViewer", fontWeight = FontWeight.Bold, fontSize = 21.sp)
             }, actions = {
-                IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(painterResource(R.drawable.ic_symbol_search), stringResource(R.string.search_comics)) }
-                IconButton(onClick = { changeFavoriteManagement(false); onSettings() }) { Icon(painterResource(R.drawable.ic_symbol_settings), stringResource(R.string.settings)) }
+                IconButton(onClick = {
+                    if (searching) closeSearch()
+                    else {
+                        requestSearchFocus = true
+                        searching = true
+                    }
+                }) { Icon(painterResource(R.drawable.ic_symbol_search), stringResource(R.string.search_comics)) }
+                IconButton(onClick = {
+                    if (searching) {
+                        focusManager.clearFocus()
+                        keyboard?.hide()
+                    }
+                    changeFavoriteManagement(false)
+                    onSettings()
+                }) { Icon(painterResource(R.drawable.ic_symbol_settings), stringResource(R.string.settings)) }
             })
         },
         navigation = {
@@ -466,10 +494,18 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                     fadeOut(tween(searchSpeed.duration(150)))
             ) {
                 TextSelectionHaptics {
-                    OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = contentInset, vertical = 8.dp),
+                    OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth()
+                        .padding(horizontal = contentInset, vertical = 8.dp).focusRequester(searchFocus),
                         placeholder = { Text(stringResource(R.string.search_title)) }, leadingIcon = { Icon(painterResource(R.drawable.ic_symbol_search), null) },
-                        trailingIcon = { IconButton(onClick = { query = ""; searching = false }) { Icon(painterResource(R.drawable.ic_symbol_close), stringResource(R.string.close_search)) } },
+                        trailingIcon = { IconButton(onClick = ::closeSearch) { Icon(painterResource(R.drawable.ic_symbol_close), stringResource(R.string.close_search)) } },
                         shape = RoundedCornerShape(28.dp), singleLine = true)
+                    LaunchedEffect(searching, requestSearchFocus, active) {
+                        if (searching && requestSearchFocus && active) {
+                            searchFocus.requestFocus()
+                            keyboard?.show()
+                            requestSearchFocus = false
+                        }
+                    }
                 }
             }
             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize().testTag("library-pager"),
