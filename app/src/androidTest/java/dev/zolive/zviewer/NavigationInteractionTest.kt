@@ -273,15 +273,18 @@ class NavigationInteractionTest {
         rule.onNodeWithText("Finished").performClick().assertIsSelected()
         rule.onNodeWithText("No matching comics").assertIsDisplayed()
         val icon = rule.onNodeWithTag("empty-library-icon")
+            .assertWidthIsEqualTo(52.dp).assertHeightIsEqualTo(52.dp)
         val libraryCenter = icon.assertIsDisplayed().fetchSemanticsNode().boundsInRoot.center.y
 
         tab("Favorites").performClick()
         rule.onNodeWithText("No favorites yet").assertIsDisplayed()
+        icon.assertWidthIsEqualTo(52.dp).assertHeightIsEqualTo(52.dp)
         assertEquals(libraryCenter, icon.assertIsDisplayed().fetchSemanticsNode().boundsInRoot.center.y, 1f)
 
         tab("Recently read").performClick()
         rule.onNodeWithText("No matching comics").assertIsDisplayed()
         rule.onNodeWithText("Unread").assertDoesNotExist()
+        icon.assertWidthIsEqualTo(52.dp).assertHeightIsEqualTo(52.dp)
         assertEquals(libraryCenter, icon.assertIsDisplayed().fetchSemanticsNode().boundsInRoot.center.y, 1f)
     }
 

@@ -10,6 +10,8 @@ import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -40,10 +42,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.MenuBook
-import androidx.compose.material.icons.automirrored.outlined.Sort
-import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -61,7 +59,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onSizeChanged
@@ -73,6 +70,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -374,11 +372,17 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     }
     SettingsImportDialog(model)
     if (state.error != null) {
-        AppAlertDialog(onDismissRequest = model::dismissError, icon = { Icon(Icons.Outlined.Info, null) },
+        AppAlertDialog(onDismissRequest = model::dismissError, icon = { Icon(painterResource(R.drawable.ic_symbol_info), null) },
             title = { Text(stringResource(R.string.read_error_title)) }, text = { Text(state.error) },
             confirmButton = { TextButton(onClick = model::dismissError) { Text(stringResource(R.string.ok)) } },
             dismissButton = { TextButton(onClick = { model.dismissError(); chooseLibrary() }) { Text(stringResource(R.string.choose_library)) } })
     }
+}
+
+private enum class LibraryTab(@StringRes val title: Int, @DrawableRes val outlineIcon: Int, @DrawableRes val filledIcon: Int) {
+    Library(R.string.library, R.drawable.ic_symbol_book, R.drawable.ic_symbol_book_filled),
+    Favorites(R.string.favorites, R.drawable.ic_symbol_bookmark, R.drawable.ic_symbol_bookmark_filled),
+    Recent(R.string.recent_reads, R.drawable.ic_symbol_history, R.drawable.ic_symbol_history),
 }
 
 @Composable
@@ -387,9 +391,9 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     val searchSpeed = animationSpeed(AnimationEffect.LibrarySearch)
     val managementHaptic = hapticFeedback(HapticEvent.FavoriteManagement)
     val favoriteHaptic = hapticFeedback(HapticEvent.Favorite)
-    val titles = listOf(stringResource(R.string.library), stringResource(R.string.favorites), stringResource(R.string.recent_reads))
-    val pagerState = rememberPagerState { titles.size }
-    val gridStates = titles.map { rememberLazyGridState() }
+    val tabs = LibraryTab.entries
+    val pagerState = rememberPagerState { tabs.size }
+    val gridStates = tabs.map { rememberLazyGridState() }
     val currentGrid = gridStates[pagerState.currentPage]
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
@@ -427,8 +431,8 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
             TopAppBar(modifier = Modifier.padding(start = contentInset - 16.dp, end = actionInset - 4.dp), title = {
                 Text("ZViewer", fontWeight = FontWeight.Bold, fontSize = 21.sp)
             }, actions = {
-                IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(Icons.Outlined.Search, stringResource(R.string.search_comics)) }
-                IconButton(onClick = { changeFavoriteManagement(false); onSettings() }) { Icon(Icons.Outlined.Settings, stringResource(R.string.settings)) }
+                IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(painterResource(R.drawable.ic_symbol_search), stringResource(R.string.search_comics)) }
+                IconButton(onClick = { changeFavoriteManagement(false); onSettings() }) { Icon(painterResource(R.drawable.ic_symbol_settings), stringResource(R.string.settings)) }
             })
         },
         bottomBar = {
@@ -443,11 +447,12 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                     Modifier
                 }
                 NavigationBar(modifier = barModifier) {
-                    val icons = listOf(Icons.Outlined.CollectionsBookmark, Icons.Outlined.BookmarkBorder, Icons.Outlined.History)
-                    titles.forEachIndexed { index, title ->
-                        NavigationBarItem(selected = pagerState.currentPage == index,
+                    tabs.forEachIndexed { index, tab ->
+                        val selected = pagerState.currentPage == index
+                        NavigationBarItem(selected = selected,
                             onClick = { pagerState.requestScrollToPage(index) },
-                            icon = { Icon(icons[index], null) }, label = { Text(title) })
+                            icon = { Icon(painterResource(if (selected) tab.filledIcon else tab.outlineIcon), null) },
+                            label = { Text(stringResource(tab.title)) })
                     }
                 }
             }
@@ -472,25 +477,30 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
             ) {
                 TextSelectionHaptics {
                     OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = contentInset, vertical = 8.dp),
-                        placeholder = { Text(stringResource(R.string.search_title)) }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
-                        trailingIcon = { IconButton(onClick = { query = ""; searching = false }) { Icon(Icons.Outlined.Close, stringResource(R.string.close_search)) } },
+                        placeholder = { Text(stringResource(R.string.search_title)) }, leadingIcon = { Icon(painterResource(R.drawable.ic_symbol_search), null) },
+                        trailingIcon = { IconButton(onClick = { query = ""; searching = false }) { Icon(painterResource(R.drawable.ic_symbol_close), stringResource(R.string.close_search)) } },
                         shape = RoundedCornerShape(28.dp), singleLine = true)
                 }
             }
             HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize().testTag("library-pager"),
                 flingBehavior = pageFlingBehavior(pagerState, animationSpeed(AnimationEffect.LibraryPaging)),
-                key = { it }) { tab ->
+                key = { it }) { pageIndex ->
+                val tab = tabs[pageIndex]
                 var sortMenu by remember { mutableStateOf(false) }
-                val filterOptions = if (tab == 2) {
+                val filterOptions = if (tab == LibraryTab.Recent) {
                     listOf(0 to stringResource(R.string.filter_all), 1 to stringResource(R.string.filter_in_progress), 3 to stringResource(R.string.filter_read))
                 } else {
                     listOf(0 to stringResource(R.string.filter_all), 1 to stringResource(R.string.filter_in_progress), 2 to stringResource(R.string.filter_unread), 3 to stringResource(R.string.filter_read))
                 }
-                val selectedFilter = if (tab == 2 && filter == 2) 0 else filter
+                val selectedFilter = if (tab == LibraryTab.Recent && filter == 2) 0 else filter
                 val books = remember(state.books, state.favorites, state.progress, tab, query, selectedFilter, sort) {
                     state.books.filter { book ->
                         val progress = state.progress[book.id] ?: ReadingProgress()
-                        val matchesTab = when (tab) { 1 -> book.id in state.favorites; 2 -> progress.updated > 0; else -> true }
+                        val matchesTab = when (tab) {
+                            LibraryTab.Library -> true
+                            LibraryTab.Favorites -> book.id in state.favorites
+                            LibraryTab.Recent -> progress.updated > 0
+                        }
                         val matchesFilter = when (selectedFilter) {
                             1 -> progress.updated > 0 && progress.fraction < 1f
                             2 -> progress.updated == 0L
@@ -500,7 +510,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                         matchesTab && matchesFilter && book.title.contains(query, ignoreCase = true)
                     }.let { filtered ->
                         when {
-                            tab == 2 || sort == 2 -> filtered.sortedByDescending { state.progress[it.id]?.updated ?: 0 }
+                            tab == LibraryTab.Recent || sort == 2 -> filtered.sortedByDescending { state.progress[it.id]?.updated ?: 0 }
                             sort == 1 -> filtered.sortedByDescending { it.modified }
                             else -> filtered
                         }
@@ -509,7 +519,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                 val hasFavorites = state.books.any { it.id in state.favorites }
                 val hasRecent = state.books.any { (state.progress[it.id]?.updated ?: 0L) > 0L }
                 val pageModifier = Modifier.fillMaxSize()
-                    .then(if (pagerState.currentPage != tab) Modifier.clearAndSetSemantics {} else Modifier)
+                    .then(if (pagerState.currentPage != pageIndex) Modifier.clearAndSetSemantics {} else Modifier)
                 if (state.treeUri == null) {
                     Box(pageModifier) { WelcomeScreen(onChooseLibrary) }
                 } else {
@@ -518,33 +528,33 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                             Row(Modifier.fillMaxWidth().padding(start = contentInset, end = actionInset, top = 14.dp, bottom = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(titles[tab], style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
+                                    Text(stringResource(tab.title), style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                                     Text(pluralStringResource(R.plurals.comic_count, books.size, books.size), Modifier.padding(top = 5.dp),
                                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                IconButton(onClick = { changeFavoriteManagement(false); model.refresh() }, enabled = !state.scanning) { Icon(Icons.Outlined.Refresh, stringResource(R.string.refresh_library)) }
+                                IconButton(onClick = { changeFavoriteManagement(false); model.refresh() }, enabled = !state.scanning) { Icon(painterResource(R.drawable.ic_symbol_refresh), stringResource(R.string.refresh_library)) }
                                 EndAlignedDropdownMenu(
                                     expanded = sortMenu,
                                     onDismissRequest = { sortMenu = false },
                                     anchor = {
                                         IconButton(onClick = { sortMenu = true }) {
-                                            Icon(Icons.AutoMirrored.Outlined.Sort, stringResource(R.string.sort))
+                                            Icon(painterResource(R.drawable.ic_symbol_sort), stringResource(R.string.sort))
                                         }
                                     },
                                 ) {
                                     listOf(stringResource(R.string.sort_by_name), stringResource(R.string.sort_modified), stringResource(R.string.recent_reads)).forEachIndexed { index, label ->
                                         DropdownMenuItem(text = { Text(label) }, onClick = { sort = index; sortMenu = false },
-                                            trailingIcon = { if (sort == index) Icon(Icons.Outlined.Check, null) })
+                                            trailingIcon = { if (sort == index) Icon(painterResource(R.drawable.ic_symbol_check), null) })
                                     }
                                 }
                             }
                             LibraryFilters(filterOptions, selectedFilter, contentInset) { filter = it }
                         }
                         LazyVerticalGrid(columns = GridCells.Fixed(columns),
-                            state = gridStates[tab], modifier = Modifier.fillMaxSize().testTag("library-grid-$tab"),
+                            state = gridStates[pageIndex], modifier = Modifier.fillMaxSize().testTag("library-grid-$pageIndex"),
                             contentPadding = PaddingValues(gridPadding, 12.dp, gridPadding, 88.dp),
                             horizontalArrangement = Arrangement.spacedBy(gridSpacing), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-                            val recent = if (tab == 0 && query.isEmpty() && selectedFilter == 0) books
+                            val recent = if (tab == LibraryTab.Library && query.isEmpty() && selectedFilter == 0) books
                                 .filter { (state.progress[it.id]?.updated ?: 0) > 0 && (state.progress[it.id]?.fraction ?: 0f) < 1f }
                                 .maxByOrNull { state.progress[it.id]?.updated ?: 0 } else null
                             if (recent != null) item(span = { GridItemSpan(maxLineSpan) }) {
@@ -564,17 +574,18 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                         }
                         if (books.isEmpty()) {
                             EmptyLibrary(
+                                icon = tab.outlineIcon,
                                 scanning = state.scanning,
                                 directoryEmpty = state.books.isEmpty(),
                                 onChooseLibrary = onChooseLibrary,
                                 emptyTitle = when {
-                                    tab == 1 && !hasFavorites -> stringResource(R.string.no_favorites)
-                                    tab == 2 && !hasRecent -> stringResource(R.string.no_recent_reads)
+                                    tab == LibraryTab.Favorites && !hasFavorites -> stringResource(R.string.no_favorites)
+                                    tab == LibraryTab.Recent && !hasRecent -> stringResource(R.string.no_recent_reads)
                                     else -> null
                                 },
                                 emptyDescription = when {
-                                    tab == 1 && !hasFavorites -> stringResource(R.string.favorite_management_hint)
-                                    tab == 2 && !hasRecent -> stringResource(R.string.start_reading_hint)
+                                    tab == LibraryTab.Favorites && !hasFavorites -> stringResource(R.string.favorite_management_hint)
+                                    tab == LibraryTab.Recent && !hasRecent -> stringResource(R.string.start_reading_hint)
                                     else -> null
                                 }
                             )
@@ -583,7 +594,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                         val looseHeight = constraints.copy(minHeight = 0)
                         val header = measurables[0].measure(looseHeight)
                         val grid = measurables[1].measure(looseHeight.copy(maxHeight = constraints.maxHeight - header.height))
-                        // 书本图标以分页视口为基准，说明文字高度不影响位置。
+                        // 空状态图标以分页视口为基准，说明文字高度不影响位置。
                         val iconTop = (constraints.maxHeight - EmptyLibraryIconSize.roundToPx()) / 2
                         val emptyTop = maxOf(header.height, iconTop)
                         val empty = measurables.getOrNull(2)?.measure(looseHeight.copy(maxHeight = constraints.maxHeight - emptyTop))
@@ -644,7 +655,7 @@ private fun LibraryActions(gridState: LazyGridState, managingFavorites: Boolean,
                     IntOffset(-distance.roundToInt(), 0)
                 },
                 shape = CircleShape, containerColor = MaterialTheme.colorScheme.secondaryContainer) {
-                Icon(Icons.Outlined.Close, stringResource(R.string.exit_favorite_management))
+                Icon(painterResource(R.drawable.ic_symbol_close), stringResource(R.string.exit_favorite_management))
             }
         }
         val arrowVisible by remember(gridState) { derivedStateOf { buttonProgress > 0f } }
@@ -661,7 +672,7 @@ private fun LibraryActions(gridState: LazyGridState, managingFavorites: Boolean,
                     translationY = size.height * (1f - alpha)
                 },
                 shape = CircleShape, containerColor = MaterialTheme.colorScheme.secondaryContainer) {
-                Icon(Icons.Outlined.KeyboardArrowUp, stringResource(R.string.scroll_to_top))
+                Icon(painterResource(R.drawable.ic_symbol_keyboard_arrow_up), stringResource(R.string.scroll_to_top))
             }
         }
     }
@@ -686,7 +697,7 @@ private fun WelcomeScreen(onChooseLibrary: () -> Unit) {
         }
         Spacer(Modifier.height(30.dp))
         Button(onClick = onChooseLibrary, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            Icon(Icons.Outlined.CreateNewFolder, null); Spacer(Modifier.width(10.dp)); Text(stringResource(R.string.choose_library_directory), fontSize = 16.sp)
+            Icon(painterResource(R.drawable.ic_symbol_create_new_folder), null); Spacer(Modifier.width(10.dp)); Text(stringResource(R.string.choose_library_directory), fontSize = 16.sp)
         }
     }
 }
@@ -696,6 +707,7 @@ private val EmptyLibraryLineBreak = LineBreak.Paragraph.copy(wordBreak = LineBre
 
 @Composable
 private fun EmptyLibrary(
+    @DrawableRes icon: Int,
     scanning: Boolean,
     directoryEmpty: Boolean,
     onChooseLibrary: () -> Unit,
@@ -708,7 +720,7 @@ private fun EmptyLibrary(
         Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 32.dp, end = 32.dp, bottom = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(Icons.AutoMirrored.Outlined.MenuBook, null,
+        Icon(painterResource(icon), null,
             Modifier.size(EmptyLibraryIconSize).testTag("empty-library-icon"), tint = MaterialTheme.colorScheme.primary)
         Text(when {
             scanning -> stringResource(R.string.scanning_library)
@@ -731,13 +743,13 @@ private fun ContinueCard(book: Book, progress: ReadingProgress, onClick: () -> U
     Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
         shape = RoundedCornerShape(20.dp)) {
         Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.AutoMirrored.Outlined.MenuBook, null, Modifier.size(30.dp))
+            Icon(painterResource(R.drawable.ic_symbol_menu_book), null, Modifier.size(30.dp))
             Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
                 Text(stringResource(R.string.continue_reading), style = MaterialTheme.typography.labelMedium)
                 Text(book.title, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(stringResource(R.string.page_progress, progress.page + 1, progress.total), Modifier.padding(top = 3.dp), style = MaterialTheme.typography.bodySmall)
             }
-            Icon(Icons.Outlined.PlayArrow, stringResource(R.string.continue_reading))
+            Icon(painterResource(R.drawable.ic_symbol_play_arrow), stringResource(R.string.continue_reading))
         }
     }
 }
@@ -777,7 +789,7 @@ private fun BookCard(book: Book, progress: ReadingProgress, favorite: Boolean, r
                         hapticFeedbackEnabled = false,
                     ), contentAlignment = Alignment.Center) {
                     Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surface.copy(alpha = .92f)) {
-                        Icon(if (favorite) Icons.Outlined.Bookmark else Icons.Outlined.BookmarkBorder,
+                        Icon(painterResource(if (favorite) R.drawable.ic_symbol_bookmark_filled else R.drawable.ic_symbol_bookmark),
                             stringResource(if (favorite) R.string.remove_favorite else R.string.add_favorite, book.title),
                             Modifier.padding(6.dp).size(18.dp), tint = MaterialTheme.colorScheme.primary)
                     }
@@ -813,7 +825,7 @@ private fun BookCover(book: Book, repository: BookRepository, size: PixelSize, r
     if (image != null) Image(image.asImageBitmap(), book.title, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
     else Column(Modifier.fillMaxSize().padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center) {
-        Icon(if (failed) Icons.Outlined.ImageNotSupported else Icons.AutoMirrored.Outlined.MenuBook, null,
+        Icon(painterResource(if (failed) R.drawable.ic_symbol_image_not_supported else R.drawable.ic_symbol_menu_book), null,
             Modifier.size(32.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         if (failed) Text(stringResource(R.string.tap_to_read), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.labelSmall)
     }
