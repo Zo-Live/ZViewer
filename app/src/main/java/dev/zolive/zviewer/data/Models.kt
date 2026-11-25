@@ -101,6 +101,7 @@ data class ReaderSettings(
     val disabledAnimations: Set<AnimationEffect> = emptySet(),
     val disabledHaptics: Set<HapticEvent> = emptySet(),
     val verificationFollowsTheme: Boolean = true,
+    val showPageNumber: Boolean = true,
 ) {
     internal fun animationSpeedFor(effect: AnimationEffect): AnimationSpeed =
         if (effect in disabledAnimations) AnimationSpeed.Moderate else animationSpeed

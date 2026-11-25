@@ -661,7 +661,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                 Image(remember(transition.frame) { transition.frame.asImageBitmap() }, null,
                     Modifier.fillMaxSize().background(background), contentScale = ContentScale.FillBounds)
             }
-            if (!controls) {
+            if (!controls && settings.showPageNumber) {
                 Surface(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(12.dp),
                     color = background.copy(alpha = OverlayBackgroundAlpha),
                     contentColor = foreground, shape = RoundedCornerShape(12.dp)) {

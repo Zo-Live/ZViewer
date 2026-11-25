@@ -870,6 +870,9 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
     ) {
         onSettings(if (settings.vertical) settings.copy(horizontalVideoSeek = it) else settings.copy(rightToLeft = it))
     }
+    PreferenceSwitch(stringResource(R.string.show_page_number), checked = settings.showPageNumber) {
+        onSettings(settings.copy(showPageNumber = it))
+    }
     PreferenceSwitch(stringResource(R.string.keep_screen_on), checked = settings.keepScreenOn) { onSettings(settings.copy(keepScreenOn = it)) }
     PreferenceSwitch(stringResource(R.string.volume_key_paging), checked = settings.volumeKeyPaging) { onSettings(settings.copy(volumeKeyPaging = it)) }
     PreferenceSwitch(stringResource(R.string.double_tap_zoom), checked = settings.doubleTapZoom) { onSettings(settings.copy(doubleTapZoom = it)) }

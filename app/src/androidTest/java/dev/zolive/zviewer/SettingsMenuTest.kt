@@ -370,6 +370,7 @@ class SettingsMenuTest {
         val rightToLeft = setting("从右向左翻页")
         rule.onNodeWithText("阅读模式").assertDoesNotExist()
         val horizontalSeek = setting("左右滑动调整视频进度")
+        val pageNumber = setting("右下角显示页码")
         val volume = setting("使用音量键翻页")
         val zoom = setting("双击以放缩")
         rightToLeft.assertDoesNotExist()
@@ -377,6 +378,7 @@ class SettingsMenuTest {
         val topRows = listOf(mode, direction, horizontalSeek).map { it.fetchSemanticsNode().boundsInRoot }
         topRows.zipWithNext().forEach { (upper, lower) -> assertTrue(upper.bottom <= lower.top) }
         horizontalSeek.performClick().assertIsOff()
+        pageNumber.assertIsOn()
         volume.assertIsOff()
         zoom.assertIsOn()
         mode.performClick()
@@ -388,12 +390,13 @@ class SettingsMenuTest {
         mode.assert(hasText("分页"))
         horizontalSeek.assertDoesNotExist()
         rightToLeft.assertIsOff()
-        val rows = listOf(mode, direction, rightToLeft, setting("阅读时屏幕常亮"), volume, zoom,
+        val rows = listOf(mode, direction, rightToLeft, pageNumber, setting("阅读时屏幕常亮"), volume, zoom,
             setting("深色阅读背景")).map { it.fetchSemanticsNode().boundsInRoot }
         rows.zipWithNext().forEach { (upper, lower) -> assertTrue(upper.bottom <= lower.top) }
         rule.onNodeWithText("适用于右开本的水平阅读模式").assertDoesNotExist()
         rule.onNodeWithText("离开阅读器后恢复系统设置").assertDoesNotExist()
         rightToLeft.performClick().assertIsOn()
+        pageNumber.performClick().assertIsOff()
         volume.performClick().assertIsOn()
         zoom.performClick().assertIsOff()
         mode.performClick()
@@ -411,6 +414,7 @@ class SettingsMenuTest {
         assertFalse(saved.paged)
         assertFalse(saved.vertical)
         assertFalse(saved.horizontalVideoSeek)
+        assertFalse(saved.showPageNumber)
         assertTrue(saved.volumeKeyPaging)
         assertFalse(saved.doubleTapZoom)
     }
