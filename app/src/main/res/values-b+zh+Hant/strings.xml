@@ -254,6 +254,7 @@
     <string name="video_accessibility_without_zoom">第 %1$d 部影片，輕點顯示閱讀控制。</string>
     <string name="retry">重試</string>
     <string name="show_reader_controls">顯示閱讀控制</string>
+    <string name="hide_reader_controls">隱藏閱讀控制</string>
     <string name="video_error">無法播放影片，檔案可能無法讀取，或裝置不支援此編碼。</string>
     <string name="pause_video">暫停影片</string>
     <string name="play_video">播放影片</string>

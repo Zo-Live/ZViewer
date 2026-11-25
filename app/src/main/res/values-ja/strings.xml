@@ -254,6 +254,7 @@
     <string name="video_accessibility_without_zoom">動画 %1$d。タップで操作ボタンを表示します。</string>
     <string name="retry">再試行</string>
     <string name="show_reader_controls">閲覧操作ボタンを表示</string>
+    <string name="hide_reader_controls">閲覧操作ボタンを非表示</string>
     <string name="video_error">動画を再生できません。ファイルを読み込めないか、端末がコーデックに対応していない可能性があります。</string>
     <string name="pause_video">動画を一時停止</string>
     <string name="play_video">動画を再生</string>

@@ -464,6 +464,36 @@ class ReaderInteractionTest {
         }
     }
 
+    @Test fun toolbarHandleFollowsDragAndClosesAfterThreshold() {
+        open(video = false)
+        val handle = rule.onNodeWithContentDescription(rule.activity.getString(R.string.hide_reader_controls))
+        val settings = rule.onNodeWithContentDescription(rule.activity.getString(R.string.reader_settings))
+        fun showControls() {
+            rule.onRoot().performTouchInput { click(Offset(centerX, height * .35f)) }
+            rule.waitUntil(5_000) {
+                rule.onAllNodesWithContentDescription(rule.activity.getString(R.string.hide_reader_controls))
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            handle.assertIsDisplayed()
+        }
+        fun dragHandle(distance: Float) {
+            val start = handle.fetchSemanticsNode().boundsInRoot.center
+            rule.onRoot().performTouchInput { swipe(start, start + Offset(0f, distance), 400) }
+        }
+        showControls()
+        val initialBounds = handle.fetchSemanticsNode().boundsInRoot
+        dragHandle(initialBounds.height * .7f)
+        assertEquals(initialBounds, handle.assertIsDisplayed().fetchSemanticsNode().boundsInRoot)
+        dragHandle(initialBounds.height * 2f)
+        handle.assertDoesNotExist()
+        settings.assertDoesNotExist()
+        assertEquals(0, currentPage)
+        showControls()
+        assertEquals(initialBounds, handle.fetchSemanticsNode().boundsInRoot)
+        handle.performClick()
+        settings.assertDoesNotExist()
+    }
+
     @Test fun progressControlsSeekAndHideTogether() {
         open(names = listOf("moving-video/moving.mp4", "video-folder/video2.mp4"))
         toggleControls()

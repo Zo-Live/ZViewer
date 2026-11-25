@@ -10,6 +10,7 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -17,8 +18,10 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.ScrollableDefaults
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.rememberOverscrollEffect
 import androidx.compose.foundation.layout.*
@@ -59,6 +62,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -126,6 +131,24 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
     val toolbarSpeed = settings.animationSpeedFor(AnimationEffect.ReaderToolbar)
     var currentPage by rememberSaveable(session.book.id) { mutableIntStateOf(initialPage.coerceIn(session.pages.indices)) }
     var controls by rememberSaveable(session.book.id) { mutableStateOf(false) }
+    var toolbarDragOffset by remember { mutableFloatStateOf(0f) }
+    var toolbarDragJob by remember { mutableStateOf<Job?>(null) }
+    val toolbarDismissDistance = with(LocalDensity.current) { 48.dp.toPx() }
+    val toolbarSpring = spring<Float>(stiffness = toolbarSpeed.stiffness(Spring.StiffnessMediumLow))
+    LaunchedEffect(controls) {
+        if (controls) {
+            toolbarDragJob?.cancel()
+            toolbarDragOffset = 0f
+        }
+    }
+    fun restoreToolbarPosition() {
+        toolbarDragJob?.cancel()
+        toolbarDragJob = scope.launch {
+            animate(toolbarDragOffset, 0f, animationSpec = toolbarSpring) { value, _ ->
+                toolbarDragOffset = value
+            }
+        }
+    }
     var preferences by remember { mutableStateOf(false) }
     var jumpDialog by remember { mutableStateOf(false) }
     var zoomSequence by remember { mutableIntStateOf(0) }
@@ -641,7 +664,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             if (!controls) {
                 Surface(Modifier.align(Alignment.BottomEnd).navigationBarsPadding().padding(12.dp),
                     color = background.copy(alpha = OverlayBackgroundAlpha),
-                    contentColor = foreground.copy(alpha = .65f), shape = RoundedCornerShape(12.dp)) {
+                    contentColor = foreground, shape = RoundedCornerShape(12.dp)) {
                     Text(stringResource(
                         when {
                             mixedBook -> R.string.compact_item_progress
@@ -654,8 +677,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         style = MaterialTheme.typography.labelSmall)
                 }
             }
-            val fadeSpec = spring<Float>(stiffness = toolbarSpeed.stiffness(Spring.StiffnessMediumLow))
-            AnimatedVisibility(visible = controls, enter = fadeIn(fadeSpec), exit = fadeOut(fadeSpec),
+            AnimatedVisibility(visible = controls, enter = fadeIn(toolbarSpring), exit = fadeOut(toolbarSpring),
                 modifier = Modifier.align(Alignment.TopCenter).blockVideoGestures()) {
                 TopAppBar(title = {
                     Text(session.book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
@@ -667,14 +689,41 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             val slideSpec = spring(
                 stiffness = toolbarSpeed.stiffness(Spring.StiffnessMediumLow), visibilityThreshold = IntOffset(1, 1),
             )
-            AnimatedVisibility(visible = controls, modifier = Modifier.align(Alignment.BottomCenter).blockVideoGestures(),
-                enter = slideInVertically(slideSpec) { it } + fadeIn(fadeSpec),
-                exit = slideOutVertically(slideSpec) { it } + fadeOut(fadeSpec)) {
+            AnimatedVisibility(
+                visible = controls,
+                modifier = Modifier.align(Alignment.BottomCenter)
+                    .offset { IntOffset(0, toolbarDragOffset.roundToInt()) }
+                    .blockVideoGestures(),
+                enter = slideInVertically(slideSpec) { it } + fadeIn(toolbarSpring),
+                exit = slideOutVertically(slideSpec) { it } + fadeOut(toolbarSpring),
+            ) {
                 Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .98f), tonalElevation = 3.dp,
                     shadowElevation = 8.dp, shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)) {
-                    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 12.dp)) {
-                        Box(Modifier.align(Alignment.CenterHorizontally).size(32.dp, 4.dp).clip(RoundedCornerShape(2.dp))
-                            .background(MaterialTheme.colorScheme.outlineVariant))
+                    Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 20.dp).padding(bottom = 12.dp)) {
+                        val hideControls = stringResource(R.string.hide_reader_controls)
+                        Box(
+                            Modifier.align(Alignment.CenterHorizontally).size(width = 96.dp, height = 48.dp)
+                                .semantics { contentDescription = hideControls }
+                                .clickable(enabled = controls, role = Role.Button) { controls = false }
+                                .pointerInput(controls, toolbarDismissDistance, toolbarSpring) {
+                                    if (!controls) return@pointerInput
+                                    detectVerticalDragGestures(
+                                        onDragStart = { toolbarDragJob?.cancel() },
+                                        onDragEnd = {
+                                            if (toolbarDragOffset >= toolbarDismissDistance) controls = false
+                                            else restoreToolbarPosition()
+                                        },
+                                        onDragCancel = ::restoreToolbarPosition,
+                                        onVerticalDrag = { _, distance ->
+                                            toolbarDragOffset = (toolbarDragOffset + distance).coerceAtLeast(0f)
+                                        },
+                                    )
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(Modifier.size(32.dp, 4.dp).clip(RoundedCornerShape(2.dp))
+                                .background(MaterialTheme.colorScheme.outlineVariant))
+                        }
                         if (toolbarVideoState != null) {
                             VideoProgressControls(toolbarVideoState, enabled = !scrubbing && pendingPreviewPage == null)
                         }

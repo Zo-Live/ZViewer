@@ -254,6 +254,7 @@
     <string name="video_accessibility_without_zoom">Video %1$d. Tap for reading controls.</string>
     <string name="retry">Retry</string>
     <string name="show_reader_controls">Show reading controls</string>
+    <string name="hide_reader_controls">Hide reading controls</string>
     <string name="video_error">This video could not be played. The file may be unreadable or use an unsupported codec.</string>
     <string name="pause_video">Pause video</string>
     <string name="play_video">Play video</string>
