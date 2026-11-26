@@ -180,6 +180,7 @@
     <string name="keep_screen_on">Keep screen on while reading</string>
     <string name="volume_key_paging">Turn pages with volume keys</string>
     <string name="double_tap_zoom">Double-tap to zoom</string>
+    <string name="reset_progress_on_close">Reset reading progress when closing a comic</string>
     <string name="loop_single_video">Loop each video</string>
     <string name="loop_single_video_hint">Restart the current video when it ends</string>
     <string name="video_preview">Preview videos by default</string>

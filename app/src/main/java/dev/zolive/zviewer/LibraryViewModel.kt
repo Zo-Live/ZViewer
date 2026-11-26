@@ -373,8 +373,12 @@ class LibraryViewModel(
     }
 
     fun closeBook() {
-        val session = mutable.value.session
+        val current = mutable.value
+        val session = current.session
         DiagnosticLog.log("Reader", "关闭 book=${session?.book?.id?.take(8)}")
+        if (session != null && current.settings.resetProgressOnClose) {
+            store.saveProgress(session.book.id, 0, session.pages.size)
+        }
         mutable.update { it.copy(session = null, waitingForVideoEntry = false) }
         refreshProgress()
         if (session != null) releaseSession(session)

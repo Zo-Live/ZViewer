@@ -181,6 +181,7 @@
     <string name="keep_screen_on">阅读时屏幕常亮</string>
     <string name="volume_key_paging">使用音量键翻页</string>
     <string name="double_tap_zoom">双击以放缩</string>
+    <string name="reset_progress_on_close">关闭漫画后重置阅读进度</string>
     <string name="loop_single_video">单个视频循环播放</string>
     <string name="loop_single_video_hint">视频播放完后留在当前视频并重新开始</string>
     <string name="video_preview">视频默认仅预览</string>

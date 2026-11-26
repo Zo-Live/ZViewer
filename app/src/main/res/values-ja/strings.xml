@@ -180,6 +180,7 @@
     <string name="keep_screen_on">閲覧中は画面を点灯</string>
     <string name="volume_key_paging">音量キーでページをめくる</string>
     <string name="double_tap_zoom">ダブルタップで拡大・縮小</string>
+    <string name="reset_progress_on_close">漫画を閉じると読書進捗をリセット</string>
     <string name="loop_single_video">動画を個別にループ再生</string>
     <string name="loop_single_video_hint">再生が終わると同じ動画を最初から再生します</string>
     <string name="video_preview">動画をプレビューで表示</string>

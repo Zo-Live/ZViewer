@@ -426,6 +426,7 @@ class SettingsMenuTest {
         val pageNumber = setting("右下角显示页码")
         val volume = setting("使用音量键翻页")
         val zoom = setting("双击以放缩")
+        val resetProgress = setting("关闭漫画后重置阅读进度")
         rightToLeft.assertDoesNotExist()
         horizontalSeek.assertIsOn()
         val topRows = listOf(mode, direction, horizontalSeek).map { it.fetchSemanticsNode().boundsInRoot }
@@ -434,6 +435,7 @@ class SettingsMenuTest {
         pageNumber.assertIsOn()
         volume.assertIsOff()
         zoom.assertIsOn()
+        resetProgress.assertIsOff()
         mode.performClick()
         option("分页").performClick()
         horizontalSeek.assertIsOff()
@@ -443,7 +445,7 @@ class SettingsMenuTest {
         mode.assert(hasText("分页"))
         horizontalSeek.assertDoesNotExist()
         rightToLeft.assertIsOff()
-        val rows = listOf(mode, direction, rightToLeft, pageNumber, setting("阅读时屏幕常亮"), volume, zoom,
+        val rows = listOf(mode, direction, rightToLeft, pageNumber, setting("阅读时屏幕常亮"), volume, zoom, resetProgress,
             setting("深色阅读背景")).map { it.fetchSemanticsNode().boundsInRoot }
         rows.zipWithNext().forEach { (upper, lower) -> assertTrue(upper.bottom <= lower.top) }
         rule.onNodeWithText("适用于右开本的水平阅读模式").assertDoesNotExist()
@@ -452,6 +454,7 @@ class SettingsMenuTest {
         pageNumber.performClick().assertIsOff()
         volume.performClick().assertIsOn()
         zoom.performClick().assertIsOff()
+        resetProgress.performClick().assertIsOn()
         mode.performClick()
         option("连续").performClick()
         rightToLeft.assertIsOn()
@@ -470,6 +473,7 @@ class SettingsMenuTest {
         assertFalse(saved.showPageNumber)
         assertTrue(saved.volumeKeyPaging)
         assertFalse(saved.doubleTapZoom)
+        assertTrue(saved.resetProgressOnClose)
     }
 
     @Test fun legacyHorizontalReadingKeepsPagingUntilModeIsChanged() {

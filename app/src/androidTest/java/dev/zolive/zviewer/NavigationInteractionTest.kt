@@ -93,6 +93,25 @@ class NavigationInteractionTest {
         tab("收藏").assertIsSelected()
     }
 
+    @Test fun closingResetsPageAndKeepsRecentReading() {
+        store.saveSettings(store.settings().copy(resetProgressOnClose = true, startupPage = LibraryTab.Recent,
+            paged = true, volumeKeyPaging = true))
+        launch()
+        rule.onNodeWithText(book.title).performClick()
+        rule.waitUntil(15_000) {
+            rule.onAllNodesWithTag("library-screen").fetchSemanticsNodes().isEmpty()
+        }
+        rule.waitForIdle()
+        pressVolumeDown(1)
+        rule.waitUntil(10_000) { store.progress(book.id).page == 1 }
+        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        rule.onNode(hasText(book.title) and hasText("1 / 3 页")).assertIsDisplayed().performClick()
+        rule.waitUntil(15_000) {
+            rule.onAllNodesWithTag("library-screen").fetchSemanticsNodes().isEmpty()
+        }
+        rule.onNodeWithText("1 / 3 页").assertIsDisplayed()
+    }
+
     @Test fun continueReadingStartsOpeningBeforeIconAnimationFinishes() {
         launch()
         lateinit var model: LibraryViewModel

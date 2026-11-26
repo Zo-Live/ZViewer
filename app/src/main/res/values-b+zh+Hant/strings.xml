@@ -180,6 +180,7 @@
     <string name="keep_screen_on">閱讀時保持螢幕開啟</string>
     <string name="volume_key_paging">使用音量鍵翻頁</string>
     <string name="double_tap_zoom">點兩下以縮放</string>
+    <string name="reset_progress_on_close">關閉漫畫後重設閱讀進度</string>
     <string name="loop_single_video">單部影片循環播放</string>
     <string name="loop_single_video_hint">影片播放結束後停留在目前影片並重新播放</string>
     <string name="video_preview">影片預設僅預覽</string>
