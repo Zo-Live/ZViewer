@@ -1,6 +1,8 @@
 - 开发过程中更新 docs 中的相应文档。
 - README 简洁地说明大体功能，不追求完整反映具体实现，不需要一一讲解用户简单摸索后即可了解的功能。必要时才更新 README，不要作为 Changelog 记录每个更新细节。
 - Material 图标统一使用新版 Material Symbols 的 Rounded 样式。
+- 新增动画按用途归入页面切换、展开与弹出、图标与控件状态、滚动与回弹、画面缩放或加载指示。
+- 新增触感按触发动作归入确认与开启、取消与关闭、操作提示或刻度与边界。同一控件的不同动作可归入不同类别。
 - 除了单元测试，还需通过 Android Emulator 进行功能测试与端到端测试。验证时使用 emulator-5554 以便用户实时预览。
 - 若模拟器卡顿，可关闭后在 Powershell 中运行 `emulator -avd MyPixel -no-snapshot-load` 以重启模拟器。
 - 开发构建目录为 app/build/outputs/apk/release，dist 为正式构建目录。
