@@ -88,7 +88,8 @@ internal fun AppLockScreen(settings: ReaderSettings, onVerify: () -> Unit) {
                 Spacer(Modifier.weight(3.55f))
                 Text(
                     title,
-                    modifier = Modifier.padding(bottom = titleBottomPadding),
+                    modifier = Modifier.absoluteOffset(x = 2.dp).padding(bottom = titleBottomPadding),
+                    color = colors.onSurfaceVariant,
                     maxLines = 1,
                     style = titleStyle.copy(fontSize = titleSize, lineHeight = TextUnit.Unspecified),
                 )
