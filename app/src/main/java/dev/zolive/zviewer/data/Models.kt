@@ -1,5 +1,7 @@
 package dev.zolive.zviewer.data
 
+import androidx.annotation.StringRes
+import dev.zolive.zviewer.R
 import java.security.MessageDigest
 import java.io.Closeable
 import java.util.Locale
@@ -57,6 +59,12 @@ enum class PagedImageFit(val key: String) {
     Screen("screen"), Width("width"), Height("height"),
 }
 
+enum class LibraryTab(val key: String, @StringRes val title: Int) {
+    Library("library", R.string.library),
+    Favorites("favorites", R.string.favorites),
+    Recent("recent", R.string.recent_reads),
+}
+
 internal const val DefaultThemeAccent = 0xFF49684DL
 
 data class ReaderSettings(
@@ -102,6 +110,7 @@ data class ReaderSettings(
     val disabledHaptics: Set<HapticEvent> = emptySet(),
     val verificationFollowsTheme: Boolean = true,
     val showPageNumber: Boolean = true,
+    val startupPage: LibraryTab = LibraryTab.Library,
 ) {
     internal fun animationSpeedFor(effect: AnimationEffect): AnimationSpeed =
         if (effect in disabledAnimations) AnimationSpeed.Moderate else animationSpeed

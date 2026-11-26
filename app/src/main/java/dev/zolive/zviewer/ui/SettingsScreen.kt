@@ -88,6 +88,7 @@ import dev.zolive.zviewer.data.CacheLimits
 import dev.zolive.zviewer.data.DefaultThemeAccent
 import dev.zolive.zviewer.data.DiagnosticLog
 import dev.zolive.zviewer.data.HapticEvent
+import dev.zolive.zviewer.data.LibraryTab
 import dev.zolive.zviewer.data.PagedImageFit
 import dev.zolive.zviewer.data.UpdateDownload
 import kotlinx.coroutines.CancellationException
@@ -337,6 +338,11 @@ private fun AppPreferences(
     SettingsVisibility(settings.hapticFeedback) {
         InteractionSettingsLink(InteractionSettingsPage.Haptics, settings.hapticFeedback, onOpen)
     }
+    PreferenceMenu(
+        title = stringResource(R.string.preferred_startup_page),
+        selectedValue = settings.startupPage,
+        options = LibraryTab.entries.map { it to stringResource(it.title) },
+    ) { onSettings(settings.copy(startupPage = it)) }
     PreferenceSwitch(stringResource(R.string.show_file_type), stringResource(R.string.show_file_type_hint), settings.showFileType) {
         onSettings(settings.copy(showFileType = it))
     }

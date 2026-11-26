@@ -71,6 +71,7 @@
     <string name="show_file_type_hint">表紙の左上に形式を表示します</string>
     <string name="show_favorite_icon">お気に入りアイコンを表示</string>
     <string name="show_favorite_icon_hint">表紙の右下にお気に入りボタンを表示します</string>
+    <string name="preferred_startup_page">起動時に表示するページ</string>
     <string name="reading">閲覧</string>
     <string name="library_and_storage">ライブラリとストレージ</string>
     <string name="library_directory">ライブラリフォルダー</string>

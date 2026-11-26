@@ -71,6 +71,7 @@
     <string name="show_file_type_hint">Show the format in the top left of the cover</string>
     <string name="show_favorite_icon">Show favorite icon</string>
     <string name="show_favorite_icon_hint">Show the favorite button in the bottom right of the cover</string>
+    <string name="preferred_startup_page">Preferred start page</string>
     <string name="reading">Reading</string>
     <string name="library_and_storage">Library and storage</string>
     <string name="library_directory">Library folder</string>

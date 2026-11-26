@@ -30,6 +30,9 @@ internal fun readSettings(value: (String, Any?) -> Any?): ReaderSettings {
         gridColumns = int("columns", 3).coerceIn(2, 5),
         showFileType = boolean("show_file_type", false),
         showFavoriteIcon = boolean("show_favorite_icon", true),
+        startupPage = string("startup_page", LibraryTab.Library.key).let { key ->
+            LibraryTab.entries.firstOrNull { it.key == key } ?: LibraryTab.Library
+        },
         videoLoopSingle = boolean("video_loop_single", false),
         videoPreview = boolean("video_preview", false),
         loopMode = boolean("loop_mode", false),
@@ -86,6 +89,7 @@ internal fun settingsValues(settings: ReaderSettings): Map<String, Any?> = mapOf
     "columns" to settings.gridColumns,
     "show_file_type" to settings.showFileType,
     "show_favorite_icon" to settings.showFavoriteIcon,
+    "startup_page" to settings.startupPage.key,
     "video_loop_single" to settings.videoLoopSingle,
     "video_preview" to settings.videoPreview,
     "loop_mode" to settings.loopMode,

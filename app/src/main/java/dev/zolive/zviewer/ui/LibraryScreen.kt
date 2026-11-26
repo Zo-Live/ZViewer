@@ -11,7 +11,6 @@ import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
-import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -96,6 +95,7 @@ import dev.zolive.zviewer.data.Book
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.DiagnosticLog
 import dev.zolive.zviewer.data.HapticEvent
+import dev.zolive.zviewer.data.LibraryTab
 import dev.zolive.zviewer.data.ReadingProgress
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -414,12 +414,6 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     }
 }
 
-private enum class LibraryTab(@StringRes val title: Int, @DrawableRes val outlineIcon: Int) {
-    Library(R.string.library, LibraryFillIcon.Book.outline),
-    Favorites(R.string.favorites, LibraryFillIcon.Bookmark.outline),
-    Recent(R.string.recent_reads, R.drawable.ic_symbol_history),
-}
-
 @Composable
 private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: Boolean,
     continueMotion: ContinueReadingMotion?, onContinue: (Book) -> Unit,
@@ -428,7 +422,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     val managementHaptic = hapticFeedback(HapticEvent.FavoriteManagement)
     val favoriteHaptic = hapticFeedback(HapticEvent.Favorite)
     val tabs = LibraryTab.entries
-    val pagerState = rememberPagerState { tabs.size }
+    val pagerState = rememberPagerState(initialPage = state.settings.startupPage.ordinal) { tabs.size }
     val gridStates = tabs.map { rememberLazyGridState() }
     val currentGrid = gridStates[pagerState.currentPage]
     var query by rememberSaveable { mutableStateOf("") }
@@ -634,7 +628,11 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                         }
                         if (books.isEmpty()) {
                             EmptyLibrary(
-                                icon = tab.outlineIcon,
+                                icon = when (tab) {
+                                    LibraryTab.Library -> LibraryFillIcon.Book.outline
+                                    LibraryTab.Favorites -> LibraryFillIcon.Bookmark.outline
+                                    LibraryTab.Recent -> R.drawable.ic_symbol_history
+                                },
                                 scanning = state.scanning,
                                 directoryEmpty = state.books.isEmpty(),
                                 onChooseLibrary = onChooseLibrary,

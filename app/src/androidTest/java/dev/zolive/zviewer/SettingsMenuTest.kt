@@ -156,6 +156,52 @@ class SettingsMenuTest {
         assertTrue(store.settings().vertical)
     }
 
+    @Test fun preferredStartupPageAppliesToEachNewLaunch() {
+        val startupPage = setting("首选启动页")
+        val library = rule.onNode(hasText("书库") and isSelectable())
+        val favorites = rule.onNode(hasText("收藏") and isSelectable())
+        val recent = rule.onNode(hasText("最近阅读") and isSelectable())
+
+        fun openPreferences() {
+            rule.onNodeWithContentDescription("设置").performClick()
+            setting("偏好").performClick()
+            startupPage.performScrollTo().assertIsDisplayed()
+        }
+        fun relaunch() {
+            scenario.close()
+            scenario = ActivityScenario.launch(MainActivity::class.java)
+        }
+
+        setting("偏好").performClick()
+        startupPage.performScrollTo()
+        val fileType = setting("显示文件类型").fetchSemanticsNode().boundsInRoot
+        assertEquals(startupPage.fetchSemanticsNode().boundsInRoot.bottom, fileType.top, 1f)
+        startupPage.assert(hasText("书库")).performClick()
+        option("书库").assertIsSelected()
+        option("最近阅读").assertIsNotSelected()
+        option("收藏").assertIsNotSelected().performClick()
+        startupPage.assert(hasText("收藏"))
+        rule.onNodeWithContentDescription("返回设置").performClick()
+        rule.onNodeWithContentDescription("返回书库").performClick()
+        library.assertIsSelected()
+        scenario.recreate()
+        library.assertIsSelected()
+
+        relaunch()
+        favorites.assertIsSelected()
+        openPreferences()
+        startupPage.assert(hasText("收藏")).performClick()
+        option("收藏").assertIsSelected()
+        option("最近阅读").performClick()
+        relaunch()
+        recent.assertIsSelected()
+        openPreferences()
+        startupPage.assert(hasText("最近阅读")).performClick()
+        option("书库").performClick()
+        relaunch()
+        library.assertIsSelected()
+    }
+
     @Test fun readingFitExpandsInlineAndKeepsSeparateChoices() {
         setting("阅读").performClick()
         val fit = setting("画面适配")
@@ -204,7 +250,7 @@ class SettingsMenuTest {
         val language = setting("语言")
         val speed = setting("动画速度")
         val haptics = setting("触感反馈")
-        val rows = listOf(language, speed, haptics, setting("触感设置"), setting("显示文件类型"))
+        val rows = listOf(language, speed, haptics, setting("触感设置"), setting("首选启动页"), setting("显示文件类型"))
             .map { it.fetchSemanticsNode().boundsInRoot }
         rows.zipWithNext().forEach { (upper, lower) -> assertEquals(upper.bottom, lower.top, 1f) }
         speed.assert(hasText("适中")).performClick()

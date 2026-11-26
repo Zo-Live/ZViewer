@@ -71,6 +71,7 @@
     <string name="show_file_type_hint">在封面左上角显示漫画格式</string>
     <string name="show_favorite_icon">显示收藏图标</string>
     <string name="show_favorite_icon_hint">在封面右下角显示收藏按钮</string>
+    <string name="preferred_startup_page">首选启动页</string>
     <string name="reading">阅读</string>
     <string name="library_and_storage">书库与存储</string>
     <string name="library_directory">书库目录</string>
