@@ -2,24 +2,14 @@ package dev.zolive.zviewer.ui
 
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
@@ -41,20 +31,10 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import dev.zolive.zviewer.R
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.sin
-
-private const val IconDurationMillis = 300
-
-@Composable
-internal fun libraryIconAnimationSpec() = tween<Float>(
-    durationMillis = LocalInteractionSettings.current.animationSpeed.duration(IconDurationMillis),
-    easing = LinearEasing,
-)
 
 internal enum class LibraryFillIcon(
     @DrawableRes val outline: Int,
@@ -134,7 +114,6 @@ internal enum class LibraryActionIcon(@StringRes val label: Int) {
     Refresh(R.string.refresh_library),
     Sort(R.string.sort),
     Search(R.string.search_comics),
-    Settings(R.string.settings),
 }
 
 @Composable
@@ -144,37 +123,14 @@ internal fun LibraryActionIconButton(
     active: Boolean = true,
     onClick: () -> Unit,
 ) {
-    val scope = rememberCoroutineScope()
-    val progress = remember { Animatable(0f) }
-    val spec = libraryIconAnimationSpec()
-    var motion by remember { mutableStateOf<Job?>(null) }
-    val opensSettings = icon == LibraryActionIcon.Settings
     val description = stringResource(icon.label)
-    LaunchedEffect(active) {
-        if (opensSettings && active) progress.snapTo(0f)
-    }
-    IconButton(
-        enabled = enabled,
-        onClick = {
-            if (active) {
-                motion?.cancel()
-                motion = scope.launch {
-                    progress.snapTo(0f)
-                    progress.animateTo(1f, spec)
-                }
-                onClick()
-            }
-        },
-    ) {
+    AnimatedIconButton(enabled = enabled, active = active, onClick = onClick) { progress ->
         when (icon) {
             LibraryActionIcon.Refresh -> Icon(painterResource(R.drawable.ic_symbol_refresh), description, Modifier.graphicsLayer {
                 rotationZ = 360f * FastOutSlowInEasing.transform(progress.value)
             })
             LibraryActionIcon.Sort -> LibrarySortIcon(description) { progress.value }
             LibraryActionIcon.Search -> LibrarySearchIcon(description) { progress.value }
-            LibraryActionIcon.Settings -> Icon(painterResource(R.drawable.ic_symbol_settings), description, Modifier.graphicsLayer {
-                rotationZ = 30f * FastOutSlowInEasing.transform(progress.value)
-            })
         }
     }
 }

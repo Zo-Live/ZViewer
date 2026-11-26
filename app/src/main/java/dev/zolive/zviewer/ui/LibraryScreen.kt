@@ -19,6 +19,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Animatable
@@ -207,7 +208,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     val speed = animationSpeed(AnimationEffect.PageTransition)
     val session = state.session
     val waitingForVideo = session != null && state.waitingForVideoEntry
-    val iconSpec = libraryIconAnimationSpec()
+    val iconSpec = iconAnimationSpec()
     var continueMotion by remember { mutableStateOf<ContinueReadingMotion?>(null) }
     LaunchedEffect(continueMotion) {
         val motion = continueMotion ?: return@LaunchedEffect
@@ -240,6 +241,9 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
         }
     }
     var page by rememberSaveable(stateSaver = AppPage.saver) { mutableStateOf<AppPage>(AppPage.Library) }
+    val settingsIcon = remember { mutableFloatStateOf(if (page == AppPage.Library) 0f else 1f) }
+    val settingsIconSpec = iconAnimationSpec(FastOutSlowInEasing)
+    var settingsIconJob by remember { mutableStateOf<Job?>(null) }
     var transition by remember { mutableStateOf<PageTransition?>(null) }
     var dragProgress by remember { mutableStateOf<Float?>(null) }
     var viewportWidth by remember { mutableFloatStateOf(1f) }
@@ -256,6 +260,14 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
         page = if (showChild) motion.child else motion.parent
         transition = motion
         dragProgress = null
+        if (child == AppPage.Settings) {
+            settingsIconJob?.cancel()
+            settingsIconJob = navigationScope.launch {
+                animate(settingsIcon.floatValue, target, animationSpec = settingsIconSpec) { value, _ ->
+                    settingsIcon.floatValue = value
+                }
+            }
+        }
         navigationJob = navigationScope.launch {
             motion.progress.animateTo(
                 target,
@@ -272,11 +284,19 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     }
     fun beginBackGesture(): Float {
         navigationJob?.cancel()
+        if (page == AppPage.Settings) settingsIconJob?.cancel()
         val motion = transition?.takeIf { it.child == page } ?: PageTransition(page, 1f)
         val start = dragProgress ?: motion.progress.value
         transition = motion
         dragProgress = start
         return start
+    }
+    fun updateBackGesture(progress: Float) {
+        if (transition?.child == AppPage.Settings) {
+            val delta = progress - (dragProgress ?: progress)
+            settingsIcon.floatValue = (settingsIcon.floatValue + delta).coerceIn(0f, 1f)
+        }
+        dragProgress = progress
     }
     fun finishBackGesture(showChild: Boolean) {
         val start = dragProgress ?: return
@@ -338,7 +358,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                                 .then(if (active && layer != AppPage.Library) Modifier.pageBackSwipe(
                                     onStart = { beginBackGesture() },
                                     onDrag = { dragAmount ->
-                                        dragProgress = ((dragProgress ?: 1f) - dragAmount / viewportWidth).coerceIn(0f, 1f)
+                                        updateBackGesture(((dragProgress ?: 1f) - dragAmount / viewportWidth).coerceIn(0f, 1f))
                                     },
                                     onEnd = {
                                         val start = dragProgress ?: 1f
@@ -350,7 +370,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                             Box(layerModifier) {
                                 pageStates.SaveableStateProvider(layer.tag) {
                                     when (layer) {
-                                        AppPage.Library -> LibraryScreen(state, model, active, continueMotion,
+                                        AppPage.Library -> LibraryScreen(state, model, active, continueMotion, settingsIcon,
                                             onContinue = { book ->
                                                 continueMotion = ContinueReadingMotion(book.id)
                                                 model.open(book)
@@ -393,7 +413,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                     try {
                         events.collect { event ->
                             val start = startProgress ?: beginBackGesture().also { startProgress = it }
-                            dragProgress = start * (1f - event.progress)
+                            updateBackGesture(start * (1f - event.progress))
                         }
                         goBack()
                     } catch (cancelled: CancellationException) {
@@ -422,7 +442,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
 
 @Composable
 private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: Boolean,
-    continueMotion: ContinueReadingMotion?, onContinue: (Book) -> Unit,
+    continueMotion: ContinueReadingMotion?, settingsIcon: State<Float>, onContinue: (Book) -> Unit,
     onSettings: () -> Unit, onChooseLibrary: () -> Unit) {
     val searchSpeed = animationSpeed(AnimationEffect.LibrarySearch)
     val managementHaptic = hapticFeedback(HapticEvent.FavoriteManagement)
@@ -485,7 +505,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                         searching = true
                     }
                 }
-                LibraryActionIconButton(LibraryActionIcon.Settings, active = active) {
+                SettingsIconButton(stringResource(R.string.settings), settingsIcon, active = active) {
                     if (searching) {
                         focusManager.clearFocus()
                         keyboard?.hide()
@@ -695,7 +715,7 @@ private fun LibraryScaffold(
 
 @Composable
 private fun LibraryNavigation(useRail: Boolean, mediumWidth: Boolean, page: Int, onSelect: (Int) -> Unit) {
-    val spec = libraryIconAnimationSpec()
+    val spec = iconAnimationSpec()
     val bookFill = animateFloatAsState(if (page == LibraryTab.Library.ordinal) 1f else 0f, spec)
     val bookmarkFill = animateFloatAsState(if (page == LibraryTab.Favorites.ordinal) 1f else 0f, spec)
     val historyTurn = remember { Animatable(0f) }

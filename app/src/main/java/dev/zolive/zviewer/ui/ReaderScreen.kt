@@ -150,6 +150,16 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
         }
     }
     var preferences by remember { mutableStateOf(false) }
+    val preferencesSheet = if (preferences) rememberModalBottomSheetState() else null
+    val preferencesTargetVisible = preferencesSheet != null && preferencesSheet.targetValue != SheetValue.Hidden
+    var preferencesHadVisibleTarget by remember(preferencesSheet) { mutableStateOf(false) }
+    // 面板初始也以 Hidden 为目标，首次展开后才将 Hidden 视为关闭。
+    if (preferencesTargetVisible && !preferencesHadVisibleTarget) {
+        SideEffect { preferencesHadVisibleTarget = true }
+    }
+    val settingsIcon = settingsIconProgress(
+        settingsOpen = preferences && (preferencesTargetVisible || !preferencesHadVisibleTarget),
+    )
     var jumpDialog by remember { mutableStateOf(false) }
     var zoomSequence by remember { mutableIntStateOf(0) }
     var zoomAction by remember { mutableIntStateOf(0) }
@@ -683,7 +693,11 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                     Text(session.book.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                 }, navigationIcon = {
                     IconButton(onClick = { onProgress(currentPage); onBack() }) { Icon(painterResource(R.drawable.ic_symbol_arrow_back), stringResource(R.string.back_to_library)) }
-                }, actions = { IconButton(onClick = { preferences = true }) { Icon(painterResource(R.drawable.ic_symbol_settings), stringResource(R.string.reader_settings)) } },
+                }, actions = {
+                    SettingsIconButton(stringResource(R.string.reader_settings), settingsIcon, active = !preferences) {
+                        preferences = true
+                    }
+                },
                     colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = .97f)))
             }
             val slideSpec = spring(
@@ -776,8 +790,8 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             }
         }
     }
-    if (preferences) WithAnimationSpeed(settings.animationSpeedFor(AnimationEffect.ReaderQuickSettings), modifier = Modifier.size(0.dp)) {
-        ModalBottomSheet(onDismissRequest = { preferences = false }) {
+    if (preferencesSheet != null) WithAnimationSpeed(settings.animationSpeedFor(AnimationEffect.ReaderQuickSettings), modifier = Modifier.size(0.dp)) {
+        ModalBottomSheet(sheetState = preferencesSheet, onDismissRequest = { preferences = false }) {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
                 Text(stringResource(R.string.reader_settings), style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(24.dp))
