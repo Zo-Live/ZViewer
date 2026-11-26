@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
@@ -45,6 +46,7 @@ import kotlinx.coroutines.launch
 import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.sin
 
 private const val IconDurationMillis = 300
 
@@ -169,19 +171,45 @@ internal fun LibraryActionIconButton(
                 rotationZ = 360f * FastOutSlowInEasing.transform(progress.value)
             })
             LibraryActionIcon.Sort -> LibrarySortIcon(description) { progress.value }
-            LibraryActionIcon.Search -> Icon(painterResource(R.drawable.ic_symbol_search), description, Modifier.drawWithContent {
-                val thickness = abs(cos(PI * progress.value)).toFloat().coerceAtLeast(.08f)
-                withTransform({
-                    rotate(45f)
-                    scale(1f, thickness)
-                    rotate(-45f)
-                }) { this@drawWithContent.drawContent() }
-            })
+            LibraryActionIcon.Search -> LibrarySearchIcon(description) { progress.value }
             LibraryActionIcon.Settings -> Icon(painterResource(R.drawable.ic_symbol_settings), description, Modifier.graphicsLayer {
                 rotationZ = 30f * FastOutSlowInEasing.transform(progress.value)
             })
         }
     }
+}
+
+@Composable
+private fun LibrarySearchIcon(description: String, progress: () -> Float) {
+    val color = LocalContentColor.current
+    Icon(painterResource(R.drawable.ic_symbol_search), description, Modifier.drawWithContent {
+        val angle = PI * progress()
+        val faceScale = abs(cos(angle)).toFloat()
+        if (faceScale == 1f) {
+            drawContent()
+        } else {
+            val unit = size.width / 960f
+            val depth = 80f * unit * sin(angle).toFloat()
+            // 当镜片开口被投影厚度盖住时，以等宽的圆头侧面连起轮廓。
+            if (faceScale * 360f * unit <= depth) {
+                drawLine(color, Offset(224f, 224f) * unit, Offset(784f, 784f) * unit,
+                    strokeWidth = depth, cap = StrokeCap.Round)
+            }
+            withTransform({ rotate(45f) }) {
+                // 将同一个 Rounded 矢量图沿厚度投影，保留未翻到侧面时的镜片开口。
+                val slices = 8
+                repeat(slices + 1) { slice ->
+                    val offset = depth * (slice.toFloat() / slices - .5f)
+                    translate(top = offset) {
+                        withTransform({
+                            scale(1f, faceScale.coerceAtLeast(.001f))
+                            rotate(-45f)
+                        }) { this@drawWithContent.drawContent() }
+                    }
+                }
+            }
+        }
+    })
 }
 
 @Composable

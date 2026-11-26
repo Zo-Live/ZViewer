@@ -405,7 +405,9 @@ class NavigationInteractionTest {
 
     @Test fun searchMovesContentSmoothlyOnEveryTab() {
         launch()
-        rule.onNodeWithTag("library-grid-0").performScrollToIndex(4)
+        rule.onNodeWithTag("library-grid-0").performTouchInput {
+            swipe(center, center - Offset(0f, 220.dp.toPx()), durationMillis = 700)
+        }
         listOf("书库", "收藏", "最近阅读").forEachIndexed { index, title ->
             tab(title).performClick()
             val pager = rule.onNodeWithTag("library-pager")
@@ -413,6 +415,7 @@ class NavigationInteractionTest {
             val original = pager.fetchSemanticsNode().boundsInRoot
             val scroll = grid.fetchSemanticsNode()
                 .config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange].value()
+            if (index == 0) assertTrue(scroll > 0f)
             rule.mainClock.autoAdvance = false
             rule.onNodeWithContentDescription("搜索漫画").performClick()
             rule.mainClock.advanceTimeBy(96)
