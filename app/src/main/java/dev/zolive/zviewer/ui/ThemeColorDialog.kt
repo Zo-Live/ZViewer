@@ -195,6 +195,7 @@ private enum class ColorChannel(val shift: Int, val tint: Color) {
 private fun ColorSlider(channel: ColorChannel, value: Int, onValueChange: (Int) -> Unit) {
     val gradient = remember(channel) { Brush.horizontalGradient(listOf(Color.Black, channel.tint)) }
     val haptic = hapticFeedback(HapticEvent.ThemeColorSliders)
+    val confirmHaptic = hapticFeedback(HapticEvent.ThemeColorSlidersConfirm)
     val feedback = remember { ColorPickerFeedback() }
     val currentValue by rememberUpdatedState(value)
     var dragFeedback by remember { mutableStateOf<ColorAxisFeedback?>(null) }
@@ -215,7 +216,7 @@ private fun ColorSlider(channel: ColorChannel, value: Int, onValueChange: (Int) 
                 onValueChange(next)
             },
             onValueChangeFinished = {
-                if (released) haptic(HapticFeedbackConstantsCompat.CONFIRM)
+                if (released) confirmHaptic(HapticFeedbackConstantsCompat.CONFIRM)
                 released = false
             },
             modifier = Modifier.weight(1f).semantics { contentDescription = channel.name }
@@ -285,6 +286,7 @@ private fun ColorWheel(hsv: Hsv, rgb: Int, onChange: (Hsv) -> Unit) {
     val selectedColor by rememberUpdatedState(Color(rgb))
     val updateColor by rememberUpdatedState(onChange)
     val haptic by rememberUpdatedState(hapticFeedback(HapticEvent.ThemeColorWheel))
+    val confirmHaptic by rememberUpdatedState(hapticFeedback(HapticEvent.ThemeColorWheelConfirm))
     val feedback = remember { ColorPickerFeedback() }
     val hueColor = Color.hsv(hsv.hue, 1f, 1f)
     Box(
@@ -328,7 +330,7 @@ private fun ColorWheel(hsv: Hsv, rgb: Int, onChange: (Hsv) -> Unit) {
                         updateColor(next)
                         feedback.play(pulseFor(next), haptic)
                     }
-                    if (released) haptic(HapticFeedbackConstantsCompat.CONFIRM)
+                    if (released) confirmHaptic(HapticFeedbackConstantsCompat.CONFIRM)
                 }
             }
             .drawWithCache {

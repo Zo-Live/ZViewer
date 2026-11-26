@@ -596,7 +596,8 @@ internal fun VideoPage(
     modifier: Modifier = Modifier,
 ) {
     val viewRef = remember { mutableStateOf<ZoomVideoView?>(null) }
-    val speedLockHaptic = hapticFeedback(HapticEvent.VideoSpeedLock)
+    val fastSpeedHaptic = hapticFeedback(HapticEvent.VideoSpeedHoldFast)
+    val normalSpeedHaptic = hapticFeedback(HapticEvent.VideoSpeedHoldNormal)
     val gesturesEnabled = active && allowPlayback
     val swipeSeekModifier = if (state != null && gesturesEnabled && settings.vertical && settings.horizontalVideoSeek) {
         Modifier.videoSwipeSeek(state, viewRef)
@@ -630,8 +631,11 @@ internal fun VideoPage(
                 if (!gesturesEnabled) view.cancelSpeedHold()
                 view.onSpeedHoldStart = { gesturesEnabled && state?.startSpeedHold() == true }
                 view.onSpeedHoldEnd = { end ->
-                    val feedback = state?.finishSpeedHold(end) ?: HapticFeedbackConstantsCompat.NO_HAPTICS
-                    if (feedback != HapticFeedbackConstantsCompat.NO_HAPTICS) speedLockHaptic(feedback)
+                    when (val feedback = state?.finishSpeedHold(end)) {
+                        HapticFeedbackConstantsCompat.CONFIRM -> fastSpeedHaptic(feedback)
+                        HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_DEACTIVATE -> normalSpeedHaptic(feedback)
+                        else -> Unit
+                    }
                 }
                 view.doubleTapZoomEnabled = settings.doubleTapZoom
                 view.zoomAnimationSpeed = settings.animationSpeedFor(AnimationEffect.VideoZoom)
@@ -700,7 +704,8 @@ private fun Modifier.videoSwipeSeek(state: VideoPlaybackState, view: State<ZoomV
 
 @Composable
 internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean = true) {
-    val playbackHaptic = hapticFeedback(HapticEvent.VideoPlayPause)
+    val playHaptic = hapticFeedback(HapticEvent.VideoPlay)
+    val pauseHaptic = hapticFeedback(HapticEvent.VideoPause)
     val progressHaptic = hapticFeedback(HapticEvent.VideoProgress)
     val sliderHaptics = remember(state) { ProgressSliderHaptics() }
     val scrubbing = state.scrubPosition != null
@@ -721,7 +726,8 @@ internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean =
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = {
                 state.togglePlayback()
-                playbackHaptic(if (state.playRequested) HapticFeedbackConstantsCompat.TOGGLE_ON else HapticFeedbackConstantsCompat.TOGGLE_OFF)
+                if (state.playRequested) playHaptic(HapticFeedbackConstantsCompat.TOGGLE_ON)
+                else pauseHaptic(HapticFeedbackConstantsCompat.TOGGLE_OFF)
             }, enabled = enabled && !scrubbing && !state.failed && state.index >= 0) {
                 Icon(painterResource(if (state.playRequested) R.drawable.ic_symbol_pause_filled else R.drawable.ic_symbol_play_arrow_filled),
                     stringResource(if (state.playRequested) R.string.pause_video else R.string.play_video))
@@ -751,6 +757,7 @@ private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
     val animationSpeed = animationSpeed(AnimationEffect.VideoSpeedMenu)
     val haptic = hapticFeedback(HapticEvent.VideoSpeedSelection)
     val lockHaptic = hapticFeedback(HapticEvent.VideoSpeedLock)
+    val unlockHaptic = hapticFeedback(HapticEvent.VideoSpeedUnlock)
     val label = stringResource(R.string.video_speed)
     val lockAction = stringResource(if (locked) R.string.unlock_video_speed else R.string.lock_video_speed)
     val lockDescription = stringResource(R.string.video_speed_locked)
@@ -763,8 +770,8 @@ private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
                 onLongClickLabel = lockAction, hapticFeedbackEnabled = false,
                 onLongClick = {
                     state.toggleSpeedLock()?.let { locked ->
-                        lockHaptic(if (locked) HapticFeedbackConstantsCompat.CONFIRM
-                            else HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_DEACTIVATE)
+                        if (locked) lockHaptic(HapticFeedbackConstantsCompat.CONFIRM)
+                        else unlockHaptic(HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_DEACTIVATE)
                     }
                 },
             )

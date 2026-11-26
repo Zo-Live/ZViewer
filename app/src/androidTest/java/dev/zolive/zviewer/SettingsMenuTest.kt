@@ -352,10 +352,14 @@ class SettingsMenuTest {
         back.performClick()
 
         hapticsLink.performClick()
-        rule.onAllNodes(isSwitch).assertCountEquals(HapticEvent.entries.size)
-        rule.onAllNodes(isSwitch and isOn()).assertCountEquals(HapticEvent.entries.size)
-        setting("添加和取消收藏").performScrollTo().performClick().assertIsOff()
-        setting("进入和退出收藏管理").assertIsOn()
+        rule.onAllNodes(isSwitch and isOn()).assertCountEquals(4)
+        confirmation.assertIsOn().performClick().assertIsOff()
+        setting("取消与关闭").assertIsOn()
+        setting("刻度与边界").assertIsOn()
+        assertFalse(store.settings().hapticsEnabledFor(HapticEvent.AddFavorite))
+        assertTrue(store.settings().hapticsEnabledFor(HapticEvent.RemoveFavorite))
+        assertFalse(store.settings().hapticsEnabledFor(HapticEvent.ThemeColorWheelConfirm))
+        assertTrue(store.settings().hapticsEnabledFor(HapticEvent.ThemeColorWheel))
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         haptics.performClick().assertIsOff()
         hapticsLink.assertDoesNotExist()
@@ -367,16 +371,16 @@ class SettingsMenuTest {
         hapticsLink.assertDoesNotExist()
         haptics.performClick().assertIsOn()
         hapticsLink.performClick()
-        setting("添加和取消收藏").performScrollTo().assertIsOff()
-        setting("进入和退出收藏管理").assertIsOn()
-        assertEquals(setOf(HapticEvent.Favorite), store.settings().disabledHaptics)
+        confirmation.assertIsOff()
+        setting("取消与关闭").assertIsOn()
     }
 
-    @Test fun legacyAnimationChoicesStayMixedUntilCategoryIsToggled() {
+    @Test fun legacyInteractionChoicesStayMixedUntilCategoryIsToggled() {
         scenario.close()
         context.getSharedPreferences("zviewer", Context.MODE_PRIVATE).edit()
             .putBoolean("fast_animations", true)
             .putStringSet("disabled_animations", setOf("library_search", "reader_paging"))
+            .putStringSet("disabled_haptics", setOf("favorite", "theme_color_wheel", "video_speed_lock"))
             .commit()
         scenario = ActivityScenario.launch(MainActivity::class.java)
         rule.onNodeWithContentDescription("设置").performClick()
@@ -392,6 +396,34 @@ class SettingsMenuTest {
         assertEquals(AnimationSpeed.Enhanced, oldAnimations.animationSpeedFor(AnimationEffect.SettingsTransition))
         setting("展开与弹出").performClick().assertIsOn()
         assertEquals(setOf(AnimationEffect.ReaderPaging), store.settings().disabledAnimations)
+        rule.onNodeWithContentDescription("返回偏好").performClick()
+
+        setting("触感设置").performClick()
+        setting("确认与开启").assert(mixed)
+        setting("取消与关闭").assert(mixed)
+        setting("刻度与边界").assert(mixed)
+        setting("操作提示").assertIsOn()
+        val oldHaptics = store.settings()
+        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.AddFavorite))
+        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.RemoveFavorite))
+        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.ThemeColorWheel))
+        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.ThemeColorWheelConfirm))
+        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.VideoSpeedLock))
+        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.VideoSpeedUnlock))
+        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.VideoSpeedHoldFast))
+        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.VideoSpeedHoldNormal))
+        setting("确认与开启").performClick().assertIsOn()
+        assertTrue(store.settings().hapticsEnabledFor(HapticEvent.AddFavorite))
+        assertFalse(store.settings().hapticsEnabledFor(HapticEvent.RemoveFavorite))
+        assertEquals(
+            setOf(
+                HapticEvent.RemoveFavorite,
+                HapticEvent.ThemeColorWheel,
+                HapticEvent.VideoSpeedUnlock,
+                HapticEvent.VideoSpeedHoldNormal,
+            ),
+            store.settings().disabledHaptics,
+        )
     }
 
     @Test fun interactionPageCheckboxTogglesAllOptionsAndPersists() {
@@ -408,7 +440,7 @@ class SettingsMenuTest {
 
         for ((page, item, count) in listOf(
             Triple("动画设置", "展开与弹出", 6),
-            Triple("触感设置", "添加和取消收藏", HapticEvent.entries.size),
+            Triple("触感设置", "确认与开启", 4),
         )) {
             setting(page).performClick()
             allOptions.assertIsOn().performTouchInput { click() }.assertIsOff()
@@ -437,7 +469,7 @@ class SettingsMenuTest {
         back.performClick()
         setting("触感设置").performClick()
         allOptions.assertIsOff()
-        rule.onAllNodes(isSwitch and isOff()).assertCountEquals(HapticEvent.entries.size)
+        rule.onAllNodes(isSwitch and isOff()).assertCountEquals(4)
         assertEquals(AnimationSpeed.Enhanced, store.settings().animationSpeed)
         assertTrue(store.settings().hapticFeedback)
         assertEquals(AnimationEffect.entries.toSet(), store.settings().disabledAnimations)

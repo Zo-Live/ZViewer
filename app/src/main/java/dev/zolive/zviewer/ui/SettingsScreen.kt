@@ -961,7 +961,8 @@ internal fun PreferenceSwitch(
     indeterminate: Boolean = false,
     onChange: (Boolean) -> Unit,
 ) {
-    val haptic = hapticFeedback(HapticEvent.Switch)
+    val switchOnHaptic = hapticFeedback(HapticEvent.SwitchOn)
+    val switchOffHaptic = hapticFeedback(HapticEvent.SwitchOff)
     SettingsListItem(
         headlineContent = {
             if (animateTitle) {
@@ -990,7 +991,8 @@ internal fun PreferenceSwitch(
         ) {
             val enabled = !checked
             if (feedbackOnToggle) {
-                haptic(if (enabled) HapticFeedbackConstantsCompat.TOGGLE_ON else HapticFeedbackConstantsCompat.TOGGLE_OFF)
+                if (enabled) switchOnHaptic(HapticFeedbackConstantsCompat.TOGGLE_ON)
+                else switchOffHaptic(HapticFeedbackConstantsCompat.TOGGLE_OFF)
             }
             onChange(enabled)
         },

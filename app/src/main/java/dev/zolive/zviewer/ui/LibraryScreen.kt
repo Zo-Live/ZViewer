@@ -455,8 +455,10 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     continueMotion: ContinueReadingMotion?, settingsIcon: State<Float>, onContinue: (Book) -> Unit,
     onSettings: () -> Unit, onChooseLibrary: () -> Unit) {
     val searchSpeed = animationSpeed(AnimationEffect.LibrarySearch)
-    val managementHaptic = hapticFeedback(HapticEvent.FavoriteManagement)
-    val favoriteHaptic = hapticFeedback(HapticEvent.Favorite)
+    val enterManagementHaptic = hapticFeedback(HapticEvent.EnterFavoriteManagement)
+    val exitManagementHaptic = hapticFeedback(HapticEvent.ExitFavoriteManagement)
+    val addFavoriteHaptic = hapticFeedback(HapticEvent.AddFavorite)
+    val removeFavoriteHaptic = hapticFeedback(HapticEvent.RemoveFavorite)
     val tabs = LibraryTab.entries
     val pagerState = rememberPagerState(initialPage = state.settings.startupPage.ordinal) { tabs.size }
     val gridStates = tabs.map { rememberLazyGridState() }
@@ -480,12 +482,14 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
     fun changeFavoriteManagement(enabled: Boolean) {
         if (managingFavorites == enabled) return
         managingFavorites = enabled
-        managementHaptic(if (enabled) HapticFeedbackConstantsCompat.LONG_PRESS else HapticFeedbackConstantsCompat.TOGGLE_OFF)
+        if (enabled) enterManagementHaptic(HapticFeedbackConstantsCompat.LONG_PRESS)
+        else exitManagementHaptic(HapticFeedbackConstantsCompat.TOGGLE_OFF)
     }
     fun toggleFavorite(book: Book) {
         val isFavorite = book.id in model.state.value.favorites
         model.toggleFavorite(book)
-        favoriteHaptic(if (isFavorite) HapticFeedbackConstantsCompat.TOGGLE_OFF else HapticFeedbackConstantsCompat.TOGGLE_ON)
+        if (isFavorite) removeFavoriteHaptic(HapticFeedbackConstantsCompat.TOGGLE_OFF)
+        else addFavoriteHaptic(HapticFeedbackConstantsCompat.TOGGLE_ON)
     }
     val contentInset = 24.dp
     val actionInset = contentInset - 12.dp

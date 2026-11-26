@@ -58,7 +58,7 @@ internal fun readSettings(value: (String, Any?) -> Any?): ReaderSettings {
             AnimationEffect.entries.filterTo(mutableSetOf()) { it.key in keys }
         },
         disabledHaptics = keys("disabled_haptics").let { keys ->
-            HapticEvent.entries.filterTo(mutableSetOf()) { it.key in keys }
+            HapticEvent.entries.filterTo(mutableSetOf()) { it.key in keys || it.legacyKey in keys }
         },
         verifyOnStartup = boolean("verify_on_startup", false),
         hideRecentPreview = boolean("hide_recent_preview", false),
