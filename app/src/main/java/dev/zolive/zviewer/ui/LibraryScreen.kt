@@ -20,6 +20,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
@@ -100,6 +101,9 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import androidx.core.view.WindowCompat
 import androidx.core.view.HapticFeedbackConstantsCompat
@@ -383,10 +387,10 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     }
 }
 
-private enum class LibraryTab(@StringRes val title: Int, @DrawableRes val outlineIcon: Int, @DrawableRes val filledIcon: Int) {
-    Library(R.string.library, R.drawable.ic_symbol_book, R.drawable.ic_symbol_book_filled),
-    Favorites(R.string.favorites, R.drawable.ic_symbol_bookmark, R.drawable.ic_symbol_bookmark_filled),
-    Recent(R.string.recent_reads, R.drawable.ic_symbol_history, R.drawable.ic_symbol_history),
+private enum class LibraryTab(@StringRes val title: Int, @DrawableRes val outlineIcon: Int) {
+    Library(R.string.library, LibraryFillIcon.Book.outline),
+    Favorites(R.string.favorites, LibraryFillIcon.Bookmark.outline),
+    Recent(R.string.recent_reads, R.drawable.ic_symbol_history),
 }
 
 @Composable
@@ -446,28 +450,26 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
             TopAppBar(modifier = Modifier.padding(start = contentInset - 16.dp, end = actionInset - 4.dp), title = {
                 Text("ZViewer", fontWeight = FontWeight.Bold, fontSize = 21.sp)
             }, actions = {
-                IconButton(onClick = {
+                LibraryActionIconButton(LibraryActionIcon.Search, active = active) {
                     if (searching) closeSearch()
                     else {
                         requestSearchFocus = true
                         searching = true
                     }
-                }) { Icon(painterResource(R.drawable.ic_symbol_search), stringResource(R.string.search_comics)) }
-                IconButton(onClick = {
+                }
+                LibraryActionIconButton(LibraryActionIcon.Settings, active = active) {
                     if (searching) {
                         focusManager.clearFocus()
                         keyboard?.hide()
                     }
                     changeFavoriteManagement(false)
                     onSettings()
-                }) { Icon(painterResource(R.drawable.ic_symbol_settings), stringResource(R.string.settings)) }
+                }
             })
         },
         navigation = {
-            WithAnimationSpeed(animationSpeed(AnimationEffect.LibraryTabIndicator)) {
-                LibraryNavigation(useRail, mediumWidth, pagerState.currentPage) { index ->
-                    pagerState.requestScrollToPage(index)
-                }
+            LibraryNavigation(useRail, mediumWidth, pagerState.currentPage) { index ->
+                pagerState.requestScrollToPage(index)
             }
         },
         floatingActionButton = {
@@ -558,13 +560,16 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                                     Text(pluralStringResource(R.plurals.comic_count, books.size, books.size), Modifier.padding(top = 5.dp),
                                         style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                IconButton(onClick = { changeFavoriteManagement(false); model.refresh() }, enabled = !state.scanning) { Icon(painterResource(R.drawable.ic_symbol_refresh), stringResource(R.string.refresh_library)) }
+                                LibraryActionIconButton(LibraryActionIcon.Refresh, enabled = !state.scanning, active = active) {
+                                    changeFavoriteManagement(false)
+                                    model.refresh()
+                                }
                                 EndAlignedDropdownMenu(
                                     expanded = sortMenu,
                                     onDismissRequest = { sortMenu = false },
                                     anchor = {
-                                        IconButton(onClick = { sortMenu = true }) {
-                                            Icon(painterResource(R.drawable.ic_symbol_sort), stringResource(R.string.sort))
+                                        LibraryActionIconButton(LibraryActionIcon.Sort, active = active) {
+                                            sortMenu = true
                                         }
                                     },
                                 ) {
@@ -660,6 +665,41 @@ private fun LibraryScaffold(
 
 @Composable
 private fun LibraryNavigation(useRail: Boolean, mediumWidth: Boolean, page: Int, onSelect: (Int) -> Unit) {
+    val spec = libraryIconAnimationSpec()
+    val bookFill = animateFloatAsState(if (page == LibraryTab.Library.ordinal) 1f else 0f, spec)
+    val bookmarkFill = animateFloatAsState(if (page == LibraryTab.Favorites.ordinal) 1f else 0f, spec)
+    val historyTurn = remember { Animatable(0f) }
+    val currentPage by rememberUpdatedState(page)
+    val currentSpec by rememberUpdatedState(spec)
+    LaunchedEffect(Unit) {
+        snapshotFlow { currentPage }
+            .drop(1)
+            .filter { it == LibraryTab.Recent.ordinal }
+            .collectLatest {
+                historyTurn.snapTo(0f)
+                historyTurn.animateTo(1f, currentSpec)
+            }
+    }
+    val tabIcon: @Composable (LibraryTab) -> Unit = { tab ->
+        when (tab) {
+            LibraryTab.Library -> LibraryFillingIcon(LibraryFillIcon.Book, bookFill)
+            LibraryTab.Favorites -> LibraryFillingIcon(LibraryFillIcon.Bookmark, bookmarkFill)
+            LibraryTab.Recent -> LibraryHistoryIcon(historyTurn.asState())
+        }
+    }
+    WithAnimationSpeed(animationSpeed(AnimationEffect.LibraryTabIndicator)) {
+        LibraryNavigationBar(useRail, mediumWidth, page, onSelect, tabIcon)
+    }
+}
+
+@Composable
+private fun LibraryNavigationBar(
+    useRail: Boolean,
+    mediumWidth: Boolean,
+    page: Int,
+    onSelect: (Int) -> Unit,
+    tabIcon: @Composable (LibraryTab) -> Unit,
+) {
     if (useRail) {
         NavigationRail(
             modifier = Modifier.testTag("library-navigation-rail"),
@@ -669,7 +709,7 @@ private fun LibraryNavigation(useRail: Boolean, mediumWidth: Boolean, page: Int,
                 val selected = page == index
                 NavigationRailItem(
                     selected = selected, onClick = { onSelect(index) },
-                    icon = { LibraryTabIcon(tab, selected) }, label = { Text(stringResource(tab.title)) },
+                    icon = { tabIcon(tab) }, label = { Text(stringResource(tab.title)) },
                 )
             }
         }
@@ -682,17 +722,12 @@ private fun LibraryNavigation(useRail: Boolean, mediumWidth: Boolean, page: Int,
                 val selected = page == index
                 ShortNavigationBarItem(
                     selected = selected, onClick = { onSelect(index) },
-                    icon = { LibraryTabIcon(tab, selected) }, label = { Text(stringResource(tab.title)) },
+                    icon = { tabIcon(tab) }, label = { Text(stringResource(tab.title)) },
                     iconPosition = if (mediumWidth) NavigationItemIconPosition.Start else NavigationItemIconPosition.Top,
                 )
             }
         }
     }
-}
-
-@Composable
-private fun LibraryTabIcon(tab: LibraryTab, selected: Boolean) {
-    Icon(painterResource(if (selected) tab.filledIcon else tab.outlineIcon), null)
 }
 
 @Composable

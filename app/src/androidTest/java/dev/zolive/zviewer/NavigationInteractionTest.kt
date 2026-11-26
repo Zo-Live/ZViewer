@@ -576,6 +576,7 @@ class NavigationInteractionTest {
         assertEquals(scroll, rule.onNodeWithTag("library-grid-0").fetchSemanticsNode()
             .config[androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange].value(), .01f)
         rule.onNodeWithContentDescription("设置").performClick()
+        rule.onNodeWithTag("settings-screen").assertIsDisplayed()
         scenario.recreate()
         rule.onNodeWithContentDescription("返回书库").performClick()
         tab("书库").assertIsSelected()
@@ -669,6 +670,7 @@ class NavigationInteractionTest {
         rule.mainClock.autoAdvance = false
         rule.onNodeWithContentDescription("设置").performClick()
         rule.mainClock.advanceTimeBy(96)
+        rule.onNodeWithTag("settings-screen").assertExists()
         scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
         rule.mainClock.advanceTimeBy(600)
         rule.mainClock.autoAdvance = true
