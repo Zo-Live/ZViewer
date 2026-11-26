@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -16,12 +17,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.core.graphics.ColorUtils
 import dev.zolive.zviewer.data.ReaderSettings
 
 internal val DarkReaderBackground = Color(0xFF101110)
 internal val LightReaderBackground = Color(0xFFFAF9F6)
 internal const val OverlayBackgroundAlpha = .72f
+
+internal val Typography.appTitle: TextStyle
+    get() = titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 21.sp)
 
 private fun tone(seed: Long, lightness: Float, saturation: Float = 1f): Color {
     val hsl = FloatArray(3)

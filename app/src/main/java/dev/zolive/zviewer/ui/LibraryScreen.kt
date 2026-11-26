@@ -476,7 +476,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
         topBar = {
             // 顶栏默认标题 / 操作区边距为 16 / 4 dp；图标在 48 dp 点击区内各留 12 dp。
             TopAppBar(modifier = Modifier.padding(start = contentInset - 16.dp, end = actionInset - 4.dp), title = {
-                Text("ZViewer", fontWeight = FontWeight.Bold, fontSize = 21.sp)
+                Text("ZViewer", style = MaterialTheme.typography.appTitle)
             }, actions = {
                 LibraryActionIconButton(LibraryActionIcon.Search, active = active) {
                     if (searching) closeSearch()
