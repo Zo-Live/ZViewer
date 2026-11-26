@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import androidx.lifecycle.Lifecycle
 import dev.zolive.zviewer.data.*
@@ -572,7 +573,7 @@ class ReaderInteractionTest {
 
         val button = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
         val menuItem = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
-        for ((label, rate) in listOf("0.5x" to .5f, "0.75x" to .75f, "1.5x" to 1.5f)) {
+        for ((label, rate) in listOf("0.5x" to .5f, "0.75x" to .75f, "1.25x" to 1.25f, "1.5x" to 1.5f)) {
             rule.onNode(button and hasText("1.0x")).performClick()
             rule.onNode(menuItem and hasText(label)).performClick()
             assertEquals(rate, speed(), 0f)
@@ -603,7 +604,7 @@ class ReaderInteractionTest {
         open(names = listOf("moving-video/moving.mp4"))
         toggleControls()
         val player = rule.runOnIdle { currentVideoView().playerView.player!! }
-        val rates = listOf("2.0x" to 2f, "1.5x" to 1.5f, "1.0x" to 1f, "0.75x" to .75f, "0.5x" to .5f)
+        val rates = listOf("2.0x" to 2f, "1.5x" to 1.5f, "1.25x" to 1.25f, "1.0x" to 1f, "0.75x" to .75f, "0.5x" to .5f)
         val button = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)
         val menuItem = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton)
         fun screenBounds(node: SemanticsNode): ComposeRect = rule.runOnIdle {
@@ -618,7 +619,8 @@ class ReaderInteractionTest {
             rule.onNode(menuItem and hasText(displayed)).assertIsSelected()
             val bounds = rates.map { (option, _) -> screenBounds(rule.onNode(menuItem and hasText(option)).fetchSemanticsNode()) }
             bounds.zipWithNext().forEach { (above, below) -> assertTrue(above.bottom <= below.top) }
-            assertEquals(anchorBounds.top, bounds.last().bottom, 12f)
+            val menuPadding = with(rule.density) { 8.dp.roundToPx() }
+            assertEquals(anchorBounds.top, bounds.last().bottom + menuPadding, 2f)
             assertEquals(anchorBounds.right, bounds.last().right, 2f)
             rule.onNode(menuItem and hasText(text)).performClick()
             rule.runOnIdle {

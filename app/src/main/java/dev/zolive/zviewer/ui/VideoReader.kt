@@ -6,32 +6,23 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import androidx.compose.animation.core.LinearOutSlowInEasing
-import androidx.compose.animation.core.MutableTransitionState
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.rememberTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -40,15 +31,8 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
-import androidx.compose.ui.window.PopupProperties
 import androidx.core.view.HapticFeedbackConstantsCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -79,7 +63,9 @@ import kotlin.math.roundToLong
 private const val NormalSpeed = 1f
 private const val FastSpeed = 2f
 private const val MaxSwipeSeekMs = 60_000L
-private val videoSpeedOptions = listOf(2f to "2.0x", 1.5f to "1.5x", 1f to "1.0x", .75f to "0.75x", .5f to "0.5x")
+private val videoSpeedOptions = listOf(
+    2f to "2.0x", 1.5f to "1.5x", 1.25f to "1.25x", 1f to "1.0x", .75f to "0.75x", .5f to "0.5x",
+)
 
 internal class VideoPlaybackState(val player: ExoPlayer, private val pool: VideoPlaybackPool) {
     var index by mutableIntStateOf(-1)
@@ -754,7 +740,8 @@ private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
     val locked = state.speedLocked
     var expanded by remember(state, enabled, locked) { mutableStateOf(false) }
     var anchorTop by remember { mutableFloatStateOf(0f) }
-    val animationSpeed = animationSpeed(AnimationEffect.VideoSpeedMenu)
+    // Material 3 下拉菜单在窗口顶部预留 48 dp。
+    val availableHeight = with(LocalDensity.current) { anchorTop.toDp() } - 48.dp
     val haptic = hapticFeedback(HapticEvent.VideoSpeedSelection)
     val lockHaptic = hapticFeedback(HapticEvent.VideoSpeedLock)
     val unlockHaptic = hapticFeedback(HapticEvent.VideoSpeedUnlock)
@@ -762,87 +749,59 @@ private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
     val lockAction = stringResource(if (locked) R.string.unlock_video_speed else R.string.lock_video_speed)
     val lockDescription = stringResource(R.string.video_speed_locked)
     val style = MaterialTheme.typography.labelMedium
-    Box(Modifier.onGloballyPositioned { anchorTop = it.boundsInWindow().top }) {
-        Row(Modifier.height(40.dp).widthIn(min = 48.dp)
-            .combinedClickable(
-                enabled = enabled, role = Role.Button, onClickLabel = label,
-                onClick = { expanded = true },
-                onLongClickLabel = lockAction, hapticFeedbackEnabled = false,
-                onLongClick = {
-                    state.toggleSpeedLock()?.let { locked ->
-                        if (locked) lockHaptic(HapticFeedbackConstantsCompat.CONFIRM)
-                        else unlockHaptic(HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_DEACTIVATE)
-                    }
+    EndAlignedDropdownMenu(
+        expanded = expanded,
+        onDismissRequest = { expanded = false },
+        modifier = Modifier.heightIn(max = availableHeight.coerceAtLeast(48.dp)).selectableGroup(),
+        openAbove = true,
+        animationEffect = AnimationEffect.VideoSpeedMenu,
+        anchor = {
+            Row(
+                Modifier.height(40.dp).widthIn(min = 48.dp)
+                    .onGloballyPositioned { anchorTop = it.positionInWindow().y }
+                    .combinedClickable(
+                        enabled = enabled, role = Role.Button, onClickLabel = label,
+                        onClick = { expanded = true },
+                        onLongClickLabel = lockAction, hapticFeedbackEnabled = false,
+                        onLongClick = {
+                            state.toggleSpeedLock()?.let { locked ->
+                                if (locked) lockHaptic(HapticFeedbackConstantsCompat.CONFIRM)
+                                else unlockHaptic(HapticFeedbackConstantsCompat.GESTURE_THRESHOLD_DEACTIVATE)
+                            }
+                        },
+                    )
+                    .semantics { if (locked) stateDescription = lockDescription }
+                    .padding(end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
+            ) {
+                if (locked) {
+                    val iconSize = with(LocalDensity.current) { style.fontSize.toDp() }
+                    Icon(painterResource(R.drawable.ic_symbol_lock_filled), null, Modifier.size(iconSize))
+                }
+                Text(videoSpeedOptions.first { it.first == state.speed }.second, style = style)
+            }
+        },
+    ) {
+        videoSpeedOptions.forEach { (speed, text) ->
+            val isSelected = speed == state.speed
+            DropdownMenuItem(
+                text = { Text(text) },
+                onClick = {
+                    expanded = false
+                    if (state.selectSpeed(speed)) haptic(HapticFeedbackConstantsCompat.SEGMENT_TICK)
+                },
+                modifier = Modifier.semantics {
+                    role = Role.RadioButton
+                    selected = isSelected
+                },
+                trailingIcon = {
+                    if (isSelected) Icon(
+                        painterResource(R.drawable.ic_symbol_check), null, tint = MaterialTheme.colorScheme.primary,
+                    )
                 },
             )
-            .semantics { if (locked) stateDescription = lockDescription }
-            .padding(end = 4.dp),
-            verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End),
-        ) {
-            if (locked) {
-                val iconSize = with(LocalDensity.current) { style.fontSize.toDp() }
-                Icon(painterResource(R.drawable.ic_symbol_lock_filled), null, Modifier.size(iconSize))
-            }
-            Text(videoSpeedOptions.first { it.first == state.speed }.second, style = style)
         }
-        if (expanded) {
-            Popup(AboveSpeedButton, onDismissRequest = { expanded = false }, properties = PopupProperties(focusable = true)) {
-                val entrance = remember { MutableTransitionState(false).apply { targetState = true } }
-                val transition = rememberTransition(entrance, label = "VideoSpeedMenu")
-                val scale by transition.animateFloat(
-                    transitionSpec = { tween(animationSpeed.duration(120), easing = LinearOutSlowInEasing) },
-                    label = "scale",
-                ) { visible -> if (visible) 1f else 0.8f }
-                val opacity by transition.animateFloat(
-                    transitionSpec = { tween(animationSpeed.duration(30)) },
-                    label = "alpha",
-                ) { visible -> if (visible) 1f else 0f }
-                val origin = TransformOrigin(if (LocalLayoutDirection.current == LayoutDirection.Ltr) 1f else 0f, 1f)
-                val availableHeight = with(LocalDensity.current) { anchorTop.toDp() }
-                Surface(
-                    modifier = Modifier.graphicsLayer {
-                        scaleX = scale
-                        scaleY = scale
-                        alpha = opacity
-                        transformOrigin = origin
-                    },
-                    shape = MaterialTheme.shapes.extraSmall,
-                    color = MenuDefaults.containerColor,
-                    tonalElevation = MenuDefaults.TonalElevation,
-                    shadowElevation = 4.dp,
-                ) {
-                    Column(Modifier.width(112.dp).heightIn(max = availableHeight.coerceAtLeast(48.dp))
-                        .verticalScroll(rememberScrollState()).padding(vertical = 4.dp)) {
-                        videoSpeedOptions.forEach { (speed, text) ->
-                            val isSelected = speed == state.speed
-                            DropdownMenuItem(
-                                text = { Text(text) },
-                                onClick = {
-                                    expanded = false
-                                    if (state.selectSpeed(speed)) haptic(HapticFeedbackConstantsCompat.SEGMENT_TICK)
-                                },
-                                modifier = Modifier.semantics {
-                                    role = Role.RadioButton
-                                    selected = isSelected
-                                },
-                                trailingIcon = {
-                                    if (isSelected) Icon(painterResource(R.drawable.ic_symbol_check), null, tint = MaterialTheme.colorScheme.primary)
-                                },
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-private object AboveSpeedButton : PopupPositionProvider {
-    override fun calculatePosition(anchorBounds: IntRect, windowSize: IntSize, layoutDirection: LayoutDirection,
-        popupContentSize: IntSize): IntOffset {
-        val start = if (layoutDirection == LayoutDirection.Ltr) anchorBounds.right - popupContentSize.width else anchorBounds.left
-        return IntOffset(start.coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0)),
-            (anchorBounds.top - popupContentSize.height).coerceAtLeast(0))
     }
 }
 
