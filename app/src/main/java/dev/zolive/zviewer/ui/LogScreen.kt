@@ -164,12 +164,12 @@ fun LogDetailScreen(file: DiagnosticLog.LogFile, onBack: () -> Unit) {
             },
             navigationIcon = { BackButton(R.string.back_to_logs, onBack) },
             actions = {
-                IconButton(enabled = !actionRunning && content != null, onClick = {
+                AnimatedIconButton(enabled = !actionRunning && content != null, onClick = {
                     shareLog()
-                }) { Icon(painterResource(R.drawable.ic_symbol_share), stringResource(R.string.share_log)) }
-                IconButton(enabled = !actionRunning && content != null, onClick = {
+                }) { progress -> LogShareIcon(progress) }
+                AnimatedIconButton(enabled = !actionRunning && content != null, onClick = {
                     content?.let { copyLog(it) }
-                }) { Icon(painterResource(R.drawable.ic_symbol_content_copy), stringResource(R.string.copy_log)) }
+                }) { progress -> LogCopyIcon(progress) }
             },
         )
     }) { padding ->
