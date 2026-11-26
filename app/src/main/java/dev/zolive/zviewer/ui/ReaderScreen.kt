@@ -780,9 +780,13 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                         )
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
                             IconButton(onClick = { jump(currentPage - 1, step = -1) }, enabled = !scrubbing && (settings.loopMode || currentPage > 0)) { Icon(painterResource(R.drawable.ic_symbol_navigate_before), stringResource(R.string.previous_page)) }
-                            IconButton(onClick = { zoom(-1) }, enabled = !scrubbing) { Icon(painterResource(R.drawable.ic_symbol_zoom_out), stringResource(if (currentPageIsVideo) R.string.zoom_out_video else R.string.zoom_out_image)) }
+                            ReaderZoomIconButton(zoomIn = false, video = currentPageIsVideo, enabled = !scrubbing) {
+                                zoom(-1)
+                            }
                             TextButton(onClick = { zoom(0) }, enabled = !scrubbing) { Text(stringResource(R.string.fit_screen)) }
-                            IconButton(onClick = { zoom(1) }, enabled = !scrubbing) { Icon(painterResource(R.drawable.ic_symbol_zoom_in), stringResource(if (currentPageIsVideo) R.string.zoom_in_video else R.string.zoom_in_image)) }
+                            ReaderZoomIconButton(zoomIn = true, video = currentPageIsVideo, enabled = !scrubbing) {
+                                zoom(1)
+                            }
                             IconButton(onClick = { jump(currentPage + 1, step = 1) }, enabled = !scrubbing && (settings.loopMode || currentPage < session.pages.lastIndex)) { Icon(painterResource(R.drawable.ic_symbol_keyboard_arrow_right), stringResource(R.string.next_page)) }
                         }
                     }
