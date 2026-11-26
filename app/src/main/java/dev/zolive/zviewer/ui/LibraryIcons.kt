@@ -22,10 +22,12 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.ClipOp
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.drawscope.withTransform
@@ -59,9 +61,9 @@ internal enum class LibraryFillIcon(
     private val bounds: Rect,
 ) {
     Book(R.drawable.ic_symbol_book, R.drawable.ic_symbol_book_filled, Offset(540f, 300f), Rect(160f, 80f, 800f, 880f)),
-    Bookmark(R.drawable.ic_symbol_bookmark, R.drawable.ic_symbol_bookmark_filled, Offset(480f, 120f), Rect(200f, 120f, 760f, 840f)),
-    MenuBook(R.drawable.ic_symbol_menu_book, R.drawable.ic_symbol_menu_book_filled, Offset(480f, 510f), Rect(40f, 160f, 920f, 800f)),
-    Play(R.drawable.ic_symbol_play_arrow, R.drawable.ic_symbol_play_arrow_filled, Offset(480f, 480f), Rect(320f, 200f, 760f, 760f));
+    Bookmark(R.drawable.ic_symbol_bookmark, R.drawable.ic_symbol_bookmark_filled, Offset(480f, 120f), Rect(200f, 120f, 760f, 800f)),
+    MenuBook(R.drawable.ic_symbol_menu_book, R.drawable.ic_symbol_menu_book_filled, Offset(480f, 510f), Rect(40f, 160f, 920f, 779f)),
+    Play(R.drawable.ic_symbol_play_arrow, R.drawable.ic_symbol_play_arrow_filled, Offset(480f, 480f), Rect(320f, 233f, 725f, 727f));
 
     fun fillBounds(size: Size, progress: Float): Rect {
         val widthScale = size.width / 960f
@@ -118,10 +120,9 @@ internal fun LibraryHistoryIcon(progress: State<Float>) {
         Canvas(Modifier.size(24.dp)) {
             val unit = size.width / 24f
             val stroke = 2f * unit
-            drawLine(color, center, center + Offset(3.5f, 3.5f) * unit, stroke)
-            drawCircle(color, stroke / 2f)
+            drawLine(color, center, center + Offset(2.8f, 2.8f) * unit, stroke, StrokeCap.Round)
             rotate(360f * FastOutSlowInEasing.transform(progress.value)) {
-                drawLine(color, center, center - Offset(0f, 5f * unit), stroke)
+                drawLine(color, center, center - Offset(0f, 4f * unit), stroke, StrokeCap.Round)
             }
         }
     }
@@ -198,7 +199,7 @@ private fun LibrarySortIcon(description: String, progress: () -> Float) {
             }
             val lineWidth = (18f - row * 6f) * unit * widthFraction
             val start = if (layoutDirection == LayoutDirection.Ltr) 3f * unit else size.width - 3f * unit - lineWidth
-            drawRect(color, Offset(start, (6f + row * 5f) * unit), Size(lineWidth, 2f * unit))
+            drawRoundRect(color, Offset(start, (6f + row * 5f) * unit), Size(lineWidth, 2f * unit), CornerRadius(unit))
         }
     }
 }

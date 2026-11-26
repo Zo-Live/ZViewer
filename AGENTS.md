@@ -1,5 +1,6 @@
 - 开发过程中更新 docs 中的相应文档。
 - README 简洁地说明大体功能，不追求完整反映具体实现，不需要一一讲解用户简单摸索后即可了解的功能。必要时才更新 README，不要作为 Changelog 记录每个更新细节。
+- Material 图标统一使用新版 Material Symbols 的 Rounded 样式。
 - 除了单元测试，还需通过 Android Emulator 进行功能测试与端到端测试。验证时使用 emulator-5554 以便用户实时预览。
 - 开发构建目录为 app/build/outputs/apk/release，dist 为正式构建目录。
 - Commit 时将不同功能分开提交，遵循原子化原则。
