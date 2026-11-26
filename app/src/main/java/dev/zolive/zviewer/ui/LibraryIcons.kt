@@ -59,7 +59,9 @@ internal enum class LibraryFillIcon(
     private val bounds: Rect,
 ) {
     Book(R.drawable.ic_symbol_book, R.drawable.ic_symbol_book_filled, Offset(540f, 300f), Rect(160f, 80f, 800f, 880f)),
-    Bookmark(R.drawable.ic_symbol_bookmark, R.drawable.ic_symbol_bookmark_filled, Offset(480f, 120f), Rect(200f, 120f, 760f, 840f));
+    Bookmark(R.drawable.ic_symbol_bookmark, R.drawable.ic_symbol_bookmark_filled, Offset(480f, 120f), Rect(200f, 120f, 760f, 840f)),
+    MenuBook(R.drawable.ic_symbol_menu_book, R.drawable.ic_symbol_menu_book_filled, Offset(480f, 510f), Rect(40f, 160f, 920f, 800f)),
+    Play(R.drawable.ic_symbol_play_arrow, R.drawable.ic_symbol_play_arrow_filled, Offset(480f, 480f), Rect(320f, 200f, 760f, 760f));
 
     fun fillBounds(size: Size, progress: Float): Rect {
         val widthScale = size.width / 960f

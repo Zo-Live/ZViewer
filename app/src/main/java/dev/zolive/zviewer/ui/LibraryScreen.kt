@@ -153,6 +153,10 @@ private class PageTransition(val child: AppPage, initialProgress: Float) {
     val progress = Animatable(initialProgress)
 }
 
+private class ContinueReadingMotion(val bookId: String) {
+    val progress = Animatable(0f)
+}
+
 @Composable
 private fun Modifier.pageBackSwipe(
     onStart: () -> Unit,
@@ -203,6 +207,15 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     val speed = animationSpeed(AnimationEffect.PageTransition)
     val session = state.session
     val waitingForVideo = session != null && state.waitingForVideoEntry
+    val iconSpec = libraryIconAnimationSpec()
+    var continueMotion by remember { mutableStateOf<ContinueReadingMotion?>(null) }
+    LaunchedEffect(continueMotion) {
+        val motion = continueMotion ?: return@LaunchedEffect
+        motion.progress.animateTo(1f, iconSpec)
+        continueMotion = null
+    }
+    val readerEntry = continueMotion?.takeIf { !waitingForVideo && it.bookId == session?.book?.id }
+    val readerEntryStart = remember(readerEntry, session) { readerEntry?.progress?.value ?: 0f }
     LaunchedEffect(session, waitingForVideo) {
         if (session != null && waitingForVideo) {
             delay(3_000)
@@ -278,23 +291,33 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
         Box(Modifier.fillMaxSize()) {
             if (session != null) {
                 key(session) {
-                    ReaderScreen(session, state.initialPage, state.settings,
-                        model.repository, model::settings, { index -> model.saveProgress(session, index) },
-                        { index -> model.videoPosition(session, index) },
-                        { index, position -> model.saveVideoProgress(session, index, position) },
-                        onBack = model::closeBook,
-                        visible = !waitingForVideo,
-                        onVideoEntryReady = { model.finishVideoEntry(session) })
+                    Box(Modifier.zIndex(if (readerEntry != null) 2f else 0f).graphicsLayer {
+                        if (readerEntry != null && readerEntryStart < 1f) {
+                            val fade = (readerEntry.progress.value - readerEntryStart) / (1f - readerEntryStart)
+                            alpha = fade.coerceIn(0f, 1f)
+                        }
+                    }) {
+                        ReaderScreen(session, state.initialPage, state.settings,
+                            model.repository, model::settings, { index -> model.saveProgress(session, index) },
+                            { index -> model.videoPosition(session, index) },
+                            { index, position -> model.saveVideoProgress(session, index, position) },
+                            onBack = {
+                                continueMotion = null
+                                model.closeBook()
+                            },
+                            visible = !waitingForVideo,
+                            onVideoEntryReady = { model.finishVideoEntry(session) })
+                    }
                 }
             }
-            if (session == null || waitingForVideo) {
+            if (session == null || waitingForVideo || readerEntry != null) {
                 val motion = transition
                 val layers = if (motion == null) listOf(page) else listOf(motion.parent, motion.child)
                 Box(Modifier.fillMaxSize().zIndex(1f).clipToBounds().background(MaterialTheme.colorScheme.background)
                     .onSizeChanged { viewportWidth = it.width.toFloat().coerceAtLeast(1f) }) {
                     layers.forEach { layer ->
                         key(layer) {
-                            val active = layer == page
+                            val active = layer == page && readerEntry == null
                             val layerModifier = Modifier.fillMaxSize()
                                 .graphicsLayer {
                                     val progress = dragProgress ?: motion?.progress?.value ?: 0f
@@ -324,7 +347,11 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                             Box(layerModifier) {
                                 pageStates.SaveableStateProvider(layer.tag) {
                                     when (layer) {
-                                        AppPage.Library -> LibraryScreen(state, model, active,
+                                        AppPage.Library -> LibraryScreen(state, model, active, continueMotion,
+                                            onContinue = { book ->
+                                                continueMotion = ContinueReadingMotion(book.id)
+                                                model.open(book)
+                                            },
                                             onSettings = { finishTransition(AppPage.Settings, showChild = true, startProgress = 0f) },
                                             onChooseLibrary = chooseLibrary)
                                         AppPage.Settings -> SettingsScreen(::goBack) { section ->
@@ -347,7 +374,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                             }
                         }
                     }
-                    if (waitingForVideo || motion != null && dragProgress == null) {
+                    if (waitingForVideo || readerEntry != null || motion != null && dragProgress == null) {
                         Box(Modifier.matchParentSize().pointerInput(Unit) {
                             awaitPointerEventScope {
                                 while (true) awaitPointerEvent(PointerEventPass.Initial).changes.forEach { it.consume() }
@@ -355,7 +382,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                         })
                     }
                 }
-                PredictiveBackHandler(enabled = page != AppPage.Library && !waitingForVideo) { events ->
+                PredictiveBackHandler(enabled = page != AppPage.Library && !waitingForVideo && readerEntry == null) { events ->
                     var startProgress: Float? = null
                     try {
                         events.collect { event ->
@@ -395,6 +422,7 @@ private enum class LibraryTab(@StringRes val title: Int, @DrawableRes val outlin
 
 @Composable
 private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: Boolean,
+    continueMotion: ContinueReadingMotion?, onContinue: (Book) -> Unit,
     onSettings: () -> Unit, onChooseLibrary: () -> Unit) {
     val searchSpeed = animationSpeed(AnimationEffect.LibrarySearch)
     val managementHaptic = hapticFeedback(HapticEvent.FavoriteManagement)
@@ -589,7 +617,8 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                                 .filter { (state.progress[it.id]?.updated ?: 0) > 0 && (state.progress[it.id]?.fraction ?: 0f) < 1f }
                                 .maxByOrNull { state.progress[it.id]?.updated ?: 0 } else null
                             if (recent != null) item(span = { GridItemSpan(maxLineSpan) }) {
-                                ContinueCard(recent, state.progress.getValue(recent.id), onClick = { model.open(recent) })
+                                val fill = continueMotion?.takeIf { it.bookId == recent.id }?.progress?.asState()
+                                ContinueCard(recent, state.progress.getValue(recent.id), fill, onClick = { onContinue(recent) })
                             }
                             items(books, key = { it.id }) { book ->
                                 BookCard(book, state.progress[book.id] ?: ReadingProgress(), book.id in state.favorites,
@@ -859,17 +888,17 @@ private fun EmptyLibrary(
 }
 
 @Composable
-private fun ContinueCard(book: Book, progress: ReadingProgress, onClick: () -> Unit) {
+private fun ContinueCard(book: Book, progress: ReadingProgress, fill: State<Float>?, onClick: () -> Unit) {
     Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
         shape = RoundedCornerShape(20.dp)) {
         Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(R.drawable.ic_symbol_menu_book), null, Modifier.size(30.dp))
+            LibraryFillingIcon(LibraryFillIcon.MenuBook, fill, Modifier.size(30.dp))
             Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
                 Text(stringResource(R.string.continue_reading), style = MaterialTheme.typography.labelMedium)
                 Text(book.title, Modifier.padding(top = 4.dp), style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(stringResource(R.string.page_progress, progress.page + 1, progress.total), Modifier.padding(top = 3.dp), style = MaterialTheme.typography.bodySmall)
             }
-            Icon(painterResource(R.drawable.ic_symbol_play_arrow), stringResource(R.string.continue_reading))
+            LibraryFillingIcon(LibraryFillIcon.Play, fill, description = stringResource(R.string.continue_reading))
         }
     }
 }

@@ -69,6 +69,25 @@ class NavigationInteractionTest {
 
     private fun tab(title: String) = rule.onNode(hasText(title) and isSelectable())
 
+    @Test fun continueReadingStartsOpeningBeforeIconAnimationFinishes() {
+        launch()
+        lateinit var model: LibraryViewModel
+        scenario.onActivity { model = ViewModelProvider(it)[LibraryViewModel::class.java] }
+        rule.mainClock.autoAdvance = false
+        try {
+            rule.onNodeWithContentDescription("继续阅读").performSemanticsAction(SemanticsActions.OnClick)
+            rule.waitUntil(10_000) { model.state.value.session?.book?.id == book.id }
+            rule.mainClock.advanceTimeBy(80)
+            rule.onNodeWithTag("library-screen").assertExists()
+            rule.mainClock.advanceTimeBy(320)
+            rule.onNodeWithTag("library-screen").assertDoesNotExist()
+        } finally {
+            rule.mainClock.autoAdvance = true
+        }
+        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        rule.onNodeWithContentDescription("继续阅读").assertIsDisplayed()
+    }
+
     @Test fun cancelledOpenCannotClearTheReplacementRequest() {
         val first = book.copy(modified = book.modified + 1)
         val pdf = store.readLibrary().first { it.kind == "pdf" }
