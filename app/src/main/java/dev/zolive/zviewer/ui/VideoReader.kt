@@ -723,7 +723,7 @@ internal fun VideoProgressControls(state: VideoPlaybackState, enabled: Boolean =
                 state.togglePlayback()
                 playbackHaptic(if (state.playRequested) HapticFeedbackConstantsCompat.TOGGLE_ON else HapticFeedbackConstantsCompat.TOGGLE_OFF)
             }, enabled = enabled && !scrubbing && !state.failed && state.index >= 0) {
-                Icon(painterResource(if (state.playRequested) R.drawable.ic_symbol_pause else R.drawable.ic_symbol_play_arrow),
+                Icon(painterResource(if (state.playRequested) R.drawable.ic_symbol_pause_filled else R.drawable.ic_symbol_play_arrow_filled),
                     stringResource(if (state.playRequested) R.string.pause_video else R.string.play_video))
             }
             val progressDescription = stringResource(R.string.video_playback_progress)
@@ -774,7 +774,7 @@ private fun VideoSpeedMenu(state: VideoPlaybackState, enabled: Boolean) {
         ) {
             if (locked) {
                 val iconSize = with(LocalDensity.current) { style.fontSize.toDp() }
-                Icon(painterResource(R.drawable.ic_symbol_lock), null, Modifier.size(iconSize))
+                Icon(painterResource(R.drawable.ic_symbol_lock_filled), null, Modifier.size(iconSize))
             }
             Text(videoSpeedOptions.first { it.first == state.speed }.second, style = style)
         }
