@@ -94,12 +94,12 @@ class CacheSettingsTest {
         rule.onNodeWithText("无限制").assertExists()
         rule.onNodeWithText("清理封面").performClick()
         setThreshold(CacheLimits.MIN_MIB)
-        rule.onNodeWithText("256 MiB").assertExists()
+        rule.onNodeWithText("128 MiB").assertExists()
         scenario.recreate()
         rule.onNodeWithText("清理封面").performScrollTo().assertIsOff()
-        rule.onNodeWithText("256 MiB").assertExists()
+        rule.onNodeWithText("128 MiB").assertExists()
         assertFalse(PreferenceStore(context).settings().clearCovers)
-        assertEquals(256, PreferenceStore(context).settings().cacheLimitMiB)
+        assertEquals(128, PreferenceStore(context).settings().cacheLimitMiB)
     }
 
     @Test fun taskRemovalSwitchesDefaultOffAndPersistIndependently() {
@@ -164,7 +164,7 @@ class CacheSettingsTest {
         val old = sparse(context.cacheDir, "books/threshold/old.bin", 33L * 1024 * 1024 * 1024)
         BookRepository(context).use { it.trimCache() }
         assertTrue(old.isFile)
-        setThreshold(256)
+        setThreshold(CacheLimits.MIN_MIB)
         rule.waitUntil(5_000) { !old.exists() }
         assertTrue(cover.isFile)
         setThreshold(640)
@@ -178,7 +178,7 @@ class CacheSettingsTest {
         launchSettings()
         rule.onNodeWithText("自动清理阈值").performScrollTo().assertIsDisplayed()
         rule.onNodeWithContentDescription("自动清理阈值").performScrollTo().performTouchInput {
-            swipe(Offset(width * .2f, centerY), Offset(width * .85f, centerY), durationMillis = 600)
+            swipe(Offset(width * .2f, centerY), Offset(width * .866f, centerY), durationMillis = 600)
         }
         rule.waitForIdle()
         rule.onNodeWithText("清理封面").assertExists()

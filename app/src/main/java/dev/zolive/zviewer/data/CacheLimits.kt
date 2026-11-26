@@ -1,20 +1,18 @@
 package dev.zolive.zviewer.data
 
 internal object CacheLimits {
-    const val MIN_MIB = 256
+    const val MIN_MIB = 128
     const val DEFAULT_MIB = 1536
     const val MAX_MIB = 32768
     const val UNLIMITED_MIB = Int.MAX_VALUE
-    const val STEPS_PER_DOUBLING = 4
 
     val optionsMiB = listOf(
-        MIN_MIB, 320, 384, 448,
-        512, 640, 768, 896,
+        MIN_MIB, 256, 384, 640,
         1024, 1280, DEFAULT_MIB, 1792,
         2048, 2560, 3072, 3584,
         4096, 5120, 6144, 7168,
         8192, 10240, 12288, 14336,
-        16384, 20480, 24576, 28672,
+        16384, 20480, 24576,
         MAX_MIB, UNLIMITED_MIB,
     )
 

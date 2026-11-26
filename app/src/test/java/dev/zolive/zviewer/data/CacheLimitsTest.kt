@@ -6,8 +6,13 @@ import org.junit.Test
 
 class CacheLimitsTest {
     @Test fun legacyThresholdsRoundUpToTheNextFiniteOption() {
+        assertEquals(128, readLimit(127))
+        assertEquals(256, readLimit(129))
+        assertEquals(640, readLimit(512))
+        assertEquals(1024, readLimit(896))
         assertEquals(1536, readLimit(1281))
         assertEquals(5120, readLimit(4352))
+        assertEquals(CacheLimits.MAX_MIB, readLimit(28672))
         assertEquals(CacheLimits.MAX_MIB, readLimit(CacheLimits.MAX_MIB + 1))
     }
 

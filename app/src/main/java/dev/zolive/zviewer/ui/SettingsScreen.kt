@@ -21,6 +21,7 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -44,11 +45,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.toArgb
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
@@ -67,7 +70,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.offset
 import androidx.core.view.HapticFeedbackConstantsCompat
 import androidx.core.view.ViewCompat
 import androidx.lifecycle.Lifecycle
@@ -462,7 +464,7 @@ private fun CacheLimitSlider(limitMiB: Int, onLimitChanged: (Int) -> Unit) {
     SettingsListItem(headlineContent = { Text(label) }, trailingContent = { Text(displayedLimit) })
     val interactionSource = remember { MutableInteractionSource() }
     val thumbSize = DpSize(4.dp, 44.dp)
-    val thumbTrackGap = 6.dp
+    val trackHeight = 16.dp
     Slider(
         value = index.toFloat(),
         onValueChange = {
@@ -484,44 +486,58 @@ private fun CacheLimitSlider(limitMiB: Int, onLimitChanged: (Int) -> Unit) {
         interactionSource = interactionSource,
         modifier = Modifier
             .fillMaxWidth()
-            .layout { measurable, constraints ->
-                // 滑块居中经过轨道两端，向两侧借用滑块的宽度，使轨道与设置行齐平。
-                val thumbWidth = thumbSize.width.roundToPx()
-                val slider = measurable.measure(constraints.offset(horizontal = thumbWidth))
-                layout(constraints.maxWidth, slider.height) { slider.placeRelative(-thumbWidth / 2, 0) }
-            }
             .systemGestureExclusion()
             .semantics {
                 contentDescription = label
                 stateDescription = displayedLimit
-            },
+            }
+            .padding(horizontal = (trackHeight - thumbSize.width) / 2),
         thumb = {
             Box(Modifier.width(thumbSize.width), contentAlignment = Alignment.Center) {
                 SliderDefaults.Thumb(interactionSource, thumbSize = thumbSize)
             }
         },
-        track = { sliderState ->
+        track = {
             val colors = SliderDefaults.colors()
-            SliderDefaults.Track(
-                sliderState,
-                modifier = Modifier.drawWithContent {
-                    drawContent()
-                    // 按滑块的实际行程等分轨道，点按刻度即可选中对应档位。
-                    val gap = (thumbSize.width / 2 + thumbTrackGap).toPx()
-                    val stepWidth = size.width / options.lastIndex
-                    for (tick in 1 until options.lastIndex) {
-                        val radius = (if (tick % CacheLimits.STEPS_PER_DOUBLING == 0) 1.5.dp else 0.75.dp).toPx()
-                        if (abs(tick - index) * stepWidth <= gap + radius) continue
-                        val x = if (layoutDirection == LayoutDirection.Rtl) size.width - tick * stepWidth else tick * stepWidth
-                        val color = if (tick < index) colors.activeTickColor else colors.inactiveTickColor
-                        drawCircle(color, radius, Offset(x, center.y))
+            Canvas(Modifier.fillMaxWidth().height(trackHeight)) {
+                val thumbWidth = thumbSize.width.roundToPx()
+                val thumbCenterOffset = thumbWidth / 2f - thumbWidth / 2
+                fun tickCenter(tick: Int): Float =
+                    (size.width * (tick.toFloat() / options.lastIndex)).roundToInt() + thumbCenterOffset
+
+                val selectedCenter = tickCenter(index)
+                val gap = thumbWidth / 2f + 6.dp.toPx()
+                val outerCorner = CornerRadius(center.y)
+                val innerCorner = CornerRadius(2.dp.toPx())
+
+                fun drawSegment(left: Float, right: Float, color: Color, start: CornerRadius, end: CornerRadius) {
+                    if (right > left) {
+                        val path = Path().apply {
+                            addRoundRect(RoundRect(left, 0f, right, size.height, start, end, end, start))
+                        }
+                        drawPath(path, color)
                     }
-                },
-                colors = colors,
-                drawStopIndicator = null,
-                drawTick = { _, _ -> },
-                thumbTrackGapSize = thumbTrackGap,
-            )
+                }
+
+                val direction = if (layoutDirection == LayoutDirection.Rtl) -1f else 1f
+                scale(scaleX = direction, scaleY = 1f) {
+                    drawSegment(-outerCorner.x, selectedCenter - gap, colors.activeTrackColor, outerCorner, innerCorner)
+                    drawSegment(selectedCenter + gap, size.width + outerCorner.x, colors.inactiveTrackColor, innerCorner, outerCorner)
+                    for (tick in options.indices) {
+                        val capacity = options[tick]
+                        val radius = when {
+                            tick == 0 -> 2.5.dp
+                            tick == options.lastIndex -> 2.dp
+                            capacity in 1024 until CacheLimits.MAX_MIB && capacity.countOneBits() == 1 -> 1.5.dp
+                            else -> 0.75.dp
+                        }.toPx()
+                        val centerX = tickCenter(tick)
+                        if (abs(centerX - selectedCenter) <= gap + radius) continue
+                        val color = if (tick < index) colors.activeTickColor else colors.inactiveTickColor
+                        drawCircle(color, radius, Offset(centerX, center.y))
+                    }
+                }
+            }
         },
     )
 }
