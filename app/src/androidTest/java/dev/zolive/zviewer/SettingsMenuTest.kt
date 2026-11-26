@@ -2,6 +2,7 @@ package dev.zolive.zviewer
 
 import android.content.Context
 import android.os.Build
+import android.view.WindowManager
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -79,15 +80,12 @@ class SettingsMenuTest {
     @Test fun securityDefaultsAndAutoLockIntervalArePersisted() {
         setting("安全与隐私").performClick()
         setting("启动时验证").assertIsOff()
-        setting("模糊预览").assert(hasText("在最近任务列表中隐藏应用预览，开启后无法截屏或录屏。"))
-            .assertIsOff().performClick().assertIsOn()
         setting("切换至后台后重新验证").assertIsOff()
         val recentCard = setting("隐藏后台卡片")
         recentCard.assert(hasText("从最近任务列表隐藏应用卡片。需要先将应用切换至后台。"))
             .assertIsOff().performClick().assertIsOn()
         setting("在系统相册中隐藏图片").assertIsOff()
         rule.onNodeWithText("自动锁定间隔").assertDoesNotExist()
-        assertTrue(store.settings().hideRecentPreview)
         assertTrue(store.settings().hideRecentCard)
         assertEquals(AutoLockInterval.FifteenSeconds, store.settings().autoLockInterval)
 
@@ -113,6 +111,35 @@ class SettingsMenuTest {
         rule.onNodeWithText("自动锁定间隔").assertDoesNotExist()
         assertEquals(AutoLockInterval.FiveMinutes, store.settings().autoLockInterval)
         assertFalse(store.settings().hideRecentCard)
+    }
+
+    @Test fun recentPreviewAppliesVersionSpecificCapturePolicy() {
+        val legacy = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+        val hint = if (legacy) "在最近任务列表中隐藏应用预览，开启后无法截图或录屏。"
+        else "在最近任务列表中隐藏应用预览"
+        setting("安全与隐私").performClick()
+        val preview = setting("模糊预览")
+        preview.assert(hasText(hint)).assertIsOff().performClick().assertIsOn()
+        assertTrue(store.settings().hideRecentPreview)
+        assertSecureWindow(legacy)
+
+        scenario.close()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        rule.onNodeWithContentDescription("设置").performClick()
+        setting("安全与隐私").performClick()
+        preview.assertIsOn()
+        assertSecureWindow(legacy)
+
+        preview.performClick().assertIsOff()
+        assertFalse(store.settings().hideRecentPreview)
+        assertSecureWindow(false)
+    }
+
+    private fun assertSecureWindow(expected: Boolean) {
+        scenario.onActivity { activity ->
+            val secure = activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0
+            assertEquals(expected, secure)
+        }
     }
 
     @Test fun settingsExposeCurrentValuesAndMenuSelection() {

@@ -161,10 +161,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setRecentPreviewHidden(hidden: Boolean) {
-        if (hidden) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
-        else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             setRecentsScreenshotEnabled(!hidden)
+        } else if (hidden) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
         }
     }
 

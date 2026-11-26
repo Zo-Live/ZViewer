@@ -380,7 +380,11 @@ private fun SecuritySettings(state: LibraryState, model: LibraryViewModel) {
         settings.verifyOnStartup,
     ) { if (canEnableVerification(it)) model.settings(settings.copy(verifyOnStartup = it)) }
     PreferenceSwitch(
-        stringResource(R.string.hide_recent_preview), stringResource(R.string.hide_recent_preview_hint),
+        stringResource(R.string.hide_recent_preview),
+        stringResource(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) R.string.hide_recent_preview_hint
+            else R.string.hide_recent_preview_legacy_hint,
+        ),
         settings.hideRecentPreview,
     ) { model.settings(settings.copy(hideRecentPreview = it)) }
     PreferenceSwitch(
