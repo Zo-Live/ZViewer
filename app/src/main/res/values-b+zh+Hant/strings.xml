@@ -42,7 +42,6 @@
     <string name="motion_library_paging">書庫分頁滑動</string>
     <string name="motion_library_tab_indicator">底部導覽列選取指示</string>
     <string name="motion_library_filter_rebound">篩選列回彈</string>
-    <string name="motion_library_scan_progress">書庫掃描進度列</string>
     <string name="motion_library_scroll_to_top">返回書庫頂端</string>
     <string name="motion_reader_paging">閱讀器翻頁</string>
     <string name="motion_reader_toolbar">閱讀工具列顯示與隱藏</string>

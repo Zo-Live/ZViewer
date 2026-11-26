@@ -42,7 +42,6 @@
     <string name="motion_library_paging">书库标签滑动</string>
     <string name="motion_library_tab_indicator">底栏选中指示</string>
     <string name="motion_library_filter_rebound">筛选栏回弹</string>
-    <string name="motion_library_scan_progress">书库扫描进度条</string>
     <string name="motion_library_scroll_to_top">返回书库顶部</string>
     <string name="motion_reader_paging">阅读器翻页</string>
     <string name="motion_reader_toolbar">阅读工具栏显示和隐藏</string>

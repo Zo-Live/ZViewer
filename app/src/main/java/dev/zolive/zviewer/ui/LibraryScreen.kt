@@ -511,9 +511,6 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
         }
         val coverSize = remember(coverWidth) { PixelSize(coverWidth, (coverWidth / BookCoverAspectRatio).roundToInt()) }
         Column(Modifier.fillMaxSize()) {
-            if (state.scanning) WithAnimationSpeed(animationSpeed(AnimationEffect.LibraryScanProgress)) {
-                LinearProgressIndicator(Modifier.fillMaxWidth())
-            }
             AnimatedVisibility(
                 visible = searching,
                 enter = expandVertically(tween(searchSpeed.duration(280), easing = FastOutSlowInEasing), expandFrom = Alignment.Top) +

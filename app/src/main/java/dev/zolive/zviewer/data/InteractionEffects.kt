@@ -11,7 +11,6 @@ enum class AnimationEffect(internal val key: String) {
     LibraryPaging("library_paging"),
     LibraryTabIndicator("library_tab_indicator"),
     LibraryFilterRebound("library_filter_rebound"),
-    LibraryScanProgress("library_scan_progress"),
     LibraryScrollToTop("library_scroll_to_top"),
     ReaderPaging("reader_paging"),
     ReaderToolbar("reader_toolbar"),

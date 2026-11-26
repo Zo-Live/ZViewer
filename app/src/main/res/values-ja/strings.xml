@@ -42,7 +42,6 @@
     <string name="motion_library_paging">ライブラリのタブ間スワイプ</string>
     <string name="motion_library_tab_indicator">下部ナビゲーションの選択表示</string>
     <string name="motion_library_filter_rebound">絞り込みバーのバウンス</string>
-    <string name="motion_library_scan_progress">ライブラリのスキャン進行バー</string>
     <string name="motion_library_scroll_to_top">ライブラリの先頭に戻る</string>
     <string name="motion_reader_paging">閲覧画面のページ送り</string>
     <string name="motion_reader_toolbar">閲覧ツールバーの表示と非表示</string>

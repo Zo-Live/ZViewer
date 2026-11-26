@@ -42,7 +42,6 @@
     <string name="motion_library_paging">Swiping library tabs</string>
     <string name="motion_library_tab_indicator">Bottom navigation indicator</string>
     <string name="motion_library_filter_rebound">Filter bar rebound</string>
-    <string name="motion_library_scan_progress">Library scan progress bar</string>
     <string name="motion_library_scroll_to_top">Scroll to top of library</string>
     <string name="motion_reader_paging">Reader page turns</string>
     <string name="motion_reader_toolbar">Showing and hiding reader controls</string>

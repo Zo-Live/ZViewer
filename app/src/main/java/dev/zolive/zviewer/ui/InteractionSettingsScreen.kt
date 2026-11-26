@@ -41,7 +41,6 @@ private val animationGroups = listOf(
         AnimationEffect.LibraryPaging to R.string.motion_library_paging,
         AnimationEffect.LibraryTabIndicator to R.string.motion_library_tab_indicator,
         AnimationEffect.LibraryFilterRebound to R.string.motion_library_filter_rebound,
-        AnimationEffect.LibraryScanProgress to R.string.motion_library_scan_progress,
         AnimationEffect.LibraryScrollToTop to R.string.motion_library_scroll_to_top,
     )),
     InteractionGroup(R.string.reading, listOf(
