@@ -111,6 +111,7 @@ data class ReaderSettings(
     val verificationFollowsTheme: Boolean = true,
     val showPageNumber: Boolean = true,
     val startupPage: LibraryTab = LibraryTab.Library,
+    val resumeReadingOnStartup: Boolean = false,
 ) {
     internal fun animationSpeedFor(effect: AnimationEffect): AnimationSpeed =
         if (effect in disabledAnimations) AnimationSpeed.Moderate else animationSpeed

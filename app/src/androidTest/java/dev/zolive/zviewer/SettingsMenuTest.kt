@@ -158,6 +158,7 @@ class SettingsMenuTest {
 
     @Test fun preferredStartupPageAppliesToEachNewLaunch() {
         val startupPage = setting("首选启动页")
+        val resumeReading = setting("启动即继续阅读")
         val library = rule.onNode(hasText("书库") and isSelectable())
         val favorites = rule.onNode(hasText("收藏") and isSelectable())
         val recent = rule.onNode(hasText("最近阅读") and isSelectable())
@@ -175,7 +176,11 @@ class SettingsMenuTest {
         setting("偏好").performClick()
         startupPage.performScrollTo()
         val fileType = setting("显示文件类型").fetchSemanticsNode().boundsInRoot
-        assertEquals(startupPage.fetchSemanticsNode().boundsInRoot.bottom, fileType.top, 1f)
+        val resumeRow = resumeReading.assertIsOff().fetchSemanticsNode().boundsInRoot
+        assertEquals(startupPage.fetchSemanticsNode().boundsInRoot.bottom, resumeRow.top, 1f)
+        assertEquals(resumeRow.bottom, fileType.top, 1f)
+        resumeReading.performClick().assertIsOn()
+        assertTrue(store.settings().resumeReadingOnStartup)
         startupPage.assert(hasText("书库")).performClick()
         option("书库").assertIsSelected()
         option("最近阅读").assertIsNotSelected()
@@ -190,6 +195,7 @@ class SettingsMenuTest {
         relaunch()
         favorites.assertIsSelected()
         openPreferences()
+        resumeReading.assertIsOn()
         startupPage.assert(hasText("收藏")).performClick()
         option("收藏").assertIsSelected()
         option("最近阅读").performClick()
@@ -250,7 +256,8 @@ class SettingsMenuTest {
         val language = setting("语言")
         val speed = setting("动画速度")
         val haptics = setting("触感反馈")
-        val rows = listOf(language, speed, haptics, setting("触感设置"), setting("首选启动页"), setting("显示文件类型"))
+        val rows = listOf(language, speed, haptics, setting("触感设置"), setting("首选启动页"),
+            setting("启动即继续阅读"), setting("显示文件类型"))
             .map { it.fetchSemanticsNode().boundsInRoot }
         rows.zipWithNext().forEach { (upper, lower) -> assertEquals(upper.bottom, lower.top, 1f) }
         speed.assert(hasText("适中")).performClick()

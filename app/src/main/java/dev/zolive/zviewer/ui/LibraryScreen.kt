@@ -286,7 +286,10 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) model.selectLibrary(uri)
     }
-    val chooseLibrary = { picker.launch(state.treeUri?.let(Uri::parse)) }
+    val chooseLibrary = {
+        model.cancelStartupReading()
+        picker.launch(state.treeUri?.let(Uri::parse))
+    }
     Surface(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
             if (session != null) {
@@ -352,7 +355,10 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                                                 continueMotion = ContinueReadingMotion(book.id)
                                                 model.open(book)
                                             },
-                                            onSettings = { finishTransition(AppPage.Settings, showChild = true, startProgress = 0f) },
+                                            onSettings = {
+                                                model.cancelStartupReading()
+                                                finishTransition(AppPage.Settings, showChild = true, startProgress = 0f)
+                                            },
                                             onChooseLibrary = chooseLibrary)
                                         AppPage.Settings -> SettingsScreen(::goBack) { section ->
                                             finishTransition(AppPage.Section(section), showChild = true, startProgress = 0f)

@@ -33,6 +33,7 @@ internal fun readSettings(value: (String, Any?) -> Any?): ReaderSettings {
         startupPage = string("startup_page", LibraryTab.Library.key).let { key ->
             LibraryTab.entries.firstOrNull { it.key == key } ?: LibraryTab.Library
         },
+        resumeReadingOnStartup = boolean("resume_reading_on_startup", false),
         videoLoopSingle = boolean("video_loop_single", false),
         videoPreview = boolean("video_preview", false),
         loopMode = boolean("loop_mode", false),
@@ -90,6 +91,7 @@ internal fun settingsValues(settings: ReaderSettings): Map<String, Any?> = mapOf
     "show_file_type" to settings.showFileType,
     "show_favorite_icon" to settings.showFavoriteIcon,
     "startup_page" to settings.startupPage.key,
+    "resume_reading_on_startup" to settings.resumeReadingOnStartup,
     "video_loop_single" to settings.videoLoopSingle,
     "video_preview" to settings.videoPreview,
     "loop_mode" to settings.loopMode,

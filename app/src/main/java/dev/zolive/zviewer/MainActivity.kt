@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var appliedLanguage: AppLanguage
     private var verification: CancellationSignal? = null
     private var pausedAt = 0L
+    private var startupReadingPending = true
     internal var onVolumePage: ((Int) -> Unit)? = null
 
     override fun attachBaseContext(newBase: Context) {
@@ -50,13 +51,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        startupReadingPending = savedInstanceState?.getBoolean("startup_reading_pending") ?: true
         DiagnosticLog.installCrashHandler()
         enableEdgeToEdge()
+        val taskPreparation = TaskRemovalCleanup.track(application, taskId)
         setRecentPreviewHidden(model.state.value.settings.hideRecentPreview)
         lifecycleScope.launch {
             model.state.map { it.settings.hideRecentCard }.distinctUntilChanged().collect(::setRecentCardHidden)
         }
-        val taskPreparation = TaskRemovalCleanup.track(application, taskId)
         lifecycleScope.launch {
             taskPreparation.join()
             setContent {
@@ -73,6 +75,12 @@ class MainActivity : ComponentActivity() {
                     if (locked) {
                         AppLockScreen(themeSettings, ::verify)
                     } else {
+                        LaunchedEffect(Unit) {
+                            if (startupReadingPending) {
+                                startupReadingPending = false
+                                model.resumeReadingOnStartup()
+                            }
+                        }
                         pageState.SaveableStateProvider("app") { ZViewerApp(model, state) }
                     }
                 }
@@ -88,6 +96,11 @@ class MainActivity : ComponentActivity() {
                     }
             }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("startup_reading_pending", startupReadingPending)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onStart() {

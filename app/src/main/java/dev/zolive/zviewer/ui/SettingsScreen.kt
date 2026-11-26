@@ -343,6 +343,9 @@ private fun AppPreferences(
         selectedValue = settings.startupPage,
         options = LibraryTab.entries.map { it to stringResource(it.title) },
     ) { onSettings(settings.copy(startupPage = it)) }
+    PreferenceSwitch(stringResource(R.string.resume_reading_on_startup), checked = settings.resumeReadingOnStartup) {
+        onSettings(settings.copy(resumeReadingOnStartup = it))
+    }
     PreferenceSwitch(stringResource(R.string.show_file_type), stringResource(R.string.show_file_type_hint), settings.showFileType) {
         onSettings(settings.copy(showFileType = it))
     }

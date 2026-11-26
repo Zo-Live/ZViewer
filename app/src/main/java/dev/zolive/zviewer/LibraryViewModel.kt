@@ -38,6 +38,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -93,6 +94,7 @@ class LibraryViewModel(
     private var scannedLibraryFolders: Set<Uri>? = null
     private val galleryRequests = Channel<Unit>(Channel.CONFLATED)
     private var openJob: Job? = null
+    private var startupReadingJob: Job? = null
     private var manualUpdateRequested = false
 
     init {
@@ -235,6 +237,7 @@ class LibraryViewModel(
     }
 
     fun selectLibrary(uri: Uri) {
+        cancelStartupReading()
         try {
             val resolver = getApplication<Application>().contentResolver
             val current = state.value
@@ -308,7 +311,26 @@ class LibraryViewModel(
         mutable.update { it.copy(books = books, progress = progress, error = null) }
     }
 
+    internal fun resumeReadingOnStartup() {
+        val initial = mutable.value
+        if (!initial.settings.resumeReadingOnStartup || initial.treeUri == null) return
+        startupReadingJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
+            val current = state.first { !it.scanning }
+            startupReadingJob = null
+            if (current.error != null || current.session != null || current.openingRequest != null) return@launch
+            val latest = current.books.maxByOrNull { store.progress(it.id).updated } ?: return@launch
+            if (store.progress(latest.id).updated > 0L) open(latest)
+        }
+        startupReadingJob?.start()
+    }
+
+    internal fun cancelStartupReading() {
+        startupReadingJob?.cancel()
+        startupReadingJob = null
+    }
+
     fun open(book: Book) {
+        cancelStartupReading()
         val request = Any()
         mutable.update { it.copy(opening = message(R.string.opening_book, book.title), openingRequest = request, error = null) }
         openJob?.cancel()

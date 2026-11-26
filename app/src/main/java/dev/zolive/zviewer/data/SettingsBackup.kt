@@ -50,7 +50,8 @@ internal data class SettingsBackup(val settings: ReaderSettings, val library: St
             val library = json.get("library_uri").let { if (it === JSONObject.NULL) null else it as String }
             val values = json.getJSONObject("settings")
             val optionalKeys = setOf(
-                "paged", "paged_image_fit", "continuous_image_fit_screen", "video_fill_screen", "show_page_number", "startup_page",
+                "paged", "paged_image_fit", "continuous_image_fit_screen", "video_fill_screen", "show_page_number",
+                "startup_page", "resume_reading_on_startup",
             )
             val settings = readSettings { key, default ->
                 if (key in optionalKeys && !values.has(key)) return@readSettings default
