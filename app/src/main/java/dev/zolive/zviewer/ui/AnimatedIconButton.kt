@@ -20,16 +20,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import dev.zolive.zviewer.R
+import dev.zolive.zviewer.data.AnimationEffect
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 private const val IconDurationMillis = 300
 
 @Composable
-internal fun iconAnimationSpec(easing: Easing = LinearEasing) = tween<Float>(
-    durationMillis = LocalInteractionSettings.current.animationSpeed.duration(IconDurationMillis),
-    easing = easing,
-)
+internal fun iconAnimationSpec(easing: Easing = LinearEasing) =
+    tween<Float>(animationSpeed(AnimationEffect.Icons).duration(IconDurationMillis), easing = easing)
 
 @Composable
 internal fun AnimatedIconButton(

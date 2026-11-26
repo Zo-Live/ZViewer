@@ -19,6 +19,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -155,7 +156,8 @@ private class PageTransition(val child: AppPage, initialProgress: Float) {
 }
 
 private class ContinueReadingMotion(val bookId: String) {
-    val progress = Animatable(0f)
+    val icon = Animatable(0f)
+    val entry = Animatable(0f)
 }
 
 @Composable
@@ -209,14 +211,22 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     val session = state.session
     val waitingForVideo = session != null && state.waitingForVideoEntry
     val iconSpec = iconAnimationSpec()
+    val entrySpec = tween<Float>(animationSpeed(AnimationEffect.ReaderEntry).duration(300), easing = LinearEasing)
     var continueMotion by remember { mutableStateOf<ContinueReadingMotion?>(null) }
     LaunchedEffect(continueMotion) {
         val motion = continueMotion ?: return@LaunchedEffect
-        motion.progress.animateTo(1f, iconSpec)
+        coroutineScope {
+            launch { motion.icon.animateTo(1f, iconSpec) }
+            motion.entry.animateTo(1f, entrySpec)
+        }
         continueMotion = null
     }
-    val readerEntry = continueMotion?.takeIf { !waitingForVideo && it.bookId == session?.book?.id }
-    val readerEntryStart = remember(readerEntry, session) { readerEntry?.progress?.value ?: 0f }
+    val readerEntry = remember(continueMotion, waitingForVideo, session) {
+        derivedStateOf {
+            continueMotion?.takeIf { !waitingForVideo && it.bookId == session?.book?.id && it.entry.value < 1f }
+        }
+    }.value
+    val readerEntryStart = remember(readerEntry, session) { readerEntry?.entry?.value ?: 0f }
     LaunchedEffect(session, waitingForVideo) {
         if (session != null && waitingForVideo) {
             delay(3_000)
@@ -316,7 +326,7 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                 key(session) {
                     Box(Modifier.zIndex(if (readerEntry != null) 2f else 0f).graphicsLayer {
                         if (readerEntry != null && readerEntryStart < 1f) {
-                            val fade = (readerEntry.progress.value - readerEntryStart) / (1f - readerEntryStart)
+                            val fade = (readerEntry.entry.value - readerEntryStart) / (1f - readerEntryStart)
                             alpha = fade.coerceIn(0f, 1f)
                         }
                     }) {
@@ -634,7 +644,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                                 .filter { (state.progress[it.id]?.updated ?: 0) > 0 && (state.progress[it.id]?.fraction ?: 0f) < 1f }
                                 .maxByOrNull { state.progress[it.id]?.updated ?: 0 } else null
                             if (recent != null) item(span = { GridItemSpan(maxLineSpan) }) {
-                                val fill = continueMotion?.takeIf { it.bookId == recent.id }?.progress?.asState()
+                                val fill = continueMotion?.takeIf { it.bookId == recent.id }?.icon?.asState()
                                 ContinueCard(recent, state.progress.getValue(recent.id), fill, onClick = { onContinue(recent) })
                             }
                             items(books, key = { it.id }) { book ->

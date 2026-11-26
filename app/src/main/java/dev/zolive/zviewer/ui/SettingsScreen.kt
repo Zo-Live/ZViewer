@@ -35,7 +35,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.selection.triStateToggleable
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -65,6 +65,7 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.text
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpSize
@@ -957,6 +958,7 @@ internal fun PreferenceSwitch(
     feedbackOnToggle: Boolean = true,
     preserveAnimationComposition: Boolean = false,
     animateTitle: Boolean = false,
+    indeterminate: Boolean = false,
     onChange: (Boolean) -> Unit,
 ) {
     val haptic = hapticFeedback(HapticEvent.Switch)
@@ -973,14 +975,24 @@ internal fun PreferenceSwitch(
         supportingContent = subtitle?.let { { Text(it) } },
         trailingContent = {
             WithAnimationSpeed(animationSpeed(AnimationEffect.Switch), preserveComposition = preserveAnimationComposition) {
-                Switch(checked, onCheckedChange = null)
+                Switch(
+                    checked,
+                    onCheckedChange = null,
+                    thumbContent = if (indeterminate) {
+                        { HorizontalDivider(Modifier.width(8.dp), thickness = 2.dp, color = MaterialTheme.colorScheme.surfaceContainerHighest) }
+                    } else null,
+                )
             }
         },
-        modifier = Modifier.toggleable(value = checked, role = Role.Switch) {
+        modifier = Modifier.triStateToggleable(
+            state = if (indeterminate) ToggleableState.Indeterminate else ToggleableState(checked),
+            role = Role.Switch,
+        ) {
+            val enabled = !checked
             if (feedbackOnToggle) {
-                haptic(if (it) HapticFeedbackConstantsCompat.TOGGLE_ON else HapticFeedbackConstantsCompat.TOGGLE_OFF)
+                haptic(if (enabled) HapticFeedbackConstantsCompat.TOGGLE_ON else HapticFeedbackConstantsCompat.TOGGLE_OFF)
             }
-            onChange(it)
+            onChange(enabled)
         },
     )
 }

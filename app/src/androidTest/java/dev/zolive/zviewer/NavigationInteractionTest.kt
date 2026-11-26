@@ -112,7 +112,11 @@ class NavigationInteractionTest {
         rule.onNodeWithText("1 / 3 页").assertIsDisplayed()
     }
 
-    @Test fun continueReadingStartsOpeningBeforeIconAnimationFinishes() {
+    @Test fun continueReadingStartsOpeningImmediatelyAndUsesPageTransitionSpeed() {
+        store.saveSettings(store.settings().copy(
+            animationSpeed = AnimationSpeed.Enhanced,
+            disabledAnimations = setOf(AnimationEffect.Icons),
+        ))
         launch()
         lateinit var model: LibraryViewModel
         scenario.onActivity { model = ViewModelProvider(it)[LibraryViewModel::class.java] }
@@ -122,7 +126,7 @@ class NavigationInteractionTest {
             rule.waitUntil(10_000) { model.state.value.session?.book?.id == book.id }
             rule.mainClock.advanceTimeBy(80)
             rule.onNodeWithTag("library-screen").assertExists()
-            rule.mainClock.advanceTimeBy(320)
+            rule.mainClock.advanceTimeBy(176)
             rule.onNodeWithTag("library-screen").assertDoesNotExist()
         } finally {
             rule.mainClock.autoAdvance = true
