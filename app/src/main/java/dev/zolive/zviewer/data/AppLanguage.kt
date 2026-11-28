@@ -10,9 +10,10 @@ enum class AppLanguage(val tag: String, val endonym: String) {
     ENGLISH("en", "English"),
     JAPANESE("ja", "日本語");
 
-    fun localizedContext(context: Context): Context = context.createConfigurationContext(
+    internal fun configurationOverride(): Configuration =
         Configuration().apply { setLocale(Locale.forLanguageTag(tag)) }
-    )
+
+    fun localizedContext(context: Context): Context = context.createConfigurationContext(configurationOverride())
 
     companion object {
         fun fromTag(tag: String?): AppLanguage = entries.firstOrNull { it.tag == tag } ?: SIMPLIFIED_CHINESE

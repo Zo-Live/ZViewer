@@ -2,24 +2,34 @@ package dev.zolive.zviewer
 
 import android.app.ActivityManager
 import android.app.KeyguardManager
-import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.hardware.biometrics.BiometricManager.Authenticators
 import android.hardware.biometrics.BiometricPrompt
 import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.SystemClock
+import android.view.ContextThemeWrapper
 import android.view.KeyEvent
+import android.view.View
 import android.view.WindowManager
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
@@ -27,7 +37,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import dev.zolive.zviewer.data.AppLanguage
 import dev.zolive.zviewer.data.DefaultThemeAccent
 import dev.zolive.zviewer.data.DiagnosticLog
-import dev.zolive.zviewer.data.PreferenceStore
 import dev.zolive.zviewer.ui.AppLockScreen
 import dev.zolive.zviewer.ui.ZViewerApp
 import dev.zolive.zviewer.ui.ZViewerTheme
@@ -38,16 +47,10 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     private val model: LibraryViewModel by viewModels()
     private val appLock: AppLock by viewModels()
-    private lateinit var appliedLanguage: AppLanguage
     private var verification: CancellationSignal? = null
     private var pausedAt = 0L
     private var startupReadingPending = true
     internal var onVolumePage: ((Int) -> Unit)? = null
-
-    override fun attachBaseContext(newBase: Context) {
-        appliedLanguage = PreferenceStore(newBase).language
-        super.attachBaseContext(appliedLanguage.localizedContext(newBase))
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,25 +66,24 @@ class MainActivity : ComponentActivity() {
             taskPreparation.join()
             setContent {
                 val state by model.state.collectAsStateWithLifecycle()
-                LaunchedEffect(state.settings.language) {
-                    if (state.settings.language != appliedLanguage) recreate()
-                }
                 val pageState = rememberSaveableStateHolder()
                 val locked = appLock.locked
                 val themeSettings = if (locked && !state.settings.verificationFollowsTheme) {
                     state.settings.copy(accent = DefaultThemeAccent, dynamicColor = false)
                 } else state.settings
-                ZViewerTheme(themeSettings) {
-                    if (locked) {
-                        AppLockScreen(themeSettings, ::verify)
-                    } else {
-                        LaunchedEffect(Unit) {
-                            if (startupReadingPending) {
-                                startupReadingPending = false
-                                model.resumeReadingOnStartup()
+                WithAppLanguage(state.settings.language) {
+                    ZViewerTheme(themeSettings) {
+                        if (locked) {
+                            AppLockScreen(themeSettings, ::verify)
+                        } else {
+                            LaunchedEffect(Unit) {
+                                if (startupReadingPending) {
+                                    startupReadingPending = false
+                                    model.resumeReadingOnStartup()
+                                }
                             }
+                            pageState.SaveableStateProvider("app") { ZViewerApp(model, state) }
                         }
-                        pageState.SaveableStateProvider("app") { ZViewerApp(model, state) }
                     }
                 }
             }
@@ -179,11 +181,12 @@ class MainActivity : ComponentActivity() {
     @Suppress("DEPRECATION")
     private fun verify() {
         if (!appLock.locked || verification != null) return
+        val localized = model.state.value.settings.language.localizedContext(this)
         if (!getSystemService(KeyguardManager::class.java).isDeviceSecure) {
-            Toast.makeText(this, R.string.verification_needs_screen_lock, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, localized.getText(R.string.verification_needs_screen_lock), Toast.LENGTH_SHORT).show()
             return
         }
-        val builder = BiometricPrompt.Builder(this).setTitle(getString(R.string.verify_to_access))
+        val builder = BiometricPrompt.Builder(this).setTitle(localized.getText(R.string.verify_to_access))
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             builder.setAllowedAuthenticators(Authenticators.BIOMETRIC_WEAK or Authenticators.DEVICE_CREDENTIAL)
         } else {
@@ -203,4 +206,30 @@ class MainActivity : ComponentActivity() {
             }
         })
     }
+}
+
+@Composable
+private fun WithAppLanguage(language: AppLanguage, content: @Composable () -> Unit) {
+    val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val localizedContext = remember(context, configuration, language) {
+        ContextThemeWrapper(context, R.style.Theme_ZViewer).apply {
+            applyOverrideConfiguration(language.configurationOverride())
+        }
+    }
+    val resources = localizedContext.resources
+    val localizedConfiguration = remember(localizedContext) { Configuration(resources.configuration) }
+    val layoutDirection = if (localizedConfiguration.layoutDirection == View.LAYOUT_DIRECTION_RTL) {
+        LayoutDirection.Rtl
+    } else {
+        LayoutDirection.Ltr
+    }
+    // 弹窗有独立的 Compose 宿主，显式传入应用语言资源供其内容使用。
+    CompositionLocalProvider(
+        LocalContext provides localizedContext,
+        LocalResources provides resources,
+        LocalConfiguration provides localizedConfiguration,
+        LocalLayoutDirection provides layoutDirection,
+        content = content,
+    )
 }

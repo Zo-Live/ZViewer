@@ -28,6 +28,7 @@ import dev.zolive.zviewer.data.PreferenceStore
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -439,20 +440,31 @@ class SettingsMenuTest {
 
     @Test fun switchingLanguagesKeepsSettingsOpenAndPersists() {
         setting("偏好").performClick()
+        lateinit var activity: MainActivity
+        scenario.onActivity { activity = it }
+        val backCenter = rule.onNodeWithContentDescription("返回设置").fetchSemanticsNode().boundsInRoot.center
         setting("语言").performScrollTo().assert(hasText("简体中文")).performClick()
         option("简体中文").assertIsSelected()
         option("繁體中文").assertIsNotSelected()
         option("日本語").assertIsNotSelected()
         option("English").performClick()
         awaitSetting("Language", "English")
+        rule.onNodeWithText("Preferences").assertIsDisplayed()
+        val englishBack = rule.onNodeWithContentDescription("Back to settings").fetchSemanticsNode().boundsInRoot.center
+        assertEquals(backCenter, englishBack)
+        scenario.onActivity { assertSame(activity, it) }
 
         setting("Language").performClick()
         option("繁體中文").performClick()
         awaitSetting("語言", "繁體中文")
+        rule.onNodeWithText("偏好設定").assertIsDisplayed()
+        scenario.onActivity { assertSame(activity, it) }
 
         setting("語言").performClick()
         option("日本語").performClick()
         awaitSetting("言語", "日本語")
+        rule.onNodeWithText("基本設定").assertIsDisplayed()
+        scenario.onActivity { assertSame(activity, it) }
         assertEquals("ja", store.language.tag)
         scenario.close()
         scenario = ActivityScenario.launch(MainActivity::class.java)
