@@ -276,6 +276,12 @@ class SettingsMenuTest {
         assertEquals(PagedImageFit.Height, store.settings().pagedImageFit)
         assertTrue(store.settings().continuousImageFitScreen)
         assertTrue(store.settings().videoFillScreen)
+        scenario.close()
+        scenario = ActivityScenario.launch(MainActivity::class.java)
+        rule.onNodeWithContentDescription("设置").performClick()
+        setting("阅读").performClick()
+        image.assertIsDisplayed()
+        video.assertIsDisplayed()
     }
 
     @Test fun interactionPreferencesFollowLanguageAndPersist() {

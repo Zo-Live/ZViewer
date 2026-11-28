@@ -40,7 +40,6 @@ import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
@@ -179,7 +178,9 @@ internal fun SettingsSectionScreen(
         when (section) {
             SettingsSection.Appearance -> AppearanceSettings(state.settings, model::settings)
             SettingsSection.Preferences -> AppPreferences(state.settings, model::settings, onOpenInteractionSettings)
-            SettingsSection.Reading -> ReaderPreferences(state.settings, model::settings)
+            SettingsSection.Reading -> ReaderPreferences(
+                state.settings, state.readerFitExpanded, model::setReaderFitExpanded, model::settings,
+            )
             SettingsSection.LibraryAndStorage -> LibraryStorageSettings(state, model, onChooseLibrary)
             SettingsSection.Diagnostics -> DiagnosticsSettings(state.settings, model, active, onViewLogs)
             SettingsSection.Security -> SecuritySettings(state, model)
@@ -881,8 +882,13 @@ private fun <T> PreferenceMenu(
 }
 
 @Composable
-fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> Unit) {
-    ReaderFitPreferences(settings, onSettings)
+internal fun ReaderPreferences(
+    settings: ReaderSettings,
+    fitExpanded: Boolean,
+    onFitExpanded: (Boolean) -> Unit,
+    onSettings: (ReaderSettings) -> Unit,
+) {
+    ReaderFitPreferences(settings, fitExpanded, onFitExpanded, onSettings)
     PreferenceMenu(
         title = stringResource(R.string.page_turn_mode),
         selectedValue = settings.paged,
@@ -916,8 +922,12 @@ fun ReaderPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> 
 }
 
 @Composable
-private fun ReaderFitPreferences(settings: ReaderSettings, onSettings: (ReaderSettings) -> Unit) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
+private fun ReaderFitPreferences(
+    settings: ReaderSettings,
+    expanded: Boolean,
+    onExpanded: (Boolean) -> Unit,
+    onSettings: (ReaderSettings) -> Unit,
+) {
     val action = stringResource(if (expanded) R.string.menu_collapse else R.string.menu_expand)
     val state = stringResource(if (expanded) R.string.menu_expanded else R.string.menu_collapsed)
     SettingsListItem(
@@ -926,7 +936,7 @@ private fun ReaderFitPreferences(settings: ReaderSettings, onSettings: (ReaderSe
             val arrow = if (expanded) R.drawable.ic_symbol_keyboard_arrow_down else R.drawable.ic_symbol_keyboard_arrow_right
             Icon(painterResource(arrow), null)
         },
-        modifier = Modifier.clickable(role = Role.Button, onClickLabel = action) { expanded = !expanded }
+        modifier = Modifier.clickable(role = Role.Button, onClickLabel = action) { onExpanded(!expanded) }
             .semantics { stateDescription = state },
     )
     SettingsVisibility(expanded) {

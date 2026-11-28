@@ -339,7 +339,9 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                                 model.closeBook()
                             },
                             visible = !waitingForVideo,
-                            onVideoEntryReady = { model.finishVideoEntry(session) })
+                            onVideoEntryReady = { model.finishVideoEntry(session) },
+                            readerFitExpanded = state.readerFitExpanded,
+                            onReaderFitExpanded = model::setReaderFitExpanded)
                     }
                 }
             }

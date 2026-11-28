@@ -125,7 +125,8 @@ private fun LazyListLayoutInfo.centerItem(): Int? {
 fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSettings, repository: BookRepository,
     onSettings: (ReaderSettings) -> Unit, onProgress: (Int) -> Unit,
     videoPosition: (Int) -> Long = { 0L }, onVideoProgress: (Int, Long) -> Unit = { _, _ -> }, onBack: () -> Unit,
-    visible: Boolean = true, onVideoEntryReady: () -> Unit = {}) {
+    visible: Boolean = true, onVideoEntryReady: () -> Unit = {},
+    readerFitExpanded: Boolean = false, onReaderFitExpanded: (Boolean) -> Unit = {}) {
     val scope = rememberCoroutineScope()
     val pagingSpeed = settings.animationSpeedFor(AnimationEffect.ReaderPaging)
     val toolbarSpeed = settings.animationSpeedFor(AnimationEffect.ReaderToolbar)
@@ -799,7 +800,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp).padding(bottom = 32.dp)) {
                 Text(stringResource(R.string.reader_settings), style = MaterialTheme.typography.headlineSmall)
                 Spacer(Modifier.height(24.dp))
-                ReaderPreferences(settings) { updated ->
+                ReaderPreferences(settings, readerFitExpanded, onReaderFitExpanded) { updated ->
                     if (mixedBook && updated.paged != settings.paged && settledVideoItem?.page == currentPage) {
                         val playback = videoPool?.get(settledVideoItem)
                         val frame = playback?.ownerView?.captureVideoFrame()
