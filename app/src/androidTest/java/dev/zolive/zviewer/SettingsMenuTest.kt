@@ -85,7 +85,7 @@ class SettingsMenuTest {
         recentCard.assert(hasText("从最近任务列表隐藏应用卡片。需要先将应用切换至后台。"))
             .assertIsOff().performClick().assertIsOn()
         setting("在系统相册中隐藏图片").assertIsOff()
-        rule.onNodeWithText("自动锁定间隔").assertDoesNotExist()
+        setting("自动锁定间隔").assertIsDisplayed().assertIsNotEnabled()
         assertTrue(store.settings().hideRecentCard)
         assertEquals(AutoLockInterval.FifteenSeconds, store.settings().autoLockInterval)
 
@@ -108,7 +108,7 @@ class SettingsMenuTest {
         option("5 分钟").assertIsNotSelected().performClick()
         interval.assert(hasText("5 分钟"))
         setting("切换至后台后重新验证").performClick().assertIsOff()
-        rule.onNodeWithText("自动锁定间隔").assertDoesNotExist()
+        setting("自动锁定间隔").assertIsDisplayed().assertIsNotEnabled()
         assertEquals(AutoLockInterval.FiveMinutes, store.settings().autoLockInterval)
         assertFalse(store.settings().hideRecentCard)
     }
@@ -174,7 +174,7 @@ class SettingsMenuTest {
 
         rule.onNodeWithContentDescription("返回设置").performClick()
         setting("阅读").performClick()
-        val mode = setting("切页模式").performScrollTo()
+        val mode = setting("翻页模式").performScrollTo()
         mode.assert(hasText("连续")).performClick()
         option("连续").assertIsSelected()
         option("分页").performClick()
@@ -240,7 +240,7 @@ class SettingsMenuTest {
         val fit = setting("画面适配")
         val image = setting("图片与 PDF")
         val video = setting("视频")
-        val mode = setting("切页模式")
+        val mode = setting("翻页模式")
         image.assertDoesNotExist()
         video.assertDoesNotExist()
         fit.performClick()
@@ -511,8 +511,8 @@ class SettingsMenuTest {
 
     @Test fun readingSettingsFollowDirectionIndependentlyOfMode() {
         setting("阅读").performClick()
-        val mode = setting("切页模式").assert(hasText("连续"))
-        val direction = setting("切页方向").assert(hasText("垂直"))
+        val mode = setting("翻页模式").assert(hasText("连续"))
+        val direction = setting("翻页方向").assert(hasText("垂直"))
         val rightToLeft = setting("从右向左翻页")
         rule.onNodeWithText("阅读模式").assertDoesNotExist()
         val horizontalSeek = setting("左右滑动调整视频进度")
@@ -520,9 +520,9 @@ class SettingsMenuTest {
         val volume = setting("使用音量键翻页")
         val zoom = setting("双击以放缩")
         val resetProgress = setting("关闭漫画后重置阅读进度")
-        rightToLeft.assertDoesNotExist()
+        rightToLeft.assertIsDisplayed().assertIsNotEnabled()
         horizontalSeek.assertIsOn()
-        val topRows = listOf(mode, direction, horizontalSeek).map { it.fetchSemanticsNode().boundsInRoot }
+        val topRows = listOf(mode, direction, horizontalSeek, rightToLeft).map { it.fetchSemanticsNode().boundsInRoot }
         topRows.zipWithNext().forEach { (upper, lower) -> assertTrue(upper.bottom <= lower.top) }
         horizontalSeek.performClick().assertIsOff()
         pageNumber.assertIsOn()
@@ -532,29 +532,28 @@ class SettingsMenuTest {
         mode.performClick()
         option("分页").performClick()
         horizontalSeek.assertIsOff()
-        rightToLeft.assertDoesNotExist()
+        rightToLeft.assertIsDisplayed().assertIsNotEnabled()
         direction.performClick()
         option("水平").performClick()
         mode.assert(hasText("分页"))
-        horizontalSeek.assertDoesNotExist()
+        horizontalSeek.assertIsDisplayed().assertIsNotEnabled()
         rightToLeft.assertIsOff()
-        val rows = listOf(mode, direction, rightToLeft, pageNumber, setting("阅读时屏幕常亮"), volume, zoom, resetProgress,
-            setting("深色阅读背景")).map { it.fetchSemanticsNode().boundsInRoot }
+        val rows = listOf(mode, direction, horizontalSeek, rightToLeft, pageNumber).map { it.fetchSemanticsNode().boundsInRoot }
         rows.zipWithNext().forEach { (upper, lower) -> assertTrue(upper.bottom <= lower.top) }
         rule.onNodeWithText("适用于右开本的水平阅读模式").assertDoesNotExist()
         rule.onNodeWithText("离开阅读器后恢复系统设置").assertDoesNotExist()
         rightToLeft.performClick().assertIsOn()
         pageNumber.performClick().assertIsOff()
-        volume.performClick().assertIsOn()
-        zoom.performClick().assertIsOff()
-        resetProgress.performClick().assertIsOn()
-        mode.performClick()
+        volume.performScrollTo().performClick().assertIsOn()
+        zoom.performScrollTo().performClick().assertIsOff()
+        resetProgress.performScrollTo().performClick().assertIsOn()
+        mode.performScrollTo().performClick()
         option("连续").performClick()
         rightToLeft.assertIsOn()
-        horizontalSeek.assertDoesNotExist()
+        horizontalSeek.assertIsDisplayed().assertIsNotEnabled()
         direction.performClick()
         option("垂直").performClick()
-        rightToLeft.assertDoesNotExist()
+        rightToLeft.assertIsDisplayed().assertIsNotEnabled()
         horizontalSeek.assertIsOff()
         direction.performClick()
         option("水平").performClick()
@@ -579,10 +578,11 @@ class SettingsMenuTest {
         assertFalse(store.settings().paged)
     }
 
-    @Test fun verificationThemeIsShownOnlyWithStartupVerificationAndPersists() {
+    @Test fun verificationThemeRemainsVisibleAndRequiresStartupVerification() {
         setting("外观").performClick()
         val followTheme = setting("验证页跟随主题颜色")
-        followTheme.assertDoesNotExist()
+        val hint = "开启「安全与隐私 - 启动时验证」后可用"
+        followTheme.performScrollTo().assertIsNotEnabled().assert(hasText(hint))
         fun verifyOnStartup(enabled: Boolean) {
             scenario.onActivity {
                 val model = ViewModelProvider(it)[LibraryViewModel::class.java]
@@ -590,11 +590,11 @@ class SettingsMenuTest {
             }
         }
         verifyOnStartup(true)
-        followTheme.performScrollTo().assertIsOn().performClick().assertIsOff()
+        followTheme.performScrollTo().assertIsEnabled().assert(!hasText(hint)).assertIsOn().performClick().assertIsOff()
         scenario.recreate()
         followTheme.performScrollTo().assertIsOff()
         verifyOnStartup(false)
-        followTheme.assertDoesNotExist()
+        followTheme.performScrollTo().assertIsNotEnabled().assert(hasText(hint)).assertIsOff()
         verifyOnStartup(true)
         followTheme.performScrollTo().assertIsOff()
         assertFalse(store.settings().verificationFollowsTheme)

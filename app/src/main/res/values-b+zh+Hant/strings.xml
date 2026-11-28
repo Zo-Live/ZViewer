@@ -10,6 +10,7 @@
     <string name="dynamic_color">動態取色</string>
     <string name="theme_color">主題色彩</string>
     <string name="verification_follows_theme">驗證頁跟隨主題色彩</string>
+    <string name="verification_follows_theme_hint">開啟「安全與隱私 - 啟動時驗證」後可用</string>
     <string name="color_moss">苔綠</string>
     <string name="color_mist">霧藍</string>
     <string name="color_wisteria">藤紫</string>
@@ -140,8 +141,8 @@
     <string name="reader_fill_screen">填滿螢幕</string>
     <string name="reader_fit_width">適應寬度</string>
     <string name="reader_fit_height">適應高度</string>
-    <string name="page_turn_mode">切頁模式</string>
-    <string name="page_turn_direction">切頁方向</string>
+    <string name="page_turn_mode">翻頁模式</string>
+    <string name="page_turn_direction">翻頁方向</string>
     <string name="reading_continuous">連續</string>
     <string name="reading_paged">分頁</string>
     <string name="reading_vertical">垂直</string>

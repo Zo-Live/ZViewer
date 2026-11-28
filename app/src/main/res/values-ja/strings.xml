@@ -10,6 +10,7 @@
     <string name="dynamic_color">ダイナミックカラー</string>
     <string name="theme_color">テーマカラー</string>
     <string name="verification_follows_theme">認証画面にテーマカラーを適用</string>
+    <string name="verification_follows_theme_hint">「セキュリティとプライバシー」の「起動時に認証」をオンにすると使用できます</string>
     <string name="color_moss">モスグリーン</string>
     <string name="color_mist">ミストブルー</string>
     <string name="color_wisteria">藤色</string>

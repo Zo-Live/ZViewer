@@ -10,6 +10,7 @@
     <string name="dynamic_color">Dynamic color</string>
     <string name="theme_color">Theme color</string>
     <string name="verification_follows_theme">Verification screen follows theme colors</string>
+    <string name="verification_follows_theme_hint">Available after turning on “Verify on startup” under Security and privacy</string>
     <string name="color_moss">Moss green</string>
     <string name="color_mist">Mist blue</string>
     <string name="color_wisteria">Wisteria</string>

@@ -585,7 +585,7 @@ class LibraryViewModel(
             application.contentResolver.takePersistableUriPermission(uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             DiagnosticLog.log("Permission", "选择日志目录 authority=${uri.authority}")
-            settings(mutable.value.settings.copy(diagnosticLog = true, logDirectory = uri.toString()))
+            settings(mutable.value.settings.copy(logDirectory = uri.toString()))
         } catch (error: Exception) {
             val message = message(R.string.log_directory_error)
             DiagnosticLog.error("Log", message, error)

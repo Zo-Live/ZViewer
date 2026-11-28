@@ -15,7 +15,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -55,7 +54,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.Role
@@ -63,9 +61,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.semantics.text
 import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
@@ -107,6 +103,7 @@ private val SettingsTrailingIconSize = 24.dp
 private val SettingsTrailingMinWidth = 52.dp
 private val SettingsTrailingGap = 16.dp
 private val SettingsSupportingMaxWidth = 480.dp
+private const val DisabledSettingsContentOpacity = 0.38f
 
 @Composable
 private fun settingsTransitionDuration(millis: Int): Int {
@@ -281,12 +278,13 @@ private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSett
         }
         IconButton(onClick = { customColor = true }, Modifier.size(44.dp)) { Icon(painterResource(R.drawable.ic_symbol_palette), stringResource(R.string.custom_theme_color)) }
     }
-    if (settings.verifyOnStartup) {
-        Spacer(Modifier.height(11.5.dp))
-        PreferenceSwitch(stringResource(R.string.verification_follows_theme), checked = settings.verificationFollowsTheme) {
-            onSettings(settings.copy(verificationFollowsTheme = it))
-        }
-    }
+    Spacer(Modifier.height(11.5.dp))
+    PreferenceSwitch(
+        title = stringResource(R.string.verification_follows_theme),
+        subtitle = if (settings.verifyOnStartup) null else stringResource(R.string.verification_follows_theme_hint),
+        checked = settings.verificationFollowsTheme,
+        enabled = settings.verifyOnStartup,
+    ) { onSettings(settings.copy(verificationFollowsTheme = it)) }
     if (customColor) {
         ThemeColorDialog(
             accent = settings.accent,
@@ -392,20 +390,18 @@ private fun SecuritySettings(state: LibraryState, model: LibraryViewModel) {
     PreferenceSwitch(
         stringResource(R.string.verify_after_background), checked = settings.verifyAfterBackground,
     ) { if (canEnableVerification(it)) model.settings(settings.copy(verifyAfterBackground = it)) }
-    SettingsVisibility(settings.verifyAfterBackground) {
-        PreferenceMenu(
-            title = stringResource(R.string.auto_lock_interval),
-            subtitle = stringResource(R.string.auto_lock_interval_hint),
-            selectedValue = settings.autoLockInterval,
-            enabled = settings.verifyAfterBackground,
-            options = listOf(
-                AutoLockInterval.Immediately to stringResource(R.string.auto_lock_immediately),
-                AutoLockInterval.FifteenSeconds to stringResource(R.string.auto_lock_fifteen_seconds),
-                AutoLockInterval.OneMinute to stringResource(R.string.auto_lock_one_minute),
-                AutoLockInterval.FiveMinutes to stringResource(R.string.auto_lock_five_minutes),
-            ),
-        ) { model.settings(settings.copy(autoLockInterval = it)) }
-    }
+    PreferenceMenu(
+        title = stringResource(R.string.auto_lock_interval),
+        subtitle = stringResource(R.string.auto_lock_interval_hint),
+        selectedValue = settings.autoLockInterval,
+        enabled = settings.verifyAfterBackground,
+        options = listOf(
+            AutoLockInterval.Immediately to stringResource(R.string.auto_lock_immediately),
+            AutoLockInterval.FifteenSeconds to stringResource(R.string.auto_lock_fifteen_seconds),
+            AutoLockInterval.OneMinute to stringResource(R.string.auto_lock_one_minute),
+            AutoLockInterval.FiveMinutes to stringResource(R.string.auto_lock_five_minutes),
+        ),
+    ) { model.settings(settings.copy(autoLockInterval = it)) }
     PreferenceSwitch(
         stringResource(R.string.hide_recent_card), stringResource(R.string.hide_recent_card_hint),
         settings.hideRecentCard,
@@ -606,26 +602,24 @@ private fun DiagnosticsSettings(
         stringResource(R.string.write_diagnostic_logs_hint), settings.diagnosticLog) {
         model.settings(settings.copy(diagnosticLog = it))
     }
-    SettingsVisibility(settings.diagnosticLog) {
-        SettingsListItem(headlineContent = { Text(stringResource(R.string.log_directory)) }, supportingContent = {
-            Text(settings.logDirectory?.let(::logDirectoryLabel) ?: stringResource(R.string.log_default_directory))
-        },
-            trailingContent = {
-                val showReset = settings.logDirectory != null && settings.diagnosticLog
-                val duration = settingsTransitionDuration(180)
-                AnimatedVisibility(visible = showReset, enter = fadeIn(tween(duration)), exit = fadeOut(tween(duration))) {
-                    IconButton(onClick = { model.setLogDirectory(null) }, enabled = showReset,
-                        modifier = Modifier.width(SettingsActionWidth)) {
-                        Icon(
-                            painterResource(R.drawable.ic_symbol_refresh), stringResource(R.string.restore_default_directory),
-                            Modifier.offset(x = (SettingsActionWidth - SettingsTrailingIconSize) / 2)
-                                .size(SettingsTrailingIconSize),
-                        )
-                    }
+    SettingsListItem(headlineContent = { Text(stringResource(R.string.log_directory)) }, supportingContent = {
+        Text(settings.logDirectory?.let(::logDirectoryLabel) ?: stringResource(R.string.log_default_directory))
+    },
+        trailingContent = {
+            val showReset = settings.logDirectory != null
+            val duration = settingsTransitionDuration(180)
+            AnimatedVisibility(visible = showReset, enter = fadeIn(tween(duration)), exit = fadeOut(tween(duration))) {
+                IconButton(onClick = { model.setLogDirectory(null) }, enabled = showReset,
+                    modifier = Modifier.width(SettingsActionWidth)) {
+                    Icon(
+                        painterResource(R.drawable.ic_symbol_refresh), stringResource(R.string.restore_default_directory),
+                        Modifier.offset(x = (SettingsActionWidth - SettingsTrailingIconSize) / 2)
+                            .size(SettingsTrailingIconSize),
+                    )
                 }
-            },
-            modifier = Modifier.clickable(enabled = settings.diagnosticLog) { logPicker.launch(null) })
-    }
+            }
+        },
+        modifier = Modifier.clickable { logPicker.launch(null) })
     SettingsListItem(headlineContent = { Text(stringResource(R.string.view_logs)) },
         trailingContent = { Icon(painterResource(R.drawable.ic_symbol_keyboard_arrow_right), null) },
         modifier = Modifier.clickable(enabled = !logOperationRunning, role = Role.Button, onClick = onViewLogs))
@@ -774,16 +768,21 @@ private fun SettingsListItem(
     headlineContent: @Composable () -> Unit,
     modifier: Modifier = Modifier,
     supportingContent: (@Composable () -> Unit)? = null,
-    trailingContent: (@Composable () -> Unit)? = null
+    trailingContent: (@Composable () -> Unit)? = null,
+    enabled: Boolean = true,
 ) {
+    val headlineColor = settingsContentColor(enabled, LocalContentColor.current)
+    val secondaryColor = settingsContentColor(enabled, MaterialTheme.colorScheme.onSurfaceVariant)
     Row(modifier.fillMaxWidth().semantics(mergeDescendants = true) {}
         .heightIn(min = if (supportingContent == null) 56.dp else 72.dp).padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(SettingsTrailingGap), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            ProvideTextStyle(MaterialTheme.typography.bodyLarge, headlineContent)
+            CompositionLocalProvider(LocalContentColor provides headlineColor) {
+                ProvideTextStyle(MaterialTheme.typography.bodyLarge, headlineContent)
+            }
             if (supportingContent != null) {
                 Box(Modifier.widthIn(max = SettingsSupportingMaxWidth)) {
-                    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                    CompositionLocalProvider(LocalContentColor provides secondaryColor) {
                         ProvideTextStyle(MaterialTheme.typography.bodySmall, supportingContent)
                     }
                 }
@@ -792,16 +791,20 @@ private fun SettingsListItem(
         if (trailingContent != null) {
             // 短数值也预留与开关同宽的位置，让相邻行的说明文字在同一列内换行。
             Box(Modifier.widthIn(min = SettingsTrailingMinWidth), contentAlignment = Alignment.CenterEnd) {
-                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurfaceVariant) {
+                CompositionLocalProvider(LocalContentColor provides secondaryColor) {
                     ProvideTextStyle(
-                    MaterialTheme.typography.labelMedium.copy(textAlign = TextAlign.End),
-                    trailingContent,
-                )
+                        MaterialTheme.typography.labelMedium.copy(textAlign = TextAlign.End),
+                        trailingContent,
+                    )
                 }
             }
         }
     }
 }
+
+@Composable
+private fun settingsContentColor(enabled: Boolean, color: Color): Color =
+    if (enabled) color else MaterialTheme.colorScheme.onSurface.copy(alpha = DisabledSettingsContentOpacity)
 
 @Composable
 private fun <T> PreferenceMenu(
@@ -813,14 +816,18 @@ private fun <T> PreferenceMenu(
     enabled: Boolean = true,
     onSelect: (T) -> Unit,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var menuRequested by remember { mutableStateOf(false) }
+    LaunchedEffect(enabled) { if (!enabled) menuRequested = false }
+    val expanded = menuRequested && enabled
+    val headlineColor = settingsContentColor(enabled, LocalContentColor.current)
+    val secondaryColor = settingsContentColor(enabled, MaterialTheme.colorScheme.onSurfaceVariant)
     val haptic = hapticFeedback(HapticEvent.MenuSelection)
     val current = options.firstOrNull { it.first == selectedValue } ?: options.first()
     val action = stringResource(if (expanded) R.string.menu_collapse else R.string.menu_expand)
     val menuState = stringResource(if (expanded) R.string.menu_expanded else R.string.menu_collapsed)
     EndAlignedDropdownMenu(
-        expanded = expanded && enabled,
-        onDismissRequest = { expanded = false },
+        expanded = expanded,
+        onDismissRequest = { menuRequested = false },
         modifier = Modifier.selectableGroup(),
         anchor = {
             BoxWithConstraints {
@@ -828,19 +835,19 @@ private fun <T> PreferenceMenu(
                 Row(
                     Modifier.fillMaxWidth().heightIn(min = if (subtitle == null) 56.dp else 72.dp)
                         .clip(RoundedCornerShape(8.dp))
-                        .clickable(enabled = enabled, role = Role.Button, onClickLabel = action) { expanded = !expanded }
+                        .clickable(enabled = enabled, role = Role.Button, onClickLabel = action) { menuRequested = !expanded }
                         .semantics { stateDescription = menuState }
                         .padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(SettingsTrailingGap),
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyLarge)
-                            if (titleIcon != null) Icon(painterResource(titleIcon), null, Modifier.size(18.dp), MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(title, Modifier.weight(1f, fill = false), style = MaterialTheme.typography.bodyLarge, color = headlineColor)
+                            if (titleIcon != null) Icon(painterResource(titleIcon), null, Modifier.size(18.dp), secondaryColor)
                         }
                         if (subtitle != null) {
                             Text(subtitle, Modifier.widthIn(max = SettingsSupportingMaxWidth),
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                style = MaterialTheme.typography.bodySmall, color = secondaryColor)
                         }
                     }
                     Row(
@@ -848,11 +855,10 @@ private fun <T> PreferenceMenu(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        val tint = MaterialTheme.colorScheme.onSurfaceVariant
                         Text(current.second, Modifier.weight(1f, fill = false),
-                            style = MaterialTheme.typography.bodyMedium, color = tint, textAlign = TextAlign.End)
+                            style = MaterialTheme.typography.bodyMedium, color = secondaryColor, textAlign = TextAlign.End)
                         Icon(painterResource(if (expanded) R.drawable.ic_symbol_arrow_drop_up else R.drawable.ic_symbol_arrow_drop_down),
-                            null, Modifier.size(20.dp), tint)
+                            null, Modifier.size(20.dp), secondaryColor)
                     }
                 }
             }
@@ -863,7 +869,7 @@ private fun <T> PreferenceMenu(
             DropdownMenuItem(
                 text = { Text(option.second) },
                 onClick = {
-                    expanded = false
+                    menuRequested = false
                     if (!isSelected) {
                         haptic(HapticFeedbackConstantsCompat.SEGMENT_TICK)
                         onSelect(option.first)
@@ -900,12 +906,15 @@ internal fun ReaderPreferences(
         options = listOf(true to stringResource(R.string.reading_vertical), false to stringResource(R.string.reading_horizontal)),
     ) { onSettings(settings.copy(vertical = it)) }
     PreferenceSwitch(
-        title = stringResource(if (settings.vertical) R.string.horizontal_video_seek else R.string.reader_rtl),
-        checked = if (settings.vertical) settings.horizontalVideoSeek else settings.rightToLeft,
-        animateTitle = true,
-    ) {
-        onSettings(if (settings.vertical) settings.copy(horizontalVideoSeek = it) else settings.copy(rightToLeft = it))
-    }
+        title = stringResource(R.string.horizontal_video_seek),
+        checked = settings.horizontalVideoSeek,
+        enabled = settings.vertical,
+    ) { onSettings(settings.copy(horizontalVideoSeek = it)) }
+    PreferenceSwitch(
+        title = stringResource(R.string.reader_rtl),
+        checked = settings.rightToLeft,
+        enabled = !settings.vertical,
+    ) { onSettings(settings.copy(rightToLeft = it)) }
     PreferenceSwitch(stringResource(R.string.show_page_number), checked = settings.showPageNumber) {
         onSettings(settings.copy(showPageNumber = it))
     }
@@ -967,44 +976,39 @@ internal fun PreferenceSwitch(
     checked: Boolean,
     feedbackOnToggle: Boolean = true,
     preserveAnimationComposition: Boolean = false,
-    animateTitle: Boolean = false,
+    enabled: Boolean = true,
     indeterminate: Boolean = false,
     onChange: (Boolean) -> Unit,
 ) {
     val switchOnHaptic = hapticFeedback(HapticEvent.SwitchOn)
     val switchOffHaptic = hapticFeedback(HapticEvent.SwitchOff)
     SettingsListItem(
-        headlineContent = {
-            if (animateTitle) {
-                Crossfade(
-                    targetState = title,
-                    modifier = Modifier.clearAndSetSemantics { text = AnnotatedString(title) },
-                    animationSpec = tween(settingsTransitionDuration(180)),
-                ) { Text(it) }
-            } else Text(title)
-        },
+        headlineContent = { Text(title) },
         supportingContent = subtitle?.let { { Text(it) } },
         trailingContent = {
             WithAnimationSpeed(animationSpeed(AnimationEffect.Switch), preserveComposition = preserveAnimationComposition) {
                 Switch(
-                    checked,
+                    checked = checked,
                     onCheckedChange = null,
+                    enabled = enabled,
                     thumbContent = if (indeterminate) {
                         { HorizontalDivider(Modifier.width(8.dp), thickness = 2.dp, color = MaterialTheme.colorScheme.surfaceContainerHighest) }
                     } else null,
                 )
             }
         },
+        enabled = enabled,
         modifier = Modifier.triStateToggleable(
             state = if (indeterminate) ToggleableState.Indeterminate else ToggleableState(checked),
+            enabled = enabled,
             role = Role.Switch,
         ) {
-            val enabled = !checked
+            val next = !checked
             if (feedbackOnToggle) {
-                if (enabled) switchOnHaptic(HapticFeedbackConstantsCompat.TOGGLE_ON)
+                if (next) switchOnHaptic(HapticFeedbackConstantsCompat.TOGGLE_ON)
                 else switchOffHaptic(HapticFeedbackConstantsCompat.TOGGLE_OFF)
             }
-            onChange(enabled)
+            onChange(next)
         },
     )
 }
