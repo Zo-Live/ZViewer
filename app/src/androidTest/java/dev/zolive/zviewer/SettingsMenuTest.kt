@@ -13,7 +13,6 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.lifecycle.ViewModelProvider
@@ -289,7 +288,7 @@ class SettingsMenuTest {
         val language = setting("语言")
         val speed = setting("动画速度")
         val haptics = setting("触感反馈")
-        val rows = listOf(language, speed, haptics, setting("触感设置"), setting("首选启动页"),
+        val rows = listOf(language, speed, setting("动画设置"), haptics, setting("触感设置"), setting("首选启动页"),
             setting("启动即继续阅读"), setting("显示文件类型"))
             .map { it.fetchSemanticsNode().boundsInRoot }
         rows.zipWithNext().forEach { (upper, lower) -> assertEquals(upper.bottom, lower.top, 1f) }
@@ -315,73 +314,68 @@ class SettingsMenuTest {
         assertTrue(store.settings().hapticFeedback)
     }
 
-    @Test fun interactionSubpagesShowOnlyWithMasterSettingsAndRestoreCategoryChoices() {
+    @Test fun interactionCategoriesKeepIndividualChoicesWhenDisabled() {
         setting("偏好").performClick()
         val speed = setting("动画速度")
         val haptics = setting("触感反馈")
         val animationLink = setting("动画设置")
-        val expandAndPopup = setting("展开与弹出")
-        val iconsAndControls = setting("图标与控件状态")
         val hapticsLink = setting("触感设置")
-        val confirmation = setting("确认与开启")
+        val master = setting("启用")
         val back = rule.onNodeWithContentDescription("返回偏好")
-        val isSwitch = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)
-        animationLink.assertDoesNotExist()
-        hapticsLink.assertIsDisplayed()
+        animationLink.assertIsDisplayed().assertIsNotEnabled()
+        hapticsLink.assertIsDisplayed().assertIsEnabled()
 
         speed.performClick()
         option("增强").performClick()
-        assertEquals(speed.fetchSemanticsNode().boundsInRoot.bottom, animationLink.fetchSemanticsNode().boundsInRoot.top, 1f)
-        animationLink.performClick()
-        rule.onAllNodes(isSwitch and isOn()).assertCountEquals(6)
-        expandAndPopup.assertIsOn().performClick().assertIsOff()
-        assertEquals(AnimationSpeed.Moderate, store.settings().animationSpeedFor(AnimationEffect.SettingsTransition))
-        assertEquals(AnimationSpeed.Moderate, store.settings().animationSpeedFor(AnimationEffect.VideoSpeedMenu))
-        assertEquals(AnimationSpeed.Enhanced, store.settings().animationSpeedFor(AnimationEffect.PageTransition))
-        assertEquals(AnimationSpeed.Enhanced, store.settings().animationSpeedFor(AnimationEffect.Icons))
-        iconsAndControls.assertIsOn().performClick().assertIsOff()
-        assertEquals(AnimationSpeed.Moderate, store.settings().animationSpeedFor(AnimationEffect.Icons))
+        animationLink.assertIsEnabled().performClick()
+        rule.onNodeWithContentDescription("全部选项").assertDoesNotExist()
+        rule.onAllNodes(hasClickAction() and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+            .assertCountEquals(7)
+        setting("展开与弹出").performClick()
+        val menu = setting("下拉菜单")
+        val search = setting("搜索栏展开和收起")
+        master.assert(hasText("关闭后，以下动画速度保持为「适中」。")).assertIsOn()
+        search.assertIsOn().performClick().assertIsOff()
+        master.performClick().assertIsOff()
+        menu.assertIsOn().assertIsNotEnabled()
+        search.assertIsOff().assertIsNotEnabled()
+        assertEquals(setOf(AnimationEffect.LibrarySearch), store.settings().disabledAnimations)
+        assertEquals(AnimationSpeed.Moderate, store.settings().animationSpeedFor(AnimationEffect.DropdownMenu))
         assertEquals(AnimationSpeed.Enhanced, store.settings().animationSpeedFor(AnimationEffect.ReaderEntry))
-        assertEquals(AnimationSpeed.Enhanced, store.settings().animationSpeedFor(AnimationEffect.ReaderImageZoom))
         scenario.recreate()
-        back.assertIsDisplayed().performClick()
+        master.assertIsOff().performClick().assertIsOn()
+        search.assertIsEnabled().assertIsOff()
+        assertEquals(AnimationSpeed.Enhanced, store.settings().animationSpeedFor(AnimationEffect.DropdownMenu))
+        rule.onNodeWithContentDescription("返回动画设置").performClick()
+        back.performClick()
         speed.performClick()
         option("适中").performClick()
-        animationLink.assertDoesNotExist()
-        speed.performClick()
-        option("增强").performClick()
-        animationLink.performClick()
-        expandAndPopup.assertIsOff()
-        iconsAndControls.assertIsOff()
-        setting("页面切换").performClick().assertIsOff()
-        assertEquals(AnimationSpeed.Moderate, store.settings().animationSpeedFor(AnimationEffect.ReaderEntry))
-        back.performClick()
+        animationLink.assertIsDisplayed().assertIsNotEnabled()
 
         hapticsLink.performClick()
-        rule.onAllNodes(isSwitch and isOn()).assertCountEquals(4)
-        confirmation.assertIsOn().performClick().assertIsOff()
-        setting("取消与关闭").assertIsOn()
-        setting("刻度与边界").assertIsOn()
-        assertFalse(store.settings().hapticsEnabledFor(HapticEvent.AddFavorite))
+        rule.onNodeWithContentDescription("全部选项").assertDoesNotExist()
+        setting("确认与开启").performClick()
+        val favorite = setting("添加收藏")
+        master.assert(hasText("关闭后，以下触感效果将不可用。")).assertIsOn()
+        favorite.assertIsOn().performClick().assertIsOff()
+        master.performClick().assertIsOff()
+        favorite.assertIsNotEnabled().assertIsOff()
+        setting("打开开关").assertIsNotEnabled().assertIsOn()
+        assertFalse(store.settings().hapticsEnabledFor(HapticEvent.EnableHapticFeedback))
         assertTrue(store.settings().hapticsEnabledFor(HapticEvent.RemoveFavorite))
-        assertFalse(store.settings().hapticsEnabledFor(HapticEvent.ThemeColorWheelConfirm))
-        assertTrue(store.settings().hapticsEnabledFor(HapticEvent.ThemeColorWheel))
-        scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        rule.onNodeWithContentDescription("返回触感设置").performClick()
+        back.performClick()
         haptics.performClick().assertIsOff()
-        hapticsLink.assertDoesNotExist()
-
-        scenario.close()
-        scenario = ActivityScenario.launch(MainActivity::class.java)
-        rule.onNodeWithContentDescription("设置").performClick()
-        setting("偏好").performClick()
-        hapticsLink.assertDoesNotExist()
+        hapticsLink.assertIsDisplayed().assertIsNotEnabled()
         haptics.performClick().assertIsOn()
-        hapticsLink.performClick()
-        confirmation.assertIsOff()
-        setting("取消与关闭").assertIsOn()
+        hapticsLink.assertIsEnabled().performClick()
+        setting("确认与开启").performClick()
+        master.assertIsOff().performClick().assertIsOn()
+        favorite.assertIsEnabled().assertIsOff()
+        assertEquals(setOf(HapticEvent.AddFavorite), store.settings().disabledHaptics)
     }
 
-    @Test fun legacyInteractionChoicesStayMixedUntilCategoryIsToggled() {
+    @Test fun legacyInteractionChoicesAppearAsIndividualSwitches() {
         scenario.close()
         context.getSharedPreferences("zviewer", Context.MODE_PRIVATE).edit()
             .putBoolean("fast_animations", true)
@@ -392,94 +386,28 @@ class SettingsMenuTest {
         rule.onNodeWithContentDescription("设置").performClick()
         setting("偏好").performClick()
 
-        val mixed = SemanticsMatcher.expectValue(SemanticsProperties.ToggleableState, ToggleableState.Indeterminate)
         setting("动画设置").performClick()
-        setting("展开与弹出").assert(mixed and hasText("部分开启"))
-        setting("页面切换").assert(mixed)
-        setting("图标与控件状态").assertIsOn()
-        val oldAnimations = store.settings()
-        assertEquals(AnimationSpeed.Moderate, oldAnimations.animationSpeedFor(AnimationEffect.LibrarySearch))
-        assertEquals(AnimationSpeed.Enhanced, oldAnimations.animationSpeedFor(AnimationEffect.SettingsTransition))
-        setting("展开与弹出").performClick().assertIsOn()
+        setting("展开与弹出").performClick()
+        setting("启用").assertIsOn()
+        setting("搜索栏展开和收起").assertIsOff().performClick().assertIsOn()
         assertEquals(setOf(AnimationEffect.ReaderPaging), store.settings().disabledAnimations)
+        rule.onNodeWithContentDescription("返回动画设置").performClick()
         rule.onNodeWithContentDescription("返回偏好").performClick()
 
         setting("触感设置").performClick()
-        setting("确认与开启").assert(mixed)
-        setting("取消与关闭").assert(mixed)
-        setting("刻度与边界").assert(mixed)
-        setting("操作提示").assertIsOn()
-        val oldHaptics = store.settings()
-        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.AddFavorite))
-        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.RemoveFavorite))
-        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.ThemeColorWheel))
-        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.ThemeColorWheelConfirm))
-        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.VideoSpeedLock))
-        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.VideoSpeedUnlock))
-        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.VideoSpeedHoldFast))
-        assertFalse(oldHaptics.hapticsEnabledFor(HapticEvent.VideoSpeedHoldNormal))
-        setting("确认与开启").performClick().assertIsOn()
-        assertTrue(store.settings().hapticsEnabledFor(HapticEvent.AddFavorite))
-        assertFalse(store.settings().hapticsEnabledFor(HapticEvent.RemoveFavorite))
-        assertEquals(
-            setOf(
-                HapticEvent.RemoveFavorite,
-                HapticEvent.ThemeColorWheel,
-                HapticEvent.VideoSpeedUnlock,
-                HapticEvent.VideoSpeedHoldNormal,
-            ),
-            store.settings().disabledHaptics,
-        )
-    }
-
-    @Test fun interactionPageCheckboxTogglesAllOptionsAndPersists() {
-        setting("偏好").performClick()
-        setting("动画速度").performClick()
-        option("增强").performClick()
-
-        val allOptions = rule.onNodeWithContentDescription("全部选项")
-        val isSwitch = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch)
-        val partiallyEnabled = SemanticsMatcher.expectValue(
-            SemanticsProperties.ToggleableState, ToggleableState.Indeterminate,
-        )
-        val back = rule.onNodeWithContentDescription("返回偏好")
-
-        for ((page, item, count) in listOf(
-            Triple("动画设置", "展开与弹出", 6),
-            Triple("触感设置", "确认与开启", 4),
-        )) {
-            setting(page).performClick()
-            allOptions.assertIsOn().performTouchInput { click() }.assertIsOff()
-            rule.onAllNodes(isSwitch and isOff()).assertCountEquals(count)
-
-            setting(item).performScrollTo().performClick().assertIsOn()
-            allOptions.assert(partiallyEnabled).performTouchInput { click() }.assertIsOn()
-            rule.onAllNodes(isSwitch and isOn()).assertCountEquals(count)
-
-            allOptions.performTouchInput { click() }.assertIsOff()
-            allOptions.performTouchInput { click() }.assertIsOn()
-            rule.onAllNodes(isSwitch and isOn()).assertCountEquals(count)
-            setting(item).performClick().assertIsOff()
-            allOptions.assert(partiallyEnabled).performTouchInput { click() }.assertIsOn()
-            allOptions.performTouchInput { click() }.assertIsOff()
-            back.performClick()
-        }
-
-        scenario.close()
-        scenario = ActivityScenario.launch(MainActivity::class.java)
-        rule.onNodeWithContentDescription("设置").performClick()
-        setting("偏好").performClick()
-        setting("动画设置").performClick()
-        allOptions.assertIsOff()
-        rule.onAllNodes(isSwitch and isOff()).assertCountEquals(6)
-        back.performClick()
-        setting("触感设置").performClick()
-        allOptions.assertIsOff()
-        rule.onAllNodes(isSwitch and isOff()).assertCountEquals(4)
-        assertEquals(AnimationSpeed.Enhanced, store.settings().animationSpeed)
-        assertTrue(store.settings().hapticFeedback)
-        assertEquals(AnimationEffect.entries.toSet(), store.settings().disabledAnimations)
-        assertEquals(HapticEvent.entries.toSet(), store.settings().disabledHaptics)
+        setting("确认与开启").performClick()
+        setting("启用").assertIsOn()
+        setting("添加收藏").assertIsOff().performClick().assertIsOn()
+        setting("确认色轮选色").assertIsOff()
+        setting("锁定播放倍速").assertIsOff()
+        setting("长按临时加速").assertIsOff()
+        val saved = store.settings()
+        assertTrue(saved.hapticsEnabledFor(HapticEvent.AddFavorite))
+        assertFalse(saved.hapticsEnabledFor(HapticEvent.RemoveFavorite))
+        assertFalse(saved.hapticsEnabledFor(HapticEvent.ThemeColorWheel))
+        assertFalse(saved.hapticsEnabledFor(HapticEvent.ThemeColorWheelConfirm))
+        assertFalse(saved.hapticsEnabledFor(HapticEvent.VideoSpeedUnlock))
+        assertFalse(saved.hapticsEnabledFor(HapticEvent.VideoSpeedHoldNormal))
     }
 
     @Test fun switchingLanguagesKeepsSettingsOpenAndPersists() {

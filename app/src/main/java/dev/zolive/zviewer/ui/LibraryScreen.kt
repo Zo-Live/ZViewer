@@ -124,7 +124,7 @@ private sealed class AppPage(val tag: String) {
     fun parent(): AppPage = when (this) {
         Library, Settings -> Library
         is Section -> Settings
-        is Interaction -> Section(SettingsSection.Preferences)
+        is Interaction -> settingsPage.parent?.let(::Interaction) ?: Section(SettingsSection.Preferences)
         Logs -> Section(SettingsSection.Diagnostics)
         is LogDetail -> Logs
     }
@@ -140,9 +140,8 @@ private sealed class AppPage(val tag: String) {
                     Settings.tag -> Settings
                     Logs.tag -> Logs
                     "log-detail-screen" -> LogDetail(DiagnosticLog.LogFile(it[1] as Uri, it[2] as String, it[3] as Long))
-                    InteractionSettingsPage.Animation.tag -> Interaction(InteractionSettingsPage.Animation)
-                    InteractionSettingsPage.Haptics.tag -> Interaction(InteractionSettingsPage.Haptics)
-                    else -> SettingsSection.entries.firstOrNull { section -> section.tag == it[0] }
+                    else -> InteractionSettingsPage.fromTag(it[0] as String)?.let(::Interaction)
+                        ?: SettingsSection.entries.firstOrNull { section -> section.tag == it[0] }
                         ?.let { section -> Section(section) } ?: Library
                 }
             },
@@ -402,7 +401,9 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                                                 finishTransition(AppPage.Interaction(it), showChild = true, startProgress = 0f)
                                             })
                                         is AppPage.Interaction -> InteractionSettingsScreen(
-                                            layer.settingsPage, state.settings, ::goBack, model::settings)
+                                            layer.settingsPage, state.settings, ::goBack,
+                                            onOpen = { finishTransition(AppPage.Interaction(it), showChild = true, startProgress = 0f) },
+                                            onSettings = model::settings)
                                         AppPage.Logs -> LogListScreen(active, ::goBack) { file ->
                                             finishTransition(AppPage.LogDetail(file), showChild = true, startProgress = 0f)
                                         }

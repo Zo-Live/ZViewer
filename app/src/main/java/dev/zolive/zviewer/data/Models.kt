@@ -113,12 +113,18 @@ data class ReaderSettings(
     val showPageNumber: Boolean = true,
     val startupPage: LibraryTab = LibraryTab.Library,
     val resumeReadingOnStartup: Boolean = false,
+    val disabledAnimationCategories: Set<AnimationCategory> = emptySet(),
+    val disabledHapticCategories: Set<HapticCategory> = emptySet(),
 ) {
     internal fun animationSpeedFor(effect: AnimationEffect): AnimationSpeed =
-        if (effect in disabledAnimations) AnimationSpeed.Moderate else animationSpeed
+        if (effect.category in disabledAnimationCategories || effect in disabledAnimations) {
+            AnimationSpeed.Moderate
+        } else {
+            animationSpeed
+        }
 
     internal fun hapticsEnabledFor(event: HapticEvent): Boolean =
-        hapticFeedback && event !in disabledHaptics
+        hapticFeedback && event.category !in disabledHapticCategories && event !in disabledHaptics
 }
 
 data class PageSource(

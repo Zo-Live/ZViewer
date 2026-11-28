@@ -34,7 +34,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.selection.triStateToggleable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
@@ -61,7 +61,6 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.LayoutDirection
@@ -191,7 +190,6 @@ internal fun SettingsPage(
     @StringRes title: Int,
     @StringRes backLabel: Int,
     onBack: () -> Unit,
-    action: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Scaffold(topBar = {
@@ -212,9 +210,6 @@ internal fun SettingsPage(
             IconButton(onClick = onBack, modifier = Modifier.align(Alignment.CenterStart).padding(start = backInset)
                 .size(SettingsBackButtonSize)) {
                 Icon(painterResource(R.drawable.ic_symbol_arrow_back), stringResource(backLabel))
-            }
-            if (action != null) {
-                Box(Modifier.align(Alignment.CenterEnd).padding(end = backInset)) { action() }
             }
         }
     }) { padding ->
@@ -320,23 +315,23 @@ private fun AppPreferences(
             AnimationSpeed.Enhanced to stringResource(R.string.animation_speed_enhanced),
         ),
     ) { onSettings(settings.copy(animationSpeed = it)) }
-    val showAnimationSettings = settings.animationSpeed == AnimationSpeed.Enhanced
-    SettingsVisibility(showAnimationSettings) {
-        InteractionSettingsLink(InteractionSettingsPage.Animation, showAnimationSettings, onOpen)
+    SettingsPageLink(InteractionSettingsPage.Animation.title, enabled = settings.animationSpeed == AnimationSpeed.Enhanced) {
+        onOpen(InteractionSettingsPage.Animation)
     }
     PreferenceSwitch(
         title = stringResource(R.string.haptic_feedback),
         checked = settings.hapticFeedback,
         feedbackOnToggle = false,
     ) { enabled ->
-        onSettings(settings.copy(hapticFeedback = enabled))
+        val updated = settings.copy(hapticFeedback = enabled)
+        onSettings(updated)
         view.isHapticFeedbackEnabled = enabled
-        if (enabled && HapticEvent.EnableHapticFeedback !in settings.disabledHaptics) {
+        if (updated.hapticsEnabledFor(HapticEvent.EnableHapticFeedback)) {
             ViewCompat.performHapticFeedback(view, HapticFeedbackConstantsCompat.TOGGLE_ON)
         }
     }
-    SettingsVisibility(settings.hapticFeedback) {
-        InteractionSettingsLink(InteractionSettingsPage.Haptics, settings.hapticFeedback, onOpen)
+    SettingsPageLink(InteractionSettingsPage.Haptics.title, enabled = settings.hapticFeedback) {
+        onOpen(InteractionSettingsPage.Haptics)
     }
     PreferenceMenu(
         title = stringResource(R.string.preferred_startup_page),
@@ -355,11 +350,12 @@ private fun AppPreferences(
 }
 
 @Composable
-private fun InteractionSettingsLink(page: InteractionSettingsPage, enabled: Boolean, onOpen: (InteractionSettingsPage) -> Unit) {
+internal fun SettingsPageLink(@StringRes title: Int, enabled: Boolean = true, onClick: () -> Unit) {
     SettingsListItem(
-        headlineContent = { Text(stringResource(page.title)) },
+        headlineContent = { Text(stringResource(title)) },
         trailingContent = { Icon(painterResource(R.drawable.ic_symbol_keyboard_arrow_right), null) },
-        modifier = Modifier.clickable(enabled = enabled, role = Role.Button) { onOpen(page) },
+        modifier = Modifier.clickable(enabled = enabled, role = Role.Button, onClick = onClick),
+        enabled = enabled,
     )
 }
 
@@ -977,7 +973,6 @@ internal fun PreferenceSwitch(
     feedbackOnToggle: Boolean = true,
     preserveAnimationComposition: Boolean = false,
     enabled: Boolean = true,
-    indeterminate: Boolean = false,
     onChange: (Boolean) -> Unit,
 ) {
     val switchOnHaptic = hapticFeedback(HapticEvent.SwitchOn)
@@ -987,23 +982,11 @@ internal fun PreferenceSwitch(
         supportingContent = subtitle?.let { { Text(it) } },
         trailingContent = {
             WithAnimationSpeed(animationSpeed(AnimationEffect.Switch), preserveComposition = preserveAnimationComposition) {
-                Switch(
-                    checked = checked,
-                    onCheckedChange = null,
-                    enabled = enabled,
-                    thumbContent = if (indeterminate) {
-                        { HorizontalDivider(Modifier.width(8.dp), thickness = 2.dp, color = MaterialTheme.colorScheme.surfaceContainerHighest) }
-                    } else null,
-                )
+                Switch(checked = checked, onCheckedChange = null, enabled = enabled)
             }
         },
         enabled = enabled,
-        modifier = Modifier.triStateToggleable(
-            state = if (indeterminate) ToggleableState.Indeterminate else ToggleableState(checked),
-            enabled = enabled,
-            role = Role.Switch,
-        ) {
-            val next = !checked
+        modifier = Modifier.toggleable(value = checked, enabled = enabled, role = Role.Switch) { next ->
             if (feedbackOnToggle) {
                 if (next) switchOnHaptic(HapticFeedbackConstantsCompat.TOGGLE_ON)
                 else switchOffHaptic(HapticFeedbackConstantsCompat.TOGGLE_OFF)

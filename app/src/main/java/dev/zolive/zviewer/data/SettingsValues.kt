@@ -60,6 +60,12 @@ internal fun readSettings(value: (String, Any?) -> Any?): ReaderSettings {
         disabledHaptics = keys("disabled_haptics").let { keys ->
             HapticEvent.entries.filterTo(mutableSetOf()) { it.key in keys || it.legacyKey in keys }
         },
+        disabledAnimationCategories = keys("disabled_animation_categories").let { keys ->
+            AnimationCategory.entries.filterTo(mutableSetOf()) { it.key in keys }
+        },
+        disabledHapticCategories = keys("disabled_haptic_categories").let { keys ->
+            HapticCategory.entries.filterTo(mutableSetOf()) { it.key in keys }
+        },
         verifyOnStartup = boolean("verify_on_startup", false),
         hideRecentPreview = boolean("hide_recent_preview", false),
         verifyAfterBackground = boolean("verify_after_background", false),
@@ -110,6 +116,8 @@ internal fun settingsValues(settings: ReaderSettings): Map<String, Any?> = mapOf
     "haptic_feedback" to settings.hapticFeedback,
     "disabled_animations" to settings.disabledAnimations.mapTo(mutableSetOf()) { it.key },
     "disabled_haptics" to settings.disabledHaptics.mapTo(mutableSetOf()) { it.key },
+    "disabled_animation_categories" to settings.disabledAnimationCategories.mapTo(mutableSetOf()) { it.key },
+    "disabled_haptic_categories" to settings.disabledHapticCategories.mapTo(mutableSetOf()) { it.key },
     "verify_on_startup" to settings.verifyOnStartup,
     "hide_recent_preview" to settings.hideRecentPreview,
     "verify_after_background" to settings.verifyAfterBackground,
