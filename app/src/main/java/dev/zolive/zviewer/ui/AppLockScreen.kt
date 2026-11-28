@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -53,7 +54,7 @@ internal fun AppLockScreen(settings: ReaderSettings, onVerify: () -> Unit) {
             val title = "ZViewer"
             val titleStyle = MaterialTheme.typography.appTitle
             val verifyLabel = stringResource(R.string.verify)
-            val verifyStyle = MaterialTheme.typography.bodyLarge
+            val verifyStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold)
             val buttonPadding = ButtonDefaults.ContentPadding
             val layoutDirection = LocalLayoutDirection.current
             val textMeasurer = rememberTextMeasurer()
