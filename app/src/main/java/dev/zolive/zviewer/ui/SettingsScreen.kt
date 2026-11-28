@@ -167,6 +167,8 @@ internal fun SettingsSectionScreen(
     active: Boolean,
     onBack: () -> Unit,
     onChooseLibrary: () -> Unit,
+    canTransferSettings: Boolean,
+    onImportSettings: () -> Unit,
     onViewLogs: () -> Unit,
     onOpenInteractionSettings: (InteractionSettingsPage) -> Unit,
 ) {
@@ -183,7 +185,7 @@ internal fun SettingsSectionScreen(
             SettingsSection.LibraryAndStorage -> LibraryStorageSettings(state, model, onChooseLibrary)
             SettingsSection.Diagnostics -> DiagnosticsSettings(state.settings, model, active, onViewLogs)
             SettingsSection.Security -> SecuritySettings(state, model)
-            SettingsSection.Application -> ApplicationSettings(state, model)
+            SettingsSection.Application -> ApplicationSettings(state, model, canTransferSettings, onImportSettings)
         }
     }
 }
@@ -673,16 +675,15 @@ private fun Modifier.doubleClickToClear(
 }
 
 @Composable
-private fun ApplicationSettings(state: LibraryState, model: LibraryViewModel) {
+private fun ApplicationSettings(
+    state: LibraryState,
+    model: LibraryViewModel,
+    canTransferSettings: Boolean,
+    onImportSettings: () -> Unit,
+) {
     val settings = state.settings
     val context = LocalContext.current
     val activity = LocalActivity.current
-    val transferring by model.transferringSettings.collectAsState()
-    val pendingImport by model.settingsImport.collectAsState()
-    val canTransfer = !transferring && pendingImport == null
-    val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) model.importSettings(uri)
-    }
     val exportPicker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         if (uri != null) model.exportSettings(uri)
     }
@@ -718,17 +719,11 @@ private fun ApplicationSettings(state: LibraryState, model: LibraryViewModel) {
     }
     SettingsListItem(
         headlineContent = { Text(stringResource(R.string.settings_import)) },
-        modifier = Modifier.clickable(enabled = canTransfer, role = Role.Button) {
-            try {
-                importPicker.launch(arrayOf("application/json", "text/*", "application/octet-stream"))
-            } catch (_: ActivityNotFoundException) {
-                Toast.makeText(context, R.string.settings_import_error, Toast.LENGTH_LONG).show()
-            }
-        },
+        modifier = Modifier.clickable(enabled = canTransferSettings, role = Role.Button, onClick = onImportSettings),
     )
     SettingsListItem(
         headlineContent = { Text(stringResource(R.string.settings_export)) },
-        modifier = Modifier.clickable(enabled = canTransfer, role = Role.Button) {
+        modifier = Modifier.clickable(enabled = canTransferSettings, role = Role.Button) {
             try {
                 exportPicker.launch("ZViewer-settings.json")
             } catch (_: ActivityNotFoundException) {

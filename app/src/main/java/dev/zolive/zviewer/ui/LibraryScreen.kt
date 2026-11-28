@@ -2,15 +2,18 @@
 
 package dev.zolive.zviewer.ui
 
+import android.content.ActivityNotFoundException
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Size as PixelSize
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.activity.compose.PredictiveBackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -70,6 +73,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -207,6 +211,7 @@ private fun Modifier.pageBackSwipe(
 @Composable
 fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
     val activity = LocalActivity.current
+    val context = LocalContext.current
     val speed = animationSpeed(AnimationEffect.PageTransition)
     val session = state.session
     val waitingForVideo = session != null && state.waitingForVideoEntry
@@ -320,6 +325,19 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
         model.cancelStartupReading()
         picker.launch(state.treeUri?.let(Uri::parse))
     }
+    val transferringSettings by model.transferringSettings.collectAsState()
+    val pendingImport by model.settingsImport.collectAsState()
+    val canTransferSettings = !transferringSettings && pendingImport == null
+    val importPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) model.importSettings(uri)
+    }
+    val importSettings = {
+        try {
+            importPicker.launch(arrayOf("application/json", "text/*", "application/octet-stream"))
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(context, R.string.settings_import_error, Toast.LENGTH_LONG).show()
+        }
+    }
     Surface(Modifier.fillMaxSize()) {
         Box(Modifier.fillMaxSize()) {
             if (session != null) {
@@ -391,12 +409,16 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
                                                 model.cancelStartupReading()
                                                 finishTransition(AppPage.Settings, showChild = true, startProgress = 0f)
                                             },
-                                            onChooseLibrary = chooseLibrary)
+                                            onChooseLibrary = chooseLibrary,
+                                            canImportSettings = canTransferSettings,
+                                            onImportSettings = importSettings)
                                         AppPage.Settings -> SettingsScreen(::goBack) { section ->
                                             finishTransition(AppPage.Section(section), showChild = true, startProgress = 0f)
                                         }
                                         is AppPage.Section -> SettingsSectionScreen(
                                             layer.section, state, model, active, ::goBack, chooseLibrary,
+                                            canTransferSettings = canTransferSettings,
+                                            onImportSettings = importSettings,
                                             onViewLogs = { finishTransition(AppPage.Logs, showChild = true, startProgress = 0f) },
                                             onOpenInteractionSettings = {
                                                 finishTransition(AppPage.Interaction(it), showChild = true, startProgress = 0f)
@@ -457,7 +479,8 @@ fun ZViewerApp(model: LibraryViewModel, state: LibraryState) {
 @Composable
 private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: Boolean,
     continueMotion: ContinueReadingMotion?, settingsIcon: State<Float>, onContinue: (Book) -> Unit,
-    onSettings: () -> Unit, onChooseLibrary: () -> Unit) {
+    onSettings: () -> Unit, onChooseLibrary: () -> Unit,
+    canImportSettings: Boolean, onImportSettings: () -> Unit) {
     val searchSpeed = animationSpeed(AnimationEffect.LibrarySearch)
     val enterManagementHaptic = hapticFeedback(HapticEvent.EnterFavoriteManagement)
     val exitManagementHaptic = hapticFeedback(HapticEvent.ExitFavoriteManagement)
@@ -516,11 +539,13 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
             TopAppBar(modifier = Modifier.padding(start = contentInset - 16.dp, end = actionInset - 4.dp), title = {
                 Text("ZViewer", style = MaterialTheme.typography.appTitle)
             }, actions = {
-                LibraryActionIconButton(LibraryActionIcon.Search, active = active) {
-                    if (searching) closeSearch()
-                    else {
-                        requestSearchFocus = true
-                        searching = true
+                if (state.treeUri != null) {
+                    LibraryActionIconButton(LibraryActionIcon.Search, active = active) {
+                        if (searching) closeSearch()
+                        else {
+                            requestSearchFocus = true
+                            searching = true
+                        }
                     }
                 }
                 SettingsIconButton(stringResource(R.string.settings), settingsIcon, active = active) {
@@ -608,7 +633,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                 val pageModifier = Modifier.fillMaxSize()
                     .then(if (pagerState.currentPage != pageIndex) Modifier.clearAndSetSemantics {} else Modifier)
                 if (state.treeUri == null) {
-                    Box(pageModifier) { WelcomeScreen(onChooseLibrary) }
+                    Box(pageModifier) { WelcomeScreen(onChooseLibrary, canImportSettings, onImportSettings) }
                 } else {
                     Layout(modifier = pageModifier, content = {
                         Column {
@@ -863,7 +888,11 @@ private fun LibraryActions(gridState: LazyGridState, managingFavorites: Boolean,
 }
 
 @Composable
-private fun WelcomeScreen(onChooseLibrary: () -> Unit) {
+private fun WelcomeScreen(
+    onChooseLibrary: () -> Unit,
+    canImportSettings: Boolean,
+    onImportSettings: () -> Unit,
+) {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 30.dp), horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center) {
         val primary = MaterialTheme.colorScheme.primary
@@ -880,9 +909,25 @@ private fun WelcomeScreen(onChooseLibrary: () -> Unit) {
             drawCircle(primary, 6f, Offset(size.width * .53f, size.height * .66f))
         }
         Spacer(Modifier.height(30.dp))
-        Button(onClick = onChooseLibrary, modifier = Modifier.fillMaxWidth().height(56.dp)) {
-            Icon(painterResource(R.drawable.ic_symbol_create_new_folder), null); Spacer(Modifier.width(10.dp)); Text(stringResource(R.string.choose_library_directory), fontSize = 16.sp)
+        Column(Modifier.width(IntrinsicSize.Max)) {
+            WelcomeAction(R.drawable.ic_symbol_create_new_folder, R.string.choose_library_directory, onChooseLibrary)
+            WelcomeAction(R.drawable.ic_symbol_input, R.string.import_existing_configuration, onImportSettings,
+                enabled = canImportSettings)
         }
+    }
+}
+
+@Composable
+private fun WelcomeAction(
+    @DrawableRes icon: Int,
+    @StringRes label: Int,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+) {
+    TextButton(onClick, Modifier.fillMaxWidth().heightIn(min = 48.dp), enabled = enabled) {
+        Icon(painterResource(icon), contentDescription = null)
+        Spacer(Modifier.width(10.dp))
+        Text(stringResource(label), Modifier.weight(1f), fontSize = 16.sp)
     }
 }
 

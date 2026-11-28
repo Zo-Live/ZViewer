@@ -156,12 +156,12 @@
     <string name="update_download_preparing">Preparing download</string>
     <string name="update_checking">Checking for updates</string>
     <string name="update_check_on_start">Check for updates on startup</string>
-    <string name="settings_import">Import settings</string>
-    <string name="settings_export">Export settings</string>
-    <string name="settings_imported">ZViewer settings imported</string>
-    <string name="settings_exported">ZViewer settings exported</string>
-    <string name="settings_import_error">Could not import settings. Select a valid ZViewer settings file.</string>
-    <string name="settings_export_error">Could not export settings.</string>
+    <string name="settings_import">Import configuration</string>
+    <string name="settings_export">Export configuration</string>
+    <string name="settings_imported">ZViewer configuration imported</string>
+    <string name="settings_exported">ZViewer configuration exported</string>
+    <string name="settings_import_error">Could not import configuration. Select a valid ZViewer configuration file.</string>
+    <string name="settings_export_error">Could not export configuration.</string>
     <string name="settings_change_library">Change library folder?</string>
     <string name="settings_change_logs">Change log folder?</string>
     <string name="settings_change_directory">Current folder %1$s\nImported folder %2$s</string>
@@ -169,7 +169,7 @@
     <string name="settings_change_confirm">Change</string>
     <string name="settings_keep_directory">Keep current folder</string>
     <string name="settings_directory_unchanged">Access to the imported folder was unavailable. The current folder was kept.</string>
-    <string name="settings_imported_without_verification">Settings imported. Set a screen lock before enabling verification.</string>
+    <string name="settings_imported_without_verification">Configuration imported. Set a screen lock before enabling verification.</string>
     <string name="about">About ZViewer</string>
     <string name="color_wheel">Color wheel</string>
     <string name="apply">Apply</string>
@@ -237,6 +237,7 @@
     <string name="exit_favorite_management">Exit favorite management</string>
     <string name="scroll_to_top">Back to top</string>
     <string name="choose_library_directory">Choose library folder</string>
+    <string name="import_existing_configuration">Import existing configuration</string>
     <string name="scanning_library">Scanning your library…</string>
     <string name="empty_directory">No comics in this folder</string>
     <string name="no_matching_comics">No matching comics</string>

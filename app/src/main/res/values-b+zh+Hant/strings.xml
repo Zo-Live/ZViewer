@@ -156,12 +156,12 @@
     <string name="update_download_preparing">正在準備下載</string>
     <string name="update_checking">正在檢查更新</string>
     <string name="update_check_on_start">啟動時檢查更新</string>
-    <string name="settings_import">匯入設定</string>
-    <string name="settings_export">匯出設定</string>
-    <string name="settings_imported">ZViewer 設定已匯入</string>
-    <string name="settings_exported">ZViewer 設定已匯出</string>
-    <string name="settings_import_error">無法匯入設定，請選擇有效的 ZViewer 設定檔。</string>
-    <string name="settings_export_error">無法匯出設定。</string>
+    <string name="settings_import">匯入設定檔</string>
+    <string name="settings_export">匯出設定檔</string>
+    <string name="settings_imported">ZViewer 設定檔已匯入</string>
+    <string name="settings_exported">ZViewer 設定檔已匯出</string>
+    <string name="settings_import_error">無法匯入設定檔，請選擇有效的 ZViewer 設定檔。</string>
+    <string name="settings_export_error">無法匯出設定檔。</string>
     <string name="settings_change_library">變更書庫資料夾？</string>
     <string name="settings_change_logs">變更記錄資料夾？</string>
     <string name="settings_change_directory">目前資料夾 %1$s\n匯入資料夾 %2$s</string>
@@ -169,7 +169,7 @@
     <string name="settings_change_confirm">變更</string>
     <string name="settings_keep_directory">保留目前資料夾</string>
     <string name="settings_directory_unchanged">無法授權匯入資料夾，已保留目前資料夾。</string>
-    <string name="settings_imported_without_verification">設定已匯入。啟用驗證前，需要先在系統中設定螢幕鎖定。</string>
+    <string name="settings_imported_without_verification">設定檔已匯入。啟用驗證前，需要先在系統中設定螢幕鎖定。</string>
     <string name="about">關於 ZViewer</string>
     <string name="color_wheel">色輪</string>
     <string name="apply">套用</string>
@@ -237,6 +237,7 @@
     <string name="exit_favorite_management">離開收藏管理</string>
     <string name="scroll_to_top">回到頂端</string>
     <string name="choose_library_directory">選擇書庫資料夾</string>
+    <string name="import_existing_configuration">匯入現有設定檔</string>
     <string name="scanning_library">正在整理書庫…</string>
     <string name="empty_directory">此資料夾沒有漫畫</string>
     <string name="no_matching_comics">沒有符合條件的漫畫</string>

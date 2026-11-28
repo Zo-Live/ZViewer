@@ -156,12 +156,12 @@
     <string name="update_download_preparing">正在准备下载</string>
     <string name="update_checking">正在检查更新</string>
     <string name="update_check_on_start">启动时检查更新</string>
-    <string name="settings_import">导入设置</string>
-    <string name="settings_export">导出设置</string>
-    <string name="settings_imported">ZViewer 设置已导入</string>
-    <string name="settings_exported">ZViewer 设置已导出</string>
-    <string name="settings_import_error">无法导入设置，请选择有效的 ZViewer 设置文件。</string>
-    <string name="settings_export_error">无法导出设置。</string>
+    <string name="settings_import">导入配置</string>
+    <string name="settings_export">导出配置</string>
+    <string name="settings_imported">ZViewer 配置已导入</string>
+    <string name="settings_exported">ZViewer 配置已导出</string>
+    <string name="settings_import_error">无法导入配置，请选择有效的 ZViewer 配置文件。</string>
+    <string name="settings_export_error">无法导出配置。</string>
     <string name="settings_change_library">更改书库目录？</string>
     <string name="settings_change_logs">更改日志目录？</string>
     <string name="settings_change_directory">当前目录 %1$s\n导入目录 %2$s</string>
@@ -169,7 +169,7 @@
     <string name="settings_change_confirm">更改</string>
     <string name="settings_keep_directory">保留当前目录</string>
     <string name="settings_directory_unchanged">未能授权导入目录，已保留当前目录。</string>
-    <string name="settings_imported_without_verification">设置已导入。启用验证前，需要先在系统中设置屏幕锁。</string>
+    <string name="settings_imported_without_verification">配置已导入。启用验证前，需要先在系统中设置屏幕锁。</string>
     <string name="about">关于 ZViewer</string>
     <string name="color_wheel">色轮</string>
     <string name="color_hex" translatable="false">HEX #</string>
@@ -238,6 +238,7 @@
     <string name="exit_favorite_management">退出收藏管理</string>
     <string name="scroll_to_top">回到顶部</string>
     <string name="choose_library_directory">选择书库目录</string>
+    <string name="import_existing_configuration">导入已有配置</string>
     <string name="scanning_library">正在整理你的书库…</string>
     <string name="empty_directory">此目录无漫画</string>
     <string name="no_matching_comics">没有符合条件的漫画</string>

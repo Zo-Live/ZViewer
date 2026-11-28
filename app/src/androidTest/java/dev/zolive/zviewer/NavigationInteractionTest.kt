@@ -328,11 +328,15 @@ class NavigationInteractionTest {
         scenario.close()
         context.getSharedPreferences("zviewer", Context.MODE_PRIVATE).edit().clear().commit()
         launch()
+        rule.onNodeWithContentDescription("搜索漫画").assertDoesNotExist()
+        rule.onNodeWithText("选择书库目录").assertIsDisplayed().assertHasClickAction()
+        rule.onNodeWithText("导入已有配置").assertIsDisplayed().assertHasClickAction()
         swipe(true)
         tab("收藏").assertIsSelected()
         swipe(true)
         tab("最近阅读").assertIsSelected()
         rule.onNodeWithText("选择书库目录").assertIsDisplayed()
+        rule.onNodeWithText("导入已有配置").assertIsDisplayed()
     }
 
     @Test fun bottomNavigationJumpsStraightToTheRequestedPage() {
