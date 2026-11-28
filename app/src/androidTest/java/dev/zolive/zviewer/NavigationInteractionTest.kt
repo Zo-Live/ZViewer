@@ -21,6 +21,7 @@ import dev.zolive.zviewer.data.AnimationSpeed
 import dev.zolive.zviewer.data.AppLanguage
 import dev.zolive.zviewer.data.Book
 import dev.zolive.zviewer.data.BookRepository
+import dev.zolive.zviewer.data.LibraryFilter
 import dev.zolive.zviewer.data.LibraryTab
 import dev.zolive.zviewer.data.PreferenceStore
 import kotlinx.coroutines.runBlocking
@@ -69,6 +70,25 @@ class NavigationInteractionTest {
     }
 
     private fun tab(title: String) = rule.onNode(hasText(title) and isSelectable())
+
+    @Test fun newLaunchAppliesStartupFilterAndRecreationKeepsCurrentFilter() {
+        val finished = store.readLibrary().first { it.kind == "pdf" }
+        store.saveProgress(finished.id, 2, 3)
+        store.saveSettings(store.settings().copy(startupPage = LibraryTab.Recent, startupFilter = LibraryFilter.Read))
+
+        launch()
+        tab("最近阅读").assertIsSelected()
+        rule.onNodeWithText("已读").assertIsSelected()
+        rule.onNodeWithText(finished.title).assertIsDisplayed()
+        rule.onNodeWithText(book.title).assertDoesNotExist()
+
+        rule.onNodeWithText("在读").performClick()
+        scenario.recreate()
+        tab("最近阅读").assertIsSelected()
+        rule.onNodeWithText("在读").assertIsSelected()
+        rule.onNodeWithText(book.title).assertIsDisplayed()
+        rule.onNodeWithText(finished.title).assertDoesNotExist()
+    }
 
     @Test fun startupResumesLatestBookEvenAtTheLastPage() {
         val older = store.readLibrary().first { it.kind == "pdf" }

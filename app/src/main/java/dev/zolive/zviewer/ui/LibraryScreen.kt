@@ -97,6 +97,7 @@ import dev.zolive.zviewer.data.Book
 import dev.zolive.zviewer.data.BookRepository
 import dev.zolive.zviewer.data.DiagnosticLog
 import dev.zolive.zviewer.data.HapticEvent
+import dev.zolive.zviewer.data.LibraryFilter
 import dev.zolive.zviewer.data.LibraryTab
 import dev.zolive.zviewer.data.ReadingProgress
 import kotlinx.coroutines.CancellationException
@@ -479,7 +480,7 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
         searching = false
         query = ""
     }
-    var filter by rememberSaveable { mutableIntStateOf(0) }
+    var filterIndex by rememberSaveable { mutableIntStateOf(state.settings.startupFilter.ordinal) }
     var sort by rememberSaveable { mutableIntStateOf(0) }
     var managingFavorites by rememberSaveable { mutableStateOf(false) }
     fun changeFavoriteManagement(enabled: Boolean) {
@@ -577,12 +578,8 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                 key = { it }) { pageIndex ->
                 val tab = tabs[pageIndex]
                 var sortMenu by remember { mutableStateOf(false) }
-                val filterOptions = if (tab == LibraryTab.Recent) {
-                    listOf(0 to stringResource(R.string.filter_all), 1 to stringResource(R.string.filter_in_progress), 3 to stringResource(R.string.filter_read))
-                } else {
-                    listOf(0 to stringResource(R.string.filter_all), 1 to stringResource(R.string.filter_in_progress), 2 to stringResource(R.string.filter_unread), 3 to stringResource(R.string.filter_read))
-                }
-                val selectedFilter = if (tab == LibraryTab.Recent && filter == 2) 0 else filter
+                val filterOptions = libraryFilterOptions(tab)
+                val selectedFilter = LibraryFilter.entries[filterIndex].forTab(tab)
                 val books = remember(state.books, state.favorites, state.progress, tab, query, selectedFilter, sort) {
                     state.books.filter { book ->
                         val progress = state.progress[book.id] ?: ReadingProgress()
@@ -592,10 +589,10 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                             LibraryTab.Recent -> progress.updated > 0
                         }
                         val matchesFilter = when (selectedFilter) {
-                            1 -> progress.updated > 0 && progress.fraction < 1f
-                            2 -> progress.updated == 0L
-                            3 -> progress.total > 0 && progress.fraction >= 1f
-                            else -> true
+                            LibraryFilter.All -> true
+                            LibraryFilter.InProgress -> progress.updated > 0 && progress.fraction < 1f
+                            LibraryFilter.Unread -> progress.updated == 0L
+                            LibraryFilter.Read -> progress.total > 0 && progress.fraction >= 1f
                         }
                         matchesTab && matchesFilter && book.title.contains(query, ignoreCase = true)
                     }.let { filtered ->
@@ -641,13 +638,13 @@ private fun LibraryScreen(state: LibraryState, model: LibraryViewModel, active: 
                                     }
                                 }
                             }
-                            LibraryFilters(filterOptions, selectedFilter, contentInset) { filter = it }
+                            LibraryFilters(filterOptions, selectedFilter, contentInset) { filterIndex = it.ordinal }
                         }
                         LazyVerticalGrid(columns = GridCells.Fixed(columns),
                             state = gridStates[pageIndex], modifier = Modifier.fillMaxSize().testTag("library-grid-$pageIndex"),
                             contentPadding = PaddingValues(gridPadding, 12.dp, gridPadding, 88.dp),
                             horizontalArrangement = Arrangement.spacedBy(gridSpacing), verticalArrangement = Arrangement.spacedBy(22.dp)) {
-                            val recent = if (tab == LibraryTab.Library && query.isEmpty() && selectedFilter == 0) books
+                            val recent = if (tab == LibraryTab.Library && query.isEmpty() && selectedFilter == LibraryFilter.All) books
                                 .filter { (state.progress[it.id]?.updated ?: 0) > 0 && (state.progress[it.id]?.fraction ?: 0f) < 1f }
                                 .maxByOrNull { state.progress[it.id]?.updated ?: 0 } else null
                             if (recent != null) item(span = { GridItemSpan(maxLineSpan) }) {

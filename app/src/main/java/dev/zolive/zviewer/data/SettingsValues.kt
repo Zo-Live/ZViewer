@@ -8,6 +8,9 @@ internal fun readSettings(value: (String, Any?) -> Any?): ReaderSettings {
     @Suppress("UNCHECKED_CAST")
     fun keys(key: String) = value(key, emptySet<String>()) as Set<String>
     val vertical = boolean("vertical", true)
+    val startupPage = string("startup_page", LibraryTab.Library.key).let { key ->
+        LibraryTab.entries.firstOrNull { it.key == key } ?: LibraryTab.Library
+    }
     return ReaderSettings(
         theme = string("theme", "system") ?: "system",
         accent = long("accent", DefaultThemeAccent),
@@ -31,8 +34,9 @@ internal fun readSettings(value: (String, Any?) -> Any?): ReaderSettings {
         gridColumns = int("columns", 3).coerceIn(2, 5),
         showFileType = boolean("show_file_type", false),
         showFavoriteIcon = boolean("show_favorite_icon", true),
-        startupPage = string("startup_page", LibraryTab.Library.key).let { key ->
-            LibraryTab.entries.firstOrNull { it.key == key } ?: LibraryTab.Library
+        startupPage = startupPage,
+        startupFilter = string("startup_filter", LibraryFilter.All.key).let { key ->
+            (LibraryFilter.entries.firstOrNull { it.key == key } ?: LibraryFilter.All).forTab(startupPage)
         },
         resumeReadingOnStartup = boolean("resume_reading_on_startup", false),
         videoLoopSingle = boolean("video_loop_single", false),
@@ -99,6 +103,7 @@ internal fun settingsValues(settings: ReaderSettings): Map<String, Any?> = mapOf
     "show_file_type" to settings.showFileType,
     "show_favorite_icon" to settings.showFavoriteIcon,
     "startup_page" to settings.startupPage.key,
+    "startup_filter" to settings.startupFilter.forTab(settings.startupPage).key,
     "resume_reading_on_startup" to settings.resumeReadingOnStartup,
     "video_loop_single" to settings.videoLoopSingle,
     "video_preview" to settings.videoPreview,

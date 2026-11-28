@@ -92,6 +92,8 @@
     <string name="show_favorite_icon">Show favorite icon</string>
     <string name="show_favorite_icon_hint">Show the favorite button in the bottom right of the cover</string>
     <string name="preferred_startup_page">Preferred start page</string>
+    <string name="startup_page">Page</string>
+    <string name="startup_filter">Filter</string>
     <string name="resume_reading_on_startup">Continue reading on startup</string>
     <string name="reading">Reading</string>
     <string name="library_and_storage">Library and storage</string>

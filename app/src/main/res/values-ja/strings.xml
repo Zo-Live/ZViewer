@@ -92,6 +92,8 @@
     <string name="show_favorite_icon">お気に入りアイコンを表示</string>
     <string name="show_favorite_icon_hint">表紙の右下にお気に入りボタンを表示します</string>
     <string name="preferred_startup_page">起動時に表示するページ</string>
+    <string name="startup_page">ページ</string>
+    <string name="startup_filter">絞り込み</string>
     <string name="resume_reading_on_startup">起動時に続きから読む</string>
     <string name="reading">閲覧</string>
     <string name="library_and_storage">ライブラリとストレージ</string>

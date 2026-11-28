@@ -69,6 +69,7 @@ data class LibraryState(
     @StringRes val updateNotice: Int? = null,
     internal val openingRequest: Any? = null,
     internal val readerFitExpanded: Boolean = false,
+    internal val startupPageExpanded: Boolean = false,
 )
 
 class LibraryViewModel(
@@ -81,8 +82,13 @@ class LibraryViewModel(
     val repository = BookRepository(application)
     private val store = PreferenceStore(application)
     private val updateDownloader = UpdateDownloader(application)
-    private val mutable = MutableStateFlow(LibraryState(treeUri = store.treeUri,
-        settings = store.settings(), favorites = store.favorites(), readerFitExpanded = store.readerFitExpanded))
+    private val mutable = MutableStateFlow(LibraryState(
+        treeUri = store.treeUri,
+        settings = store.settings(),
+        favorites = store.favorites(),
+        readerFitExpanded = store.readerFitExpanded,
+        startupPageExpanded = store.startupPageExpanded,
+    ))
     val state = mutable.asStateFlow()
     private val mutableSettingsImport = MutableStateFlow<SettingsImport?>(null)
     internal val settingsImport = mutableSettingsImport.asStateFlow()
@@ -422,6 +428,11 @@ class LibraryViewModel(
     }
 
     fun settings(settings: ReaderSettings) = applySettings(settings, null)
+
+    internal fun setStartupPageExpanded(expanded: Boolean) {
+        store.startupPageExpanded = expanded
+        mutable.update { it.copy(startupPageExpanded = expanded) }
+    }
 
     internal fun setReaderFitExpanded(expanded: Boolean) {
         store.readerFitExpanded = expanded

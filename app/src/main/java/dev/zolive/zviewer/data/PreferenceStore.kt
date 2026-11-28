@@ -15,6 +15,10 @@ class PreferenceStore(context: Context) {
         get() = preferences.getBoolean("reader_fit_expanded", false)
         set(value) { preferences.edit().putBoolean("reader_fit_expanded", value).apply() }
 
+    internal var startupPageExpanded: Boolean
+        get() = preferences.getBoolean("startup_page_expanded", false)
+        set(value) { preferences.edit().putBoolean("startup_page_expanded", value).apply() }
+
     private fun SharedPreferences.Editor.selectLibrary(treeUri: String) {
         val retired = retiredLibraryTrees() + listOfNotNull(this@PreferenceStore.treeUri) - treeUri
         putString("library_uri", treeUri).putStringSet("retired_library_uris", retired).remove("books")

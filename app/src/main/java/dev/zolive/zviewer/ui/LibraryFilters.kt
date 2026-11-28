@@ -37,11 +37,14 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import dev.zolive.zviewer.data.AnimationEffect
+import dev.zolive.zviewer.data.LibraryFilter
+import dev.zolive.zviewer.data.LibraryTab
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -49,11 +52,15 @@ import kotlin.math.abs
 import kotlin.math.sign
 
 @Composable
+internal fun libraryFilterOptions(tab: LibraryTab): List<Pair<LibraryFilter, String>> =
+    LibraryFilter.entries.filter { it.isAvailableOn(tab) }.map { it to stringResource(it.title) }
+
+@Composable
 internal fun LibraryFilters(
-    options: List<Pair<Int, String>>,
-    selected: Int,
+    options: List<Pair<LibraryFilter, String>>,
+    selected: LibraryFilter,
     contentInset: Dp,
-    onSelect: (Int) -> Unit,
+    onSelect: (LibraryFilter) -> Unit,
 ) {
     val scroll = rememberScrollState()
     val scope = rememberCoroutineScope()

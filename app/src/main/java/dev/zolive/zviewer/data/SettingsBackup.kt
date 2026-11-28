@@ -51,7 +51,7 @@ internal data class SettingsBackup(val settings: ReaderSettings, val library: St
             val values = json.getJSONObject("settings")
             val optionalKeys = setOf(
                 "paged", "paged_image_fit", "continuous_image_fit_screen", "video_fill_screen", "show_page_number",
-                "startup_page", "resume_reading_on_startup", "reset_progress_on_close",
+                "startup_page", "startup_filter", "resume_reading_on_startup", "reset_progress_on_close",
                 "disabled_animation_categories", "disabled_haptic_categories",
             )
             val settings = readSettings { key, default ->

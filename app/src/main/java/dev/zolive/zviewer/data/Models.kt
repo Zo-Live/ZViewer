@@ -65,6 +65,17 @@ enum class LibraryTab(val key: String, @StringRes val title: Int) {
     Recent("recent", R.string.recent_reads),
 }
 
+enum class LibraryFilter(val key: String, @StringRes val title: Int) {
+    All("all", R.string.filter_all),
+    InProgress("in_progress", R.string.filter_in_progress),
+    Unread("unread", R.string.filter_unread),
+    Read("read", R.string.filter_read);
+
+    internal fun isAvailableOn(tab: LibraryTab): Boolean = this != Unread || tab != LibraryTab.Recent
+
+    internal fun forTab(tab: LibraryTab): LibraryFilter = if (isAvailableOn(tab)) this else All
+}
+
 internal const val DefaultThemeAccent = 0xFF49684DL
 
 data class ReaderSettings(
@@ -112,6 +123,7 @@ data class ReaderSettings(
     val verificationFollowsTheme: Boolean = true,
     val showPageNumber: Boolean = true,
     val startupPage: LibraryTab = LibraryTab.Library,
+    val startupFilter: LibraryFilter = LibraryFilter.All,
     val resumeReadingOnStartup: Boolean = false,
     val disabledAnimationCategories: Set<AnimationCategory> = emptySet(),
     val disabledHapticCategories: Set<HapticCategory> = emptySet(),

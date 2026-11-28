@@ -92,6 +92,8 @@
     <string name="show_favorite_icon">顯示收藏圖示</string>
     <string name="show_favorite_icon_hint">在封面右下角顯示收藏按鈕</string>
     <string name="preferred_startup_page">首選啟動頁</string>
+    <string name="startup_page">頁面</string>
+    <string name="startup_filter">篩選項</string>
     <string name="resume_reading_on_startup">啟動即繼續閱讀</string>
     <string name="reading">閱讀</string>
     <string name="library_and_storage">書庫與儲存空間</string>

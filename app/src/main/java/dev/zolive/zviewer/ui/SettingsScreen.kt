@@ -173,7 +173,10 @@ internal fun SettingsSectionScreen(
     SettingsPage(section.title, R.string.back_to_settings, onBack) {
         when (section) {
             SettingsSection.Appearance -> AppearanceSettings(state.settings, model::settings)
-            SettingsSection.Preferences -> AppPreferences(state.settings, model::settings, onOpenInteractionSettings)
+            SettingsSection.Preferences -> AppPreferences(
+                state.settings, state.startupPageExpanded, model::setStartupPageExpanded,
+                model::settings, onOpenInteractionSettings,
+            )
             SettingsSection.Reading -> ReaderPreferences(
                 state.settings, state.readerFitExpanded, model::setReaderFitExpanded, model::settings,
             )
@@ -297,6 +300,8 @@ private fun AppearanceSettings(settings: ReaderSettings, onSettings: (ReaderSett
 @Composable
 private fun AppPreferences(
     settings: ReaderSettings,
+    startupPageExpanded: Boolean,
+    onStartupPageExpanded: (Boolean) -> Unit,
     onSettings: (ReaderSettings) -> Unit,
     onOpen: (InteractionSettingsPage) -> Unit,
 ) {
@@ -333,11 +338,22 @@ private fun AppPreferences(
     SettingsPageLink(InteractionSettingsPage.Haptics.title, enabled = settings.hapticFeedback) {
         onOpen(InteractionSettingsPage.Haptics)
     }
-    PreferenceMenu(
-        title = stringResource(R.string.preferred_startup_page),
-        selectedValue = settings.startupPage,
-        options = LibraryTab.entries.map { it to stringResource(it.title) },
-    ) { onSettings(settings.copy(startupPage = it)) }
+    ExpandableSettingsGroup(R.string.preferred_startup_page, startupPageExpanded, onStartupPageExpanded) {
+        PreferenceMenu(
+            title = stringResource(R.string.startup_page),
+            selectedValue = settings.startupPage,
+            options = LibraryTab.entries.map { it to stringResource(it.title) },
+            enabled = startupPageExpanded,
+        ) { page ->
+            onSettings(settings.copy(startupPage = page, startupFilter = settings.startupFilter.forTab(page)))
+        }
+        PreferenceMenu(
+            title = stringResource(R.string.startup_filter),
+            selectedValue = settings.startupFilter,
+            options = libraryFilterOptions(settings.startupPage),
+            enabled = startupPageExpanded,
+        ) { onSettings(settings.copy(startupFilter = it)) }
+    }
     PreferenceSwitch(stringResource(R.string.resume_reading_on_startup), checked = settings.resumeReadingOnStartup) {
         onSettings(settings.copy(resumeReadingOnStartup = it))
     }
@@ -933,10 +949,36 @@ private fun ReaderFitPreferences(
     onExpanded: (Boolean) -> Unit,
     onSettings: (ReaderSettings) -> Unit,
 ) {
+    ExpandableSettingsGroup(R.string.reader_frame_fit, expanded, onExpanded) {
+        val imageTitle = stringResource(R.string.reader_image_and_pdf)
+        val fitScreen = stringResource(R.string.reader_fit_screen)
+        val fillScreen = stringResource(R.string.reader_fill_screen)
+        if (settings.paged) {
+            PreferenceMenu(imageTitle, settings.pagedImageFit, listOf(
+                PagedImageFit.Screen to fitScreen,
+                PagedImageFit.Width to stringResource(R.string.reader_fit_width),
+                PagedImageFit.Height to stringResource(R.string.reader_fit_height),
+            ), enabled = expanded) { onSettings(settings.copy(pagedImageFit = it)) }
+        } else {
+            PreferenceMenu(imageTitle, settings.continuousImageFitScreen, listOf(false to fillScreen, true to fitScreen),
+                enabled = expanded) { onSettings(settings.copy(continuousImageFitScreen = it)) }
+        }
+        PreferenceMenu(stringResource(R.string.reader_video_fit), settings.videoFillScreen,
+            listOf(false to fitScreen, true to fillScreen), enabled = expanded) { onSettings(settings.copy(videoFillScreen = it)) }
+    }
+}
+
+@Composable
+private fun ExpandableSettingsGroup(
+    @StringRes title: Int,
+    expanded: Boolean,
+    onExpanded: (Boolean) -> Unit,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val action = stringResource(if (expanded) R.string.menu_collapse else R.string.menu_expand)
     val state = stringResource(if (expanded) R.string.menu_expanded else R.string.menu_collapsed)
     SettingsListItem(
-        headlineContent = { Text(stringResource(R.string.reader_frame_fit)) },
+        headlineContent = { Text(stringResource(title)) },
         trailingContent = {
             val arrow = if (expanded) R.drawable.ic_symbol_keyboard_arrow_down else R.drawable.ic_symbol_keyboard_arrow_right
             Icon(painterResource(arrow), null)
@@ -944,25 +986,7 @@ private fun ReaderFitPreferences(
         modifier = Modifier.clickable(role = Role.Button, onClickLabel = action) { onExpanded(!expanded) }
             .semantics { stateDescription = state },
     )
-    SettingsVisibility(expanded) {
-        Column {
-            val imageTitle = stringResource(R.string.reader_image_and_pdf)
-            val fitScreen = stringResource(R.string.reader_fit_screen)
-            val fillScreen = stringResource(R.string.reader_fill_screen)
-            if (settings.paged) {
-                PreferenceMenu(imageTitle, settings.pagedImageFit, listOf(
-                    PagedImageFit.Screen to fitScreen,
-                    PagedImageFit.Width to stringResource(R.string.reader_fit_width),
-                    PagedImageFit.Height to stringResource(R.string.reader_fit_height),
-                ), enabled = expanded) { onSettings(settings.copy(pagedImageFit = it)) }
-            } else {
-                PreferenceMenu(imageTitle, settings.continuousImageFitScreen, listOf(false to fillScreen, true to fitScreen),
-                    enabled = expanded) { onSettings(settings.copy(continuousImageFitScreen = it)) }
-            }
-            PreferenceMenu(stringResource(R.string.reader_video_fit), settings.videoFillScreen,
-                listOf(false to fitScreen, true to fillScreen), enabled = expanded) { onSettings(settings.copy(videoFillScreen = it)) }
-        }
-    }
+    SettingsVisibility(expanded) { Column(content = content) }
 }
 
 @Composable

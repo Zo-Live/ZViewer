@@ -22,6 +22,7 @@ import dev.zolive.zviewer.data.AnimationEffect
 import dev.zolive.zviewer.data.AnimationSpeed
 import dev.zolive.zviewer.data.AutoLockInterval
 import dev.zolive.zviewer.data.HapticEvent
+import dev.zolive.zviewer.data.LibraryFilter
 import dev.zolive.zviewer.data.PagedImageFit
 import dev.zolive.zviewer.data.PreferenceStore
 import org.junit.After
@@ -184,6 +185,8 @@ class SettingsMenuTest {
 
     @Test fun preferredStartupPageAppliesToEachNewLaunch() {
         val startupPage = setting("首选启动页")
+        val page = setting("页面")
+        val filter = setting("筛选项")
         val resumeReading = setting("启动即继续阅读")
         val library = rule.onNode(hasText("书库") and isSelectable())
         val favorites = rule.onNode(hasText("收藏") and isSelectable())
@@ -201,17 +204,28 @@ class SettingsMenuTest {
 
         setting("偏好").performClick()
         startupPage.performScrollTo()
+        page.assertDoesNotExist()
+        filter.assertDoesNotExist()
         val fileType = setting("显示文件类型").fetchSemanticsNode().boundsInRoot
         val resumeRow = resumeReading.assertIsOff().fetchSemanticsNode().boundsInRoot
         assertEquals(startupPage.fetchSemanticsNode().boundsInRoot.bottom, resumeRow.top, 1f)
         assertEquals(resumeRow.bottom, fileType.top, 1f)
         resumeReading.performClick().assertIsOn()
         assertTrue(store.settings().resumeReadingOnStartup)
-        startupPage.assert(hasText("书库")).performClick()
+        startupPage.performClick()
+        val rows = listOf(startupPage, page, filter, resumeReading).map { it.fetchSemanticsNode().boundsInRoot.top }
+        assertTrue(rows.zipWithNext().all { (above, below) -> above < below })
+        filter.assert(hasText("全部")).performClick()
+        option("全部").assertIsSelected()
+        option("在读").assertIsNotSelected()
+        option("已读").assertIsNotSelected()
+        option("未读").performClick()
+        page.assert(hasText("书库")).performClick()
         option("书库").assertIsSelected()
         option("最近阅读").assertIsNotSelected()
         option("收藏").assertIsNotSelected().performClick()
-        startupPage.assert(hasText("收藏"))
+        page.assert(hasText("收藏"))
+        filter.assert(hasText("未读"))
         rule.onNodeWithContentDescription("返回设置").performClick()
         rule.onNodeWithContentDescription("返回书库").performClick()
         library.assertIsSelected()
@@ -221,17 +235,30 @@ class SettingsMenuTest {
         relaunch()
         favorites.assertIsSelected()
         openPreferences()
-        resumeReading.assertIsOn()
-        startupPage.assert(hasText("收藏")).performClick()
+        resumeReading.performScrollTo().assertIsOn()
+        assertEquals(LibraryFilter.Unread, store.settings().startupFilter)
+        page.assert(hasText("收藏")).performClick()
         option("收藏").assertIsSelected()
         option("最近阅读").performClick()
+        filter.assert(hasText("全部")).performClick()
+        option("未读").assertDoesNotExist()
+        option("全部").assertIsSelected()
+        option("在读").assertIsNotSelected()
+        option("已读").performClick()
         relaunch()
         recent.assertIsSelected()
         openPreferences()
-        startupPage.assert(hasText("最近阅读")).performClick()
+        filter.assert(hasText("已读"))
+        page.assert(hasText("最近阅读")).performClick()
         option("书库").performClick()
+        startupPage.performClick()
+        page.assertDoesNotExist()
+        filter.assertDoesNotExist()
         relaunch()
         library.assertIsSelected()
+        openPreferences()
+        page.assertDoesNotExist()
+        filter.assertDoesNotExist()
     }
 
     @Test fun readingFitExpandsInlineAndKeepsSeparateChoices() {
