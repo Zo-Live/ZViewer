@@ -463,6 +463,10 @@ class ReaderInteractionTest {
             zoomIn.performClick()
             waitForVideoZoom(scale)
         }
+        zoomIn.performClick()
+        waitForVideoZoom(1.5f)
+        rule.onNodeWithContentDescription(rule.activity.getString(R.string.fit_screen)).performClick()
+        waitForVideoZoom(1f)
     }
 
     @Test fun toolbarHandleFollowsDragAndClosesAfterThreshold() {
@@ -899,10 +903,22 @@ class ReaderInteractionTest {
         rule.waitUntil(5_000) { scale(second) > secondScale * 1.45f }
         assertEquals(firstScale, scale(first), .001f)
         val zoomOut = rule.onNodeWithContentDescription(rule.activity.getString(R.string.zoom_out_image))
+        val fitScreen = rule.onNodeWithContentDescription(rule.activity.getString(R.string.fit_screen))
+        val actionCenters = listOf(
+            rule.onNodeWithContentDescription(rule.activity.getString(R.string.previous_page)),
+            zoomOut,
+            fitScreen,
+            zoomIn,
+            rule.onNodeWithContentDescription(rule.activity.getString(R.string.next_page)),
+        ).map { it.fetchSemanticsNode().boundsInRoot.center.x }
+        val gaps = actionCenters.zipWithNext { firstCenter, secondCenter -> secondCenter - firstCenter }
+        gaps.forEach { assertEquals(gaps.first(), it, 1f) }
         zoomOut.performClick()
         rule.waitUntil(5_000) { kotlin.math.abs(scale(second) - secondScale) < .001f }
         zoomOut.performClick()
         rule.waitUntil(5_000) { kotlin.math.abs(scale(second) / secondScale - 1f / 1.5f) < .001f }
+        fitScreen.performClick()
+        rule.waitUntil(5_000) { kotlin.math.abs(scale(second) - secondScale) < .001f }
         assertEquals(firstScale, scale(first), .001f)
     }
 

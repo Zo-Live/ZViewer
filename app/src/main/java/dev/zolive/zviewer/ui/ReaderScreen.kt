@@ -784,7 +784,7 @@ fun ReaderScreen(session: BookSession, initialPage: Int, settings: ReaderSetting
                             ReaderZoomIconButton(zoomIn = false, video = currentPageIsVideo, enabled = !scrubbing) {
                                 zoom(-1)
                             }
-                            TextButton(onClick = { zoom(0) }, enabled = !scrubbing) { Text(stringResource(R.string.fit_screen)) }
+                            ReaderFitScreenIconButton(enabled = !scrubbing) { zoom(0) }
                             ReaderZoomIconButton(zoomIn = true, video = currentPageIsVideo, enabled = !scrubbing) {
                                 zoom(1)
                             }

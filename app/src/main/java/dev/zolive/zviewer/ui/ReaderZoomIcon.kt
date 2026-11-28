@@ -1,17 +1,25 @@
 package dev.zolive.zviewer.ui
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import dev.zolive.zviewer.R
 
@@ -19,6 +27,8 @@ private const val ZoomViewport = 960f
 private const val LensCenter = 380f
 private const val LensScaleChange = .12f
 private const val HandleTravel = 16f
+private const val FitFrameTravel = 24f
+private const val FitScreenScaleChange = .09f
 
 @Composable
 internal fun ReaderZoomIconButton(zoomIn: Boolean, video: Boolean, enabled: Boolean, onClick: () -> Unit) {
@@ -48,6 +58,45 @@ internal fun ReaderZoomIconButton(zoomIn: Boolean, video: Boolean, enabled: Bool
                 scale(lensScale, lensScale, pivot) { this@onDrawWithContent.drawContent() }
             }
         })
+    }
+}
+
+@Composable
+internal fun ReaderFitScreenIconButton(enabled: Boolean, onClick: () -> Unit) {
+    val description = stringResource(R.string.fit_screen)
+    // Material Symbols Rounded 的 FitScreen 轮廓。四角沿中心镜像复用同一条路径。
+    val corner = remember {
+        PathParser().parsePathString(
+            "M80 320v-80q0-33 23.5-56.5T160 160h80q17 0 28.5 11.5T280 200" +
+                "q0 17-11.5 28.5T240 240h-80v80q0 17-11.5 28.5T120 360q-17 0-28.5-11.5T80 320Z",
+        ).toPath()
+    }
+    val screen = remember {
+        PathParser().parsePathString(
+            "M240 560V400q0-33 23.5-56.5T320 320h320q33 0 56.5 23.5T720 400v160" +
+                "q0 33-23.5 56.5T640 640H320q-33 0-56.5-23.5T240 560Z M320 560h320V400H320Z",
+        ).toPath().apply { fillType = PathFillType.EvenOdd }
+    }
+    val mirrorFactors = remember { listOf(1f, -1f) }
+    AnimatedIconButton(enabled = enabled, onClick = onClick) { progress ->
+        val color = LocalContentColor.current
+        Canvas(Modifier.size(24.dp).semantics { contentDescription = description }) {
+            val unit = size.width / ZoomViewport
+            val pivot = Offset(ZoomViewport / 2, ZoomViewport / 2)
+            val motion = zoomPulse(progress.value)
+            val inset = FitFrameTravel * motion
+            val screenScale = 1f + FitScreenScaleChange * motion
+            scale(unit, unit, pivot = Offset.Zero) {
+                scale(screenScale, screenScale, pivot) { drawPath(screen, color) }
+                for (horizontal in mirrorFactors) {
+                    for (vertical in mirrorFactors) {
+                        scale(horizontal, vertical, pivot) {
+                            translate(inset, inset) { drawPath(corner, color) }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
